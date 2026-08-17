@@ -27,6 +27,7 @@
 
 > The ZIP already contains the `metamorph_creative_menu` folder. Extract/copy that folder directly into `Noita/mods/`.  
 > ZIP уже содержит папку `metamorph_creative_menu`. Распакуйте/скопируйте её прямо в `Noita/mods/`.
+
 > Choose your language above. The first section in every language is **Installation**, with the exact folder path, the required **Unsafe mods** setting, and a final TAB check.
 
 ### Folder check before starting Noita
