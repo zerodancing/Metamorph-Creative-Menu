@@ -1,0 +1,73 @@
+name: Import full MCM archive
+
+on:
+  push:
+    paths:
+      - 'Metamorph_Creative_Menu_standalone_noitapatcher*.zip'
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import standalone archive
+        shell: python
+        run: |
+          import glob
+          import os
+          import shutil
+          import zipfile
+          from pathlib import Path, PurePosixPath
+
+          archives = sorted(glob.glob('Metamorph_Creative_Menu_standalone_noitapatcher*.zip'))
+          if not archives:
+              raise SystemExit('Standalone archive was not found')
+          archive = archives[-1]
+
+          with zipfile.ZipFile(archive) as zf:
+              members = zf.infolist()
+              for member in members:
+                  path = PurePosixPath(member.filename)
+                  if path.is_absolute() or '..' in path.parts:
+                      raise SystemExit(f'Unsafe archive path: {member.filename}')
+              roots = {PurePosixPath(m.filename).parts[0] for m in members if PurePosixPath(m.filename).parts}
+              if roots != {'metamorph_creative_menu'}:
+                  raise SystemExit(f'Unexpected archive root: {sorted(roots)}')
+
+              target = Path('metamorph_creative_menu')
+              if target.exists():
+                  shutil.rmtree(target)
+              zf.extractall('.')
+
+          required = [
+              Path('metamorph_creative_menu/mod.xml'),
+              Path('metamorph_creative_menu/mod_id.txt'),
+              Path('metamorph_creative_menu/init.lua'),
+              Path('metamorph_creative_menu/NoitaPatcher/noitapatcher.dll'),
+          ]
+          missing = [str(path) for path in required if not path.is_file()]
+          if missing:
+              raise SystemExit('Missing required files: ' + ', '.join(missing))
+
+          for item in archives:
+              os.remove(item)
+
+      - name: Commit imported mod
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Archive contents already match the repository."
+            exit 0
+          fi
+          git commit -m "Import full standalone Metamorph Creative Menu"
+          git push
