@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/metamorph-creative-menu-banner.jpg" alt="Metamorph: Creative Menu" width="100%"></p>
+
 # Metamorph: Creative Menu
 
 <a id="languages"></a>
