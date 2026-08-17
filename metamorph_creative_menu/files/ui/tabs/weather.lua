@@ -27,7 +27,7 @@ end
 function weather_tab.draw(_, panel_width, screen_height)
     local can_edit,mode=weather_service.can_edit()
     GuiLayoutBeginVertical(ui.gui(),0,2,true)
-    if not can_edit then ui.white_text(0,0,"Weather editing unavailable")
+    if not can_edit then ui.white_text(0,0,ui.tr("$mcm_weather_unavailable","Weather editing unavailable"))
     elseif not advanced then
         ui.white_text(0,0,ui.tr("$mcm_weather_time_presets","TIME OF DAY"))
         GuiLayoutBeginHorizontal(ui.gui(),0,0,true)
@@ -63,7 +63,7 @@ function weather_tab.draw(_, panel_width, screen_height)
             end
         end
     end
-    local label=mode=="ew_host" and ui.tr("$mcm_weather_mode_ew_host","EW HOST") or (mode=="ew_peer" and "EW PEER" or ui.tr("$mcm_weather_mode_local","LOCAL"))
+    local label=mode=="ew_host" and ui.tr("$mcm_weather_mode_ew_host","EW HOST") or (mode=="ew_peer" and ui.tr("$mcm_weather_mode_ew_client","EW CLIENT") or ui.tr("$mcm_weather_mode_local","LOCAL"))
     ui.white_text(0,4,label..(weather_service.is_locked() and (" • "..ui.tr("$mcm_weather_locked","LOCKED")) or ""))
     GuiLayoutEnd(ui.gui())
 end
