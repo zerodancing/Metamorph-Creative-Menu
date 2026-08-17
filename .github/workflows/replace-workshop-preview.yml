@@ -1,0 +1,70 @@
+name: Replace Workshop preview
+
+on:
+  push:
+    branches: [workshop]
+
+permissions:
+  contents: write
+
+jobs:
+  replace-preview:
+    if: github.event.head_commit.message == 'Stage corrected Workshop preview'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build the correct Workshop preview from the accepted MCM banner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet pillow
+          python3 - <<'PY'
+          from PIL import Image
+          from pathlib import Path
+
+          src = Path('assets/metamorph-creative-menu-banner.jpg')
+          out = Path('metamorph_creative_menu/workshop_preview_image.png')
+
+          img = Image.open(src).convert('RGB')
+          w, h = img.size
+
+          # The accepted Social Preview artwork is the centered 2:1 crop of the
+          # repository banner. Preserve that composition, then pad to Noita's
+          # 16:9 Workshop preview without stretching the title artwork.
+          target_ratio = 2.0
+          if w / h > target_ratio:
+              crop_w = int(round(h * target_ratio))
+              left = (w - crop_w) // 2
+              img = img.crop((left, 0, left + crop_w, h))
+          else:
+              crop_h = int(round(w / target_ratio))
+              top = (h - crop_h) // 2
+              img = img.crop((0, top, w, top + crop_h))
+
+          img = img.resize((1280, 640), Image.Resampling.LANCZOS)
+          canvas = Image.new('RGB', (1280, 720), (0, 0, 0))
+          canvas.paste(img, (0, 40))
+
+          # Indexed PNG keeps the Workshop preview compact while preserving the artwork.
+          preview = canvas.quantize(
+              colors=256,
+              method=Image.Quantize.MEDIANCUT,
+              dither=Image.Dither.FLOYDSTEINBERG,
+          )
+          preview.save(out, 'PNG', optimize=True, compress_level=9)
+          print(f'preview={out} size={out.stat().st_size} bytes')
+          PY
+
+      - name: Commit corrected preview and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/replace-workshop-preview.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add metamorph_creative_menu/workshop_preview_image.png .github/workflows/replace-workshop-preview.yml
+          git commit -m "Use correct MCM artwork for Workshop preview"
+          git push origin HEAD:workshop
