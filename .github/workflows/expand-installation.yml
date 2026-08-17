@@ -1,0 +1,28 @@
+name: Expand multilingual installation guide
+
+on:
+  push:
+    paths:
+      - '.github/workflows/expand-installation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expand installation sections
+        run: python3 .github/scripts/expand_installation.py
+      - name: Commit README and remove one-shot files
+        run: |
+          rm -f .github/scripts/expand_installation.py
+          rm -f .github/workflows/expand-installation.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Improve multilingual installation instructions" || exit 0
+          git push
