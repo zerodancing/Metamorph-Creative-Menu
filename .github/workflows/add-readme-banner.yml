@@ -1,0 +1,42 @@
+name: Add repository banner to README
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-readme-banner.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Put banner at top of README
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('README.md')
+          text = path.read_text(encoding='utf-8')
+          banner = '<p align="center"><img src="assets/metamorph-creative-menu-banner.jpg" alt="Metamorph: Creative Menu" width="100%"></p>\n\n'
+
+          if 'assets/metamorph-creative-menu-banner.jpg' not in text:
+              text = banner + text
+              path.write_text(text, encoding='utf-8')
+          PY
+
+          rm -f .github/workflows/add-readme-banner.yml
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md .github/workflows/add-readme-banner.yml
+          if ! git diff --cached --quiet; then
+            git commit -m "Show Metamorph banner at top of README"
+            git push
+          fi
