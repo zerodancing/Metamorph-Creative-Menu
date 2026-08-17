@@ -30,19 +30,21 @@ jobs:
           text = path.read_text(encoding='utf-8')
           if '## Download / Скачать' not in text:
               needle = '| 한국어 | [한국어](#ko) |\n\n'
-              block = '''| 한국어 | [한국어](#ko) |
-
-## Download / Скачать
-
-| Build / Сборка | Download / Скачать |
-|---|---|
-| **Ready-to-install / Готовая версия** | **[⬇️ Download ZIP / Скачать ZIP](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/download/latest-build/Metamorph-Creative-Menu.zip)** |
-| Build page / Страница сборки | [Open / Открыть](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/tag/latest-build) |
-
-> The ZIP already contains the `metamorph_creative_menu` folder. Extract/copy that folder directly into `Noita/mods/`.  
-> ZIP уже содержит папку `metamorph_creative_menu`. Распакуйте/скопируйте её прямо в `Noita/mods/`.
-
-'''
+              lines = [
+                  '| 한국어 | [한국어](#ko) |',
+                  '',
+                  '## Download / Скачать',
+                  '',
+                  '| Build / Сборка | Download / Скачать |',
+                  '|---|---|',
+                  '| **Ready-to-install / Готовая версия** | **[⬇️ Download ZIP / Скачать ZIP](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/download/latest-build/Metamorph-Creative-Menu.zip)** |',
+                  '| Build page / Страница сборки | [Open / Открыть](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/tag/latest-build) |',
+                  '',
+                  '> The ZIP already contains the `metamorph_creative_menu` folder. Extract/copy that folder directly into `Noita/mods/`.  ',
+                  '> ZIP уже содержит папку `metamorph_creative_menu`. Распакуйте/скопируйте её прямо в `Noita/mods/`.',
+                  '',
+              ]
+              block = '\n'.join(lines)
               if needle not in text:
                   raise SystemExit('Language table marker not found in README.md')
               text = text.replace(needle, block, 1)
