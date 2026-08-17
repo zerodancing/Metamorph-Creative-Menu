@@ -59,8 +59,8 @@ function world_rules_tab.draw(_, panel_width, screen_height)
         audit("rules.reset", "result="..tostring(ok).." reason="..tostring(reason))
     end
     GuiLayoutEnd(ui.gui())
-    if not can_edit then ui.white_text(0, 0, "World-rule editing unavailable") end
-    if last_action_error ~= nil then ui.white_text(0, 0, "RULE ERROR: " .. tostring(last_action_error)) end
+    if not can_edit then ui.white_text(0, 0, ui.tr("$mcm_rules_unavailable", "World-rule editing unavailable")) end
+    if last_action_error ~= nil then ui.white_text(0, 0, ui.tr("$mcm_rules_error", "RULE ERROR") .. ": " .. tostring(last_action_error)) end
     search = ui.search_input(search, math.max(88, panel_width - 54), 64, "world_rules")
 
     local rules = world_rule_service.rules()
@@ -92,7 +92,9 @@ function world_rules_tab.draw(_, panel_width, screen_height)
         end
     end
     GuiEndScrollContainer(ui.gui())
-    local mode_label = mode == "ew_host" and "EW HOST" or (mode == "ew_peer" and "EW PEER" or "LOCAL")
+    local mode_label = mode == "ew_host" and ui.tr("$mcm_weather_mode_ew_host", "EW HOST")
+        or (mode == "ew_peer" and ui.tr("$mcm_weather_mode_ew_client", "EW CLIENT")
+        or ui.tr("$mcm_weather_mode_local", "LOCAL"))
     ui.white_text(0, 1, mode_label)
     GuiLayoutEnd(ui.gui())
 end

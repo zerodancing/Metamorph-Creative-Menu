@@ -176,18 +176,56 @@ function ui_runtime.search_input(value, width, max_length, focus_key)
     return type(new_value) == "string" and new_value or value
 end
 
-local CYRILLIC_UPPER = {
-    ["А"]="а",["Б"]="б",["В"]="в",["Г"]="г",["Д"]="д",["Е"]="е",["Ё"]="е",["Ж"]="ж",["З"]="з",
-    ["И"]="и",["Й"]="й",["К"]="к",["Л"]="л",["М"]="м",["Н"]="н",["О"]="о",["П"]="п",["Р"]="р",
-    ["С"]="с",["Т"]="т",["У"]="у",["Ф"]="ф",["Х"]="х",["Ц"]="ц",["Ч"]="ч",["Ш"]="ш",["Щ"]="щ",
-    ["Ъ"]="ъ",["Ы"]="ы",["Ь"]="ь",["Э"]="э",["Ю"]="ю",["Я"]="я",
-}
+local function utf8_encode_codepoint(codepoint)
+    if codepoint < 0x80 then return string.char(codepoint) end
+    if codepoint < 0x800 then
+        return string.char(0xC0 + math.floor(codepoint / 0x40), 0x80 + (codepoint % 0x40))
+    end
+    if codepoint < 0x10000 then
+        return string.char(0xE0 + math.floor(codepoint / 0x1000),
+            0x80 + (math.floor(codepoint / 0x40) % 0x40), 0x80 + (codepoint % 0x40))
+    end
+    return string.char(0xF0 + math.floor(codepoint / 0x40000),
+        0x80 + (math.floor(codepoint / 0x1000) % 0x40),
+        0x80 + (math.floor(codepoint / 0x40) % 0x40), 0x80 + (codepoint % 0x40))
+end
 
 local function lower_search(value)
     value = string.lower(tostring(value or ""))
-    for upper, lower in pairs(CYRILLIC_UPPER) do value = string.gsub(value, upper, lower) end
-    value = string.gsub(value, "ё", "е")
-    return value
+    local out, index, length = {}, 1, #value
+    while index <= length do
+        local first = string.byte(value, index)
+        local codepoint, width
+        if first < 0x80 then
+            codepoint, width = first, 1
+        elseif first < 0xE0 and index + 1 <= length then
+            codepoint = (first - 0xC0) * 0x40 + (string.byte(value, index + 1) - 0x80)
+            width = 2
+        elseif first < 0xF0 and index + 2 <= length then
+            codepoint = (first - 0xE0) * 0x1000
+                + (string.byte(value, index + 1) - 0x80) * 0x40
+                + (string.byte(value, index + 2) - 0x80)
+            width = 3
+        elseif index + 3 <= length then
+            codepoint = (first - 0xF0) * 0x40000
+                + (string.byte(value, index + 1) - 0x80) * 0x1000
+                + (string.byte(value, index + 2) - 0x80) * 0x40
+                + (string.byte(value, index + 3) - 0x80)
+            width = 4
+        else
+            out[#out + 1], index = string.sub(value, index, index), index + 1
+            codepoint = nil
+        end
+        if codepoint ~= nil then
+            -- Russian uppercase U+0410..U+042F maps to lowercase by +0x20.
+            -- U+0401/U+0451 (Yo/yo) is normalized to U+0435 (e) for search.
+            if codepoint >= 0x0410 and codepoint <= 0x042F then codepoint = codepoint + 0x20 end
+            if codepoint == 0x0401 or codepoint == 0x0451 then codepoint = 0x0435 end
+            out[#out + 1] = utf8_encode_codepoint(codepoint)
+            index = index + width
+        end
+    end
+    return table.concat(out)
 end
 
 local normalized_search_cache = {}

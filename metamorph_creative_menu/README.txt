@@ -1,584 +1,367 @@
-Metamorph: Creative Menu — описание проекта и обязательный контракт поведения
-=================================================================
+Metamorph: Creative Menu — project behavior and architecture contract
+=====================================================================
 
-О проекте
----------
+About the project
+-----------------
 
-Metamorph: Creative Menu — мод для игры Noita, который я разрабатываю с помощью нейросетей. На момент написания этого описания я работаю над модом уже седьмой день подряд.
+Metamorph: Creative Menu (MCM) is a creative/developer menu for Noita. The project is developed with AI assistance and is intended to remain useful both as a player-facing creative tool and as a developer/debugging toolkit.
 
-Основная цель проекта — полноценное creative/developer menu для Noita. В моде присутствует частичная экспериментальная поддержка quant.ew / Entangled Worlds (EW), однако полная совместимость с сетевой игрой сейчас не заявляется. Дальнейшее развитие и улучшение этой интеграции запланировано.
+MCM is standalone in single player. The required NoitaPatcher runtime and Base64 codec are bundled with the mod. Entangled Worlds / Noita Proxy (`quant.ew`) is optional and only provides the experimental multiplayer integration layer. If EW already exposes a compatible NoitaPatcher API, MCM may reuse it instead of loading a second provider.
 
-Самостоятельный режим не требует установленного Entangled Worlds: необходимая копия NoitaPatcher и base64-кодек поставляются внутри Metamorph: Creative Menu. Если EW включён и уже опубликовал совместимый NoitaPatcher API, MCM переиспользует его. EW остаётся только опциональным сетевым слоем.
+The bundled NoitaPatcher is a native API extension. Full MCM functionality therefore requires Noita's Unsafe mods / unrestricted API permission. Bundling NoitaPatcher removes the hard dependency on the EW folder; it does not turn native DLL functionality into the safe Noita API.
 
-Важно: встроенный NoitaPatcher является native API extension и требует расширенного Lua API Noita. Поэтому системная опция Unsafe mods / unrestricted API всё ещё необходима для полного набора функций MCM; перенос NoitaPatcher внутрь папки мода устраняет зависимость от quant.ew, но не превращает native DLL в safe-mod API.
+This document defines the player-visible behavior and the architecture contract that must be preserved during refactors. It is not an exhaustive description of every implementation detail. The code may contain additional recovery state, helper entities, RPCs, compatibility shims, diagnostics, caches and engine workarounds required to preserve the behavior described here.
 
-Это описание в первую очередь фиксирует то, как мод должен работать для игрока. Оно не является исчерпывающим описанием внутренней реализации. В коде могут существовать дополнительные механизмы, необходимые для Noita, Entangled Worlds, синхронизации, восстановления состояния, оптимизации, диагностики и обхода особенностей движка.
+Core development rule: working behavior must not be removed or simplified merely because its implementation looks complicated, unusual or workaround-heavy. Before deleting or substantially rewriting such code, determine which Noita/EW/runtime problem it solves and prove with tests that the replacement preserves the same behavior.
 
-Главный принцип разработки: уже существующее и корректно работающее поведение мода нельзя удалять или упрощать только потому, что его реализация выглядит сложной, необычной или похожей на костыль. Перед удалением или серьёзным упрощением кода необходимо сначала понять, какую игровую, сетевую или движковую проблему он решает, и доказать тестами, что новое решение сохраняет то же поведение.
+Equal host and peer rights
+--------------------------
 
-Равные права хоста и клиента
-----------------------------
+In supported multiplayer scenarios, host and peer users are intended to have the same MCM-facing rights and capabilities. The host may still be a technical routing, confirmation or rebroadcast point when required by Entangled Worlds, but that does not make a feature host-only from the user's perspective.
 
-В поддерживаемых сетевых сценариях хост и клиент должны иметь одинаковые пользовательские права и одинаковые возможности Metamorph: Creative Menu. Это является целевым принципом сетевой интеграции и не означает заявления о полной текущей совместимости со всеми механиками Entangled Worlds.
+Any old comment, document or test claiming that peers must be forbidden from changing weather, World Rules or another menu feature merely because they are not the host is obsolete unless a newer explicit protocol requirement says otherwise.
 
-Внутри сетевой реализации хост может оставаться технической точкой маршрутизации, подтверждения или повторной рассылки состояния, если этого требует Entangled Worlds. Это не означает, что какая-либо игровая функция должна быть доступна только хосту.
+Main behavior
+-------------
 
-Если в коде, старых комментариях, документации или тестах встречается утверждение, что клиент не имеет права менять погоду, правила мира или использовать другие функции меню только потому, что он не является хостом, такая информация считается устаревшей и не должна использоваться как актуальное требование проекта.
-
-Основные функции
-----------------
-
-1. Меню разработчика
-~~~~~~~~~~~~~~~~~~~~
-
-Меню разработчика открывается по нажатию клавиши TAB.
-
-В меню находятся следующие вкладки:
-
-- «Заклинания»;
-- «Предметы»;
-- «Перки»;
-- «Мобы»;
-- «Эффекты»;
-- «Погода»;
-- «Правила».
-
-Существующее разделение на вкладки и функции внутри них являются частью текущего поведения мода. Сейчас новых функций добавлять не требуется: основная задача разработки — сохранить уже существующие возможности, сделать архитектуру понятнее и надёжнее, удалить действительно неиспользуемый код, уменьшить лишний вес проекта и улучшить тестирование.
-
-2. Заклинания
-~~~~~~~~~~~~~
-
-Во вкладке «Заклинания» можно устанавливать на посох любые заклинания в любом порядке, удалять их и выбрасывать.
-
-Заклинания разделены по категориям для удобной навигации.
-
-Все операции с заклинаниями, которые должны быть видны другим участникам сетевой игры, должны корректно синхронизироваться через Entangled Worlds. Это относится к добавлению, удалению, выбрасыванию и другим поддерживаемым операциям с заклинаниями и посохами.
-
-3. Предметы
-~~~~~~~~~~~
-
-Во вкладке «Предметы» можно получать любые поддерживаемые игровые предметы, в том числе жезлы, книги, яйца, камни, контейнеры, квестовые предметы и другие предметы Noita.
-
-ЛКМ по предмету создаёт его рядом с игроком, у его ног.
-
-ПКМ по предмету пытается сразу поместить его в подходящую часть инвентаря игрока.
-
-В стандартном инвентаре Noita имеется:
-
-- 4 слота для жезлов;
-- 4 слота для обычных предметов.
-
-Перед помещением предмета в инвентарь мод должен проверить, существует ли подходящий свободный слот. Если места недостаточно, предмет не должен исчезать, заменять другой предмет или ломать инвентарь — вместо этого он должен появиться рядом с игроком.
-
-Должна сохраняться полная необходимая сетевая синхронизация действий с предметами, включая их появление, помещение в инвентарь, удаление, перемещение и другие операции, которые должны быть видимы другим участникам игры.
-
-Предметы разделены по категориям в меню мода.
-
-4. Перки
-~~~~~~~~
-
-Во вкладке «Перки» можно использовать любые поддерживаемые перки.
-
-ЛКМ по перку создаёт обычный игровой объект перка в мире.
-
-ПКМ по перку сразу применяет его к текущему игроку.
-
-Мод также должен позволять удалять уже применённые перки. Удаляться должны как перки, применённые через Metamorph: Creative Menu, так и перки, полученные обычным способом или через другие игровые механики.
-
-Ключевое требование к удалению перков: после удаления перка не должно оставаться принадлежащих ему последствий. Это касается, среди прочего:
-
-- созданных сущностей;
-- помощников;
-- щупалец;
-- визуальных эффектов;
-- дополнительных компонентов;
-- изменений физики;
-- изменений характеристик;
-- изменений состояния мира;
-- других эффектов и особенностей, созданных перком.
-
-Перки должны корректно применяться столько раз, сколько позволяет их игровая механика, независимо от количества уже установленных перков. При удалении необходимо убрать соответствующее влияние перка и восстановить состояние, которое должно существовать без удалённого перка, не повреждая влияние других перков, модов или игровых систем.
-
-Перки являются индивидуальными для каждого игрока. Применение перка одним игроком не должно автоматически применять его ко всем союзникам. Удаление перка одним игроком не должно удалять этот перк у других игроков.
-
-При этом видимые и игровые последствия перков должны корректно синхронизироваться между участниками сетевой игры. Другие игроки должны видеть, например, созданных помощников, щупальца, невидимость, дополнительные сущности и другие изменения, которые по своей природе должны быть видимы в общем мире.
-
-5. Поиск
-~~~~~~~~
-
-Во всех вкладках, где количество элементов достаточно велико и поиск имеет смысл, должна присутствовать функция поиска.
-
-Поиск является частью нормального способа использования меню и должен сохраняться при рефакторинге.
-
-6. Мобы
-~~~~~~~
-
-Во вкладке «Мобы» можно работать с существами Noita.
-
-ЛКМ по мобу создаёт выбранного моба в игровом мире.
-
-ПКМ по мобу превращает текущего игрока в выбранного моба.
-
-Мобы разделены по категориям для удобной навигации.
-
-Во время превращения необходимо максимально сохранять реальные свойства выбранного существа там, где это возможно и безопасно, в том числе:
-
-- атаки;
-- анимации;
-- физические свойства;
-- способ передвижения;
-- особенности управления;
-- игровые параметры существа;
-- визуальное поведение.
-
-При этом не требуется переносить интеллект оригинального моба или другие системы, которые должны оставаться под управлением игрока либо способны привести к лагам, неправильному управлению или сетевой рассинхронизации.
-
-Должна сохраняться необходимая синхронизация появления мобов, превращений, перемещений, физики, разрушений, смерти и других связанных состояний между участниками сетевой игры.
-
-Каталог MOBS не должен решать, можно ли использовать сущность, по случайному фрагменту имени файла. Слова вроде `physics`, `effect`, `sprite`, `body` и похожие могут использоваться как диагностическая подсказка, но сами по себе не являются причиной скрыть моба или запретить превращение. Разные XML-пути также не должны объединяться только потому, что их файлы имеют одинаковый basename: `data/entities/animals/tank.xml` и `data/entities/animals/vault/tank.xml` являются разными authored entities и должны рассматриваться отдельно.
-
-Совместимость превращения должна храниться по точному XML-пути. Подтверждённо опасная сущность блокируется точечной записью `unsafe`, подтверждённо рабочее необычное исключение — точечной записью `safe`, а замена wrapper-сущности на canonical target разрешается только для явно указанной пары путей. Широкие blacklist по подстроке имени для transform-safety запрещены.
-
-Статический анализ XML, Base и компонентов может безопасно определить, похожа ли сущность на поддерживаемую форму, и наличие пути в native `PolymorphTableGet` является сильным положительным сигналом. Однако такой анализ не считается доказательством отсутствия native crash: жёсткий сбой движка Noita невозможно гарантированно поймать `pcall`-ом внутри того же процесса. Для спорных сущностей используется точный игровой review/log с verdict `SAFE`, `UNSAFE` или `RETEST`, после чего подтверждённый результат переносится в exact-path compatibility registry.
-
-7. Возвращение из формы моба обратно в игрока
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Если игрок находится в форме моба, нажатие TAB должно вернуть его в обычную человеческую форму игрока.
-
-Это действие является штатной частью жизненного цикла превращения и не должно рассматриваться как аварийное восстановление или удаляться при упрощении архитектуры форм.
-
-8. Смерть игрока в форме моба
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Если игрок получает смертельный урон, находясь в теле моба, должна происходить особая обработка смерти формы:
-
-- текущая форма моба умирает;
-- мёртвое тело моба остаётся результатом смерти этой формы там, где это предусмотрено игровой логикой;
-- сам игрок не должен завершать игровую сессию и не должен умирать окончательно;
-- игрок продолжает жить на месте погибшего моба;
-- после этого игрок снова находится в своей обычной человеческой форме.
-
-Иными словами, смертельный урон во время превращения должен убивать текущую форму моба, а не самого игрока как участника игры.
-
-Эта логика особенно важна для сетевой игры и должна корректно синхронизироваться, не создавая одновременно живую копию формы, бессмертное мёртвое тело, второго игрока или другие дублирующиеся сущности.
-
-9. Особые формы Boss Dragon и Maggot Tiny
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-При превращении игрока в Boss Dragon или Maggot Tiny оригинальный искусственный интеллект этих существ не должен продолжать самостоятельно управлять формой.
-
-Это сложные мобы, и одновременная работа их оригинального AI вместе с управлением игрока может вызывать неправильное поведение, лишние вычисления, лаги, проблемы с физикой и рассинхронизацию между участниками сетевой игры.
-
-Поэтому в этих формах необходимо сохранять нужные игровые возможности существа, но не позволять оригинальному AI конкурировать с управлением игрока.
-
-10. Превращение в моба под курсором
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Игрок должен иметь возможность превратиться в уже существующего моба непосредственно в игровом мире.
-
-По умолчанию для этого используется клавиша G, однако пользователь может выбрать другую клавишу через настройки мода.
-
-Принцип работы:
-
-1. игрок наводит курсор на моба;
-2. нажимает назначенную клавишу;
-3. выбранный моб заменяется игроком;
-4. игрок продолжает игру в форме выбранного моба.
-
-Игрок должен именно занять место выбранного существа, а не просто создать рядом его копию.
-
-Эта механика также должна корректно работать и синхронизироваться в сетевой игре.
-
-11. Эффекты
-~~~~~~~~~~~
-
-Во вкладке «Эффекты» можно применять на себя поддерживаемые игровые эффекты и удалять их.
-
-Необходимо сохранять:
-
-- применение эффектов;
-- повторное применение там, где это допустимо;
-- удаление эффектов;
-- корректное восстановление состояния после удаления;
-- синхронизацию видимых и игровых последствий эффектов между клиентами и хостом.
-
-12. Погода
-~~~~~~~~~~
-
-Во вкладке «Погода» можно изменять время суток, погодные условия и более точно настраивать параметры погоды и связанных с ней эффектов.
-
-Изменения времени суток, погоды и точных параметров должны корректно синхронизироваться между участниками сетевой игры.
-
-И хост, и клиент имеют право изменять эти параметры через меню. Если для технической реализации Entangled Worlds изменение клиента сначала отправляется хосту, а затем хост распространяет итоговое состояние, это является только способом сетевой доставки и не означает ограничения прав клиента.
-
-13. Правила мира
+1. Creative menu
 ~~~~~~~~~~~~~~~~
 
-Во вкладке «Правила» можно изменять поддерживаемые правила и параметры игрового мира.
+TAB opens the creative/developer menu. The current tabs are Spells, Items, Perks, Mobs, Effects, Weather and Rules. Search is part of normal use in large catalogs and must survive refactoring.
 
-Эти изменения должны полностью и предсказуемо синхронизироваться между участниками сетевой игры, чтобы оба игрока видели и использовали согласованное состояние общих правил мира.
+2. Spells
+~~~~~~~~~
 
-И хост, и клиент имеют одинаковое право менять правила через меню. Техническая маршрутизация через хост, если она необходима Entangled Worlds, не является пользовательским ограничением.
+The Spells tab can edit the currently held wand: select a slot, place supported spells in arbitrary order, replace an existing action, delete it or drop it into the world. Operations that must be visible to other players should use the EW integration when EW is active.
 
-Правила Creative Menu являются обратимыми overrides, а не необратимым редактированием сейва. Мод обязан сохранять исходное состояние каждого принадлежащего ему изменения и при NATIVE/RESET возвращать именно этот baseline, не накапливая множители при повторном применении. Если игра была закрыта при активном override и изменённое значение попало в сохранение мира, следующая Lua-сессия должна сначала восстановить зафиксированный baseline и только после этого принимать новые изменения/сетевые snapshots.
+Spell replacement is transactional: do not destroy the old spell until the replacement has been attached and verified.
 
-Тяжёлые сканирования физических тел и сущностей не должны выполняться из GUI-click/draw пути. Изменение кнопки Rules обновляет только состояние правила и необходимые локальные latency-sensitive поля, а широкое применение выполняется штатным world-update с ограниченной частотой.
+3. Items
+~~~~~~~~
 
-14. Частичная совместимость с сетевой игрой
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The Items tab can spawn supported Noita items such as wands, books, eggs, stones, containers, quest objects and other catalog entries.
 
-Metamorph: Creative Menu в первую очередь ориентирован на одиночную игру. В проекте уже присутствует частичная экспериментальная интеграция с Entangled Worlds / Noita Proxy, но на текущем этапе полная синхронизация и полная совместимость не гарантируются. Развитие сетевой поддержки запланировано в следующих версиях.
+LMB spawns the item near the player. RMB attempts to place it into the appropriate inventory row. The standard quick inventory has four wand slots and four item slots. If no suitable slot is available, the item must remain in the world rather than disappearing, replacing another item or corrupting inventory state.
 
-Перечисленные ниже пункты являются целевым направлением дальнейшего развития сетевой интеграции, а не обещанием, что каждый из них уже полностью работает в текущей версии:
+World-spawn and inventory operations that require multiplayer visibility must use the EW bridge when EW is enabled.
 
-- физику;
-- перемещения;
-- разрушения;
-- появление и удаление сущностей;
-- превращения;
-- смерть форм;
-- действия с предметами;
-- действия с заклинаниями;
-- видимые последствия перков;
-- эффекты;
-- погоду;
-- время суток;
-- правила мира;
-- другие изменения общего игрового мира.
+4. Perks
+~~~~~~~~
 
-При этом индивидуальное состояние игрока не должно без причины становиться глобальным. Например, перки одного игрока не должны автоматически становиться перками другого игрока только из-за синхронизации их видимых последствий.
+LMB spawns a normal perk pickup. RMB applies the perk to the local player through the canonical pickup path. The editor can also remove supported perks, including perks obtained outside MCM when a safe inverse is known.
 
-Клиент и хост должны иметь одинаковые возможности меню. Сетевая архитектура может иметь различающиеся технические роли, но пользовательские права должны оставаться равными.
+Removing a perk must remove the state owned by that perk without blindly overwriting unrelated state from other perks, mods or the game. Owned state may include entities, companions, tentacles, visual effects, components, physics changes, statistics, globals, run flags and world changes.
 
-15. Производительность
-~~~~~~~~~~~~~~~~~~~~~~
+Perks remain per-player. Multiplayer synchronization should expose visible/shared consequences without turning one player's perk ownership into every player's perk ownership.
 
-Мод должен оставаться пригодным для пользователей со слабыми компьютерами.
+5. Search
+~~~~~~~~~
 
-При разработке необходимо избегать неоправданно тяжёлых операций, особенно если они выполняются:
+Large catalogs must remain searchable. Search supports translated names and relevant IDs/paths/descriptions depending on the tab. Exclusion tokens and normalized separators are part of the current search behavior.
 
-- каждый кадр;
-- для большого количества сущностей;
-- одновременно у нескольких сетевых игроков;
-- при сканировании игрового мира;
-- при работе с физикой;
-- при построении больших каталогов, которые можно загружать постепенно или только при необходимости.
-
-Оптимизация не должна достигаться ценой удаления существующих функций, нарушения сетевой синхронизации или изменения уже корректно работающего поведения.
-
-Правила рефакторинга и очистки проекта
---------------------------------------
-
-Сейчас основная задача проекта — не добавление новых функций, а улучшение уже существующей кодовой базы.
-
-Приоритеты:
-
-- сохранить все существующие игровые возможности;
-- сохранить совместимость с Entangled Worlds;
-- сохранить одинаковые права клиента и хоста;
-- удалить только доказанно неиспользуемый код;
-- убрать дублирование;
-- упростить чрезмерно сложные участки без изменения поведения;
-- уменьшить лишний размер проекта;
-- разгрузить тяжёлые операции и ненужную раннюю загрузку модулей;
-- разделить слишком большие модули по понятным зонам ответственности;
-- дать переменным, функциям и модулям названия, которые ясно отражают их назначение;
-- заменить хрупкие тесты на проверки реального поведения там, где это возможно;
-- сохранить специальные обходы Noita/EW, если они действительно необходимы.
-
-Если часть кода выглядит странно, сложно или избыточно, это само по себе не является причиной для удаления. Перед изменением необходимо проверить:
-
-1. какую реальную игровую проблему решает этот код;
-2. требуется ли он из-за особенностей Noita;
-3. требуется ли он для совместимости с Entangled Worlds;
-4. влияет ли он на синхронизацию клиента и хоста;
-5. участвует ли он в восстановлении состояния после удаления перка, эффекта или формы;
-6. защищает ли он от рассинхронизации, дублирования сущностей, повреждения инвентаря или потери состояния;
-7. можно ли заменить его более простой реализацией с тем же поведением;
-8. существуют ли тесты, которые подтверждают сохранение поведения после изменения.
-
-Текущее корректное поведение игры является важнейшим источником истины. Старые комментарии и документация могут быть неверными или устаревшими, особенно если они противоречат этому README и фактическому подтверждённому поведению мода.
-
-Архитектура проекта и навигация по коду
---------------------------------------
-
-Архитектура проекта должна отвечать на простой вопрос: «если сломался конкретный аспект игры, в какую папку нужно зайти?». Код разделён не по истории его появления и не по размеру файлов, а по тому, кому принадлежит ответственность.
-
-Главные слои проекта:
-
-- `files/features/` — игровые функции Metamorph: Creative Menu. Если меняется поведение заклинаний, предметов, перков, мобов, форм, погоды, правил мира, possession или помощников, начинать поиск нужно здесь;
-- `files/integrations/ew/` — всё, что существует именно из-за Entangled Worlds / Noita Proxy: RPC, сетевые мосты, EW-синхронизация, идентификаторы и обходы особенностей EW;
-- `files/platform/noita/` — низкоуровневые адаптеры к API и компонентам Noita. UI не должен напрямую управлять `Entity*`/`Component*`, если такую операцию можно выразить через этот слой или feature-service;
-- `files/ui/` — только отображение меню, поиск, кнопки, выбор вкладок, перевод и передача намерений пользователя feature-сервисам;
-- `files/core/` — небольшие общие алгоритмы и утилиты, которые не принадлежат конкретной игровой функции;
-- `files/diagnostics/` — журнал, пассивное наблюдение и диагностическое сканирование;
-- `files/qa/` — встроенный игровой Z-тест и его данные/rollback-механизмы;
-- `tests/` — offline regression-тесты. Документ `tests/TESTING.txt` объясняет именно тестовую инфраструктуру и не является вторым README проекта.
-
-В корне `files/` намеренно остаются только `item_registry.lua` и `creature_registry.lua`. Это стабильные точки расширения для внешних модов; их путь сам является частью совместимости.
-
-Заклинания — `files/features/spells/`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- `catalog.lua` — загрузка и нормализация ванильного каталога заклинаний, категории и фон иконки;
-- `service.lua` — содержимое жезла, слоты, ёмкость, добавление, замена, удаление, выбрасывание, сохранение маны и требуемая EW-синхронизация;
-- `files/ui/tabs/spells.lua` — только отображение вкладки, поиск и передача действий в `spell_service`.
-
-Если заклинание неправильно отображается или попадает не в ту категорию — смотреть `catalog.lua`. Если неправильно меняется жезл — `service.lua`. Если проблема только с расположением кнопок/поиском — UI-вкладку.
-
-Предметы — `files/features/items/`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- `catalog.lua` — основной статический каталог предметов;
-- `ui_catalog.lua` — сбор меню из встроенного каталога, внешних registry/manifest и списка жидкостей;
-- `service.lua` — спавн предмета, RMB-помещение в инвентарь, fallback у ног, создание наполненных колб;
-- `liquid_preview.lua` — безопасный скрытый probe для получения настоящего цвета жидкости;
-- `files/platform/noita/inventory_slots.lua` — низкоуровневая логика слотов и подтверждения vanilla pickup;
-- `files/integrations/ew/world_items.lua` — регистрация/синхронизация предметов мира и принудительный inventory sync;
-- `files/ui/tabs/items.lua` — только отображение каталога и пользовательские команды.
-
-Если предмет не помещается в нужный слот — начинать с `inventory_slots.lua` и `items/service.lua`. Если предмет не виден второму игроку — `integrations/ew/world_items.lua`. Если отсутствует в меню — `catalog.lua`/`ui_catalog.lua`.
-
-Перки — `files/features/perks/`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- `catalog.lua` — загрузка уникального ванильного списка перков;
-- `service.lua` — публичные операции: spawn/apply/count/remove и выбор правильной стратегии удаления;
-- `pickup_service.lua` — каноническое применение через настоящий vanilla perk entity;
-- `transactions.lua` — точный журнал изменений для копий перков, применённых модом, и их rollback;
-- `transactions/global_journal.lua` — перехват и обратное применение изменений `Globals*` и run-flags;
-- `inverse_registry.lua` — маленький маршрутизатор специальных inverse-обработчиков;
-- `inverse/player.lua` — последствия конкретных перков на игроке;
-- `inverse/world.lua` — последствия в мире;
-- `inverse/companions.lua` — созданные сущности/помощники и связанные счётчики;
-- `inverse/lukki.lua` — отдельная сложная логика Lukki/Leggy;
-- `root_companions.lua` — ownership отделённых от игрока companion entities;
-- `presentation.lua` — иконки, GameEffect и presentation-residue после удаления;
-- `files/ui/tabs/perks.lua` — только меню и пользовательские команды.
-
-Если после удаления перка остаётся конкретная игровая особенность — сначала определить её тип и открыть соответствующий `inverse/*`. Если проблема только у перка, применённого через меню, — дополнительно проверять `transactions.lua`. Если остаётся иконка/визуальный GameEffect — `presentation.lua`.
-
-Мобы и каталог существ — `files/features/creatures/`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- `catalog.lua` — исходный список vanilla entity paths;
-- `catalog_builder.lua` — построение полного каталога и incremental warmup;
-- `classification.lua` — структурное определение «что является самостоятельным игровым мобом»; filename-hints здесь только диагностические и не являются transform-blacklist;
-- `compatibility.lua` — вычисление статуса `verified / candidate / unsafe / unsupported` без опасного пробного polymorph;
-- `compatibility_overrides.lua` — единственный ручной exact-path registry для подтверждённых `safe`, `unsafe` и canonical aliases;
-- `metadata.lua` — чтение XML, имён и метаданных;
-- `diagnostics.lua` — глубокий анализ компонентов/атак/профиля существа;
-- `ui_catalog.lua` — данные, подготовленные для вкладки MOBS;
-- `service.lua` — небольшой публичный facade: collect, canonical path, prewarm и spawn;
-- `files/ui/tabs/creatures.lua` — отображение, поиск, spawn/transform intent.
-
-Если моб отсутствует в списке — `catalog_builder.lua` и затем структурная проверка в `classification.lua`. Если рабочая сущность ошибочно заблокирована или подтверждённый крашер всё ещё разрешён — проверять только `compatibility_overrides.lua` и `compatibility.lua`, а не добавлять новый substring blacklist. Если неверны имя/XML-метаданные — `metadata.lua`. Для ручной проверки точных путей использовать review-режим вкладки MOBS и `tests/creature_review_report.py`.
-
-Формы и превращения — `files/features/forms/`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Это наиболее чувствительная часть проекта, поэтому обязанности разделены особенно строго:
-
-- `manager.lua` — жизненный цикл сессии превращения: начало, TAB-возврат, death-handoff и координация переходов;
-- `runtime.lua` — маленький диспетчер активной формы;
-- `family.lua` — определение семейства формы и lifecycle root;
-- `controls.lua` — нормализованный ввод формы;
-- `combat.lua` — атаки, прицеливание, лазеры и связанные боевые действия;
-- `presentation.lua` — vision, herd, DamageModel/CharacterData и визуально-профильная часть формы;
-- `component_ops.lua` — общие низкоуровневые операции над компонентами формы;
-- `entity_tree_cache.lua` — кэш дерева сущности формы;
-- `adapters/ghost.lua` — только ghost-family;
-- `adapters/fish.lua` — только fish-family;
-- `adapters/worm.lua` — только worm-family;
-- `adapters/physics.lua` — physics/IK/native physics формы;
-- `adapters/boss_dragon.lua` — особенности Boss Dragon и сложных boss-атак без возврата оригинального AI;
-- `exact_effects.lua` — создание точных polymorph wrappers/runtime clones;
-- `human_restore.lua` — восстановление сохранённой человеческой сущности;
-- `player_authority.lua` — транзакционное переключение authoritative player entity;
-- `corpse_service.lua` — судьба погибшей формы и её синхронизируемого тела;
-- `death_guard.lua` — граница native death callback;
-- `transform_flash.lua` — временное подавление polymorph flash с восстановлением чужого состояния;
-- `profile.lua` — анализ профиля формы;
-- `noop.lua` — намеренно пустой runtime-script для сущностей, чей оригинальный lifecycle/AI нужно отключить.
-
-Если TAB не возвращает игрока — `manager.lua`. Если смерть формы не возвращает живого человека — `manager.lua` + `human_restore.lua` + `player_authority.lua`; если неправильно остаётся труп — `corpse_service.lua`. Если не работает атака — `combat.lua`. Если неправильно управляется конкретное семейство мобов — соответствующий `adapters/*.lua`. Если Boss Dragon снова получает конкурирующий AI/неверное special-поведение — `adapters/boss_dragon.lua` и `family.lua`.
-
-Possession — `files/features/possession/`
+6. Creatures, objects and transformations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- `keybinds.lua` — выбранная пользователем клавиша и её обработка;
-- `targeting.lua` — выбор сущности под курсором, включая EW tolerance/fallback;
-- `service.lua` — transaction/state machine possession;
-- `retirement.lua` — локальная подготовка заменяемой сущности к удалению;
-- `files/integrations/ew/possession_retire.lua` — сетевой retire/handoff удалённой EW-сущности.
+In the MOBS catalog, LMB spawns an entry and RMB transforms the current player into it. The system attempts to preserve useful native attacks, animations, movement, physics, presentation and authored behavior while disabling AI that would fight player controls or cause duplicate simulation.
 
-Эффекты — `files/features/effects/`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Compatibility is exact-path based. Do not add broad substring blacklists such as blocking every filename containing `physics`, `effect`, `sprite` or `body`. Different XML paths with the same basename are separate authored entities and must remain separate catalog entries.
 
-- `catalog.lua` — список и метаданные доступных эффектов;
-- `policy.lua` — общие правила идентичности/безопасности;
-- `service.lua` — применение, ownership, удаление, expiry, snapshot и residue-проверки;
-- `files/ui/tabs/effects.lua` — отображение и команды пользователя.
+Known unsafe forms are recorded as exact paths. Known safe exceptions are also exact paths. Wrapper-to-canonical routing is permitted only for explicitly validated path pairs. Static XML analysis and native polymorph-table membership are useful signals, but a hard engine crash cannot be proven impossible by Lua `pcall` inside the same process.
 
-Погода — `files/features/weather/`
+7. Returning to human form
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+While transformed, TAB must return the player to the normal human form. Native polymorph expiry is the primary route; serialized backup/hard recovery is a fallback. TAB return is a normal part of the form lifecycle, not an optional emergency-only feature.
+
+8. Death while transformed
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Fatal damage to a supported transformed body should kill the creature form while allowing the player to continue as a restored human at the death position instead of ending the run because the temporary body died.
+
+The form corpse should remain when appropriate. Human inventory and relevant player state should survive the handoff. The death flow is engine-sensitive, so recovery code must treat unknown player-authority states conservatively and must not destroy an entity when authority is uncertain.
+
+9. Special forms
+~~~~~~~~~~~~~~~~
+
+Boss Dragon, Maggot Tiny and other unusual families may require dedicated adapters. Do not re-enable original AI merely to make an adapter look simpler: competing AI can create duplicated attacks, movement conflicts, lag, physics problems and multiplayer desync.
+
+10. Possession
+~~~~~~~~~~~~~~
+
+The default possession key is G and can be changed in mod settings. The player points at a supported creature and takes over its compatible form. The original target is retired only after the transformation is confirmed. Possession should feel like taking the target's place, not creating an unrelated duplicate nearby.
+
+11. Effects
+~~~~~~~~~~~
+
+The Effects tab applies supported status/timed effects and removes them when safe. Removal must preserve unrelated protected/perk/internal effects and restore editor-owned state where possible.
+
+12. Weather
+~~~~~~~~~~~
+
+The Weather tab controls time presets, weather presets and advanced supported WorldState fields such as cloud cover, fog, wind, rain and lightning behavior. Weather state is synchronized through EW when EW is active. Host and peer users have equal MCM-facing rights; routing through a host is an implementation detail.
+
+13. World Rules
+~~~~~~~~~~~~~~~
+
+World Rules are reversible overrides rather than permanent save edits. NATIVE/RESET restores the baseline captured for state owned by MCM. Repeated multipliers must not accumulate against an already overridden value. Critical persistent values keep recovery information so a later Lua session can restore native state after an interrupted run.
+
+Expensive physics/entity scans must not run directly from GUI draw/click paths. UI actions update desired rule state; broad application belongs in bounded world-update work.
+
+14. Experimental multiplayer integration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+MCM is primarily a standalone single-player mod. Entangled Worlds support is partial/experimental and does not guarantee every Noita/EW edge case. The integration aims to synchronize shared world effects such as items, supported spell operations, forms, possession, visible perk consequences, effects, weather, time and World Rules while keeping player-local ownership local when appropriate.
+
+All peers should use the same MCM build and a compatible EW version.
+
+15. Performance
+~~~~~~~~~~~~~~~
+
+The mod should remain usable on weaker systems. Avoid unnecessary work every frame, broad world scans, repeated XML parsing, eager loading of large catalogs and duplicated network simulation. Optimize without silently removing existing features or weakening recovery/synchronization guarantees.
+
+Refactoring and cleanup rules
+-----------------------------
+
+Current priority is reliability and maintainability of existing features, not feature count.
+
+- Preserve existing player-facing behavior.
+- Preserve standalone functionality without requiring Entangled Worlds.
+- Preserve experimental EW integration and equal user-facing host/peer rights.
+- Remove code only when it is demonstrably unused.
+- Remove duplication when behavior is preserved.
+- Split large modules by responsibility rather than by arbitrary line count.
+- Keep exact-path compatibility registries and protocol slots stable when they are part of compatibility.
+- Prefer behavior tests over tests that search for a particular source string.
+- Keep necessary Noita/EW workarounds until a tested replacement exists.
+- Treat current verified in-game behavior as a stronger source of truth than stale comments.
+
+Project architecture and code navigation
+----------------------------------------
+
+The architecture should answer: "If a specific gameplay aspect breaks, which folder owns it?"
+
+Top-level layers:
+
+- `files/features/` — MCM gameplay features.
+- `files/integrations/ew/` — code that exists specifically for Entangled Worlds / Noita Proxy: RPCs, network bridges, mailboxes, sync and EW-specific resilience patches.
+- `files/platform/noita/` — low-level Noita API/component adapters. UI should not directly implement Entity/Component transactions when a platform/feature boundary exists.
+- `files/ui/` — presentation, search, buttons, tabs, localization lookup and forwarding user intent to feature services.
+- `files/core/` — small generic algorithms/utilities with no gameplay or Noita ownership.
+- `files/diagnostics/` — bounded logs, passive observation and diagnostics.
+- `files/qa/` — in-game Z QA scenario infrastructure.
+- `tests/` — offline regression tests; `tests/TESTING.txt` documents the test system.
+
+`files/item_registry.lua` and `files/creature_registry.lua` intentionally remain stable extension entry points for external mods.
+
+Spells — `files/features/spells/`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- `definitions.lua` — поля и пресеты;
-- `runtime_effects.lua` — дождь, молнии и runtime weather effects;
-- `service.lua` — пользовательские операции и текущее состояние;
-- `files/integrations/ew/weather_sync.lua` — сетевой snapshot, mailbox и правило равных пользовательских прав хоста/клиента;
+- `catalog.lua` — vanilla spell catalog normalization, categories and icon metadata.
+- `service.lua` — wand contents, slots/capacity, add/replace/delete/drop, mana preservation and required EW sync.
+- `files/ui/tabs/spells.lua` — rendering, search and commands only.
+
+Items — `files/features/items/`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- `catalog.lua` — built-in item catalog.
+- `ui_catalog.lua` — combined built-in/external/liquid menu catalog.
+- `service.lua` — world spawn, RMB inventory delivery, world fallback and filled containers.
+- `liquid_preview.lua` — hidden probe used to obtain actual liquid colors.
+- `files/platform/noita/inventory_slots.lua` — low-level slot/pickup confirmation.
+- `files/integrations/ew/world_items.lua` — multiplayer world-item/inventory transport.
+- `files/ui/tabs/items.lua` — rendering and user commands.
+
+Perks — `files/features/perks/`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- `catalog.lua` — unique vanilla perk catalog.
+- `service.lua` — public spawn/apply/count/remove API and removal strategy selection.
+- `pickup_service.lua` — canonical application using a real perk entity.
+- `transactions.lua` — ownership journal for MCM-applied perk copies and rollback.
+- `transactions/global_journal.lua` — Globals/run-flag capture and restoration.
+- `inverse_registry.lua` — explicit inverse dispatcher.
+- `inverse/player.lua`, `inverse/world.lua`, `inverse/companions.lua`, `inverse/lukki.lua` — special inverse families.
+- `root_companions.lua` — ownership of detached companion entities.
+- `presentation.lua` — perk icons/GameEffect/presentation residue cleanup.
+- `files/ui/tabs/perks.lua` — menu only.
+
+Creatures — `files/features/creatures/`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- `catalog.lua` — known vanilla entity paths.
+- `catalog_builder.lua` — full catalog construction and incremental warmup.
+- `classification.lua` — structural independent-creature classification; filename hints are diagnostic only.
+- `compatibility.lua` — verified/candidate/unsafe/unsupported status without dangerous trial polymorph.
+- `compatibility_overrides.lua` — the manual exact-path safe/unsafe/canonical registry.
+- `metadata.lua` — XML/name metadata.
+- `diagnostics.lua` — deeper component/attack/profile inspection.
+- `ui_catalog.lua` — MOBS-ready data.
+- `service.lua` — collect/canonical/prewarm/spawn facade.
+- `files/ui/tabs/creatures.lua` — rendering, search and spawn/transform intent.
+
+Forms — `files/features/forms/`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This is the most sensitive subsystem.
+
+- `manager.lua` — session lifecycle, transform start, TAB return, death handoff and transition coordination.
+- `runtime.lua` — active-form dispatcher.
+- `family.lua` — form family/lifecycle root detection.
+- `controls.lua` — normalized player input.
+- `combat.lua` — attacks, aiming, lasers and manual combat adapters.
+- `presentation.lua` — vision/herd/DamageModel/CharacterData/presentation profile.
+- `component_ops.lua` — shared component operations.
+- `entity_tree_cache.lua` — active-form entity-tree cache.
+- `adapters/ghost.lua`, `fish.lua`, `worm.lua`, `physics.lua`, `boss_dragon.lua` — family-specific behavior.
+- `exact_effects.lua` — exact polymorph wrappers/runtime clones.
+- `human_restore.lua` — serialized human restoration.
+- `player_authority.lua` — transactional authoritative-player switching.
+- `corpse_service.lua` — creature-form corpse lifecycle/synchronization.
+- `death_guard.lua` — native death callback boundary.
+- `transform_flash.lua` — temporary polymorph-flash ownership and restoration.
+- `profile.lua` — form profile analysis.
+- `noop.lua` — deliberately empty runtime script used when original lifecycle/AI must be disabled.
+
+Possession — `files/features/possession/`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- `keybinds.lua` — configured key handling.
+- `targeting.lua` — entity selection under the cursor, including EW tolerance/fallback.
+- `service.lua` — possession state machine/transaction.
+- `retirement.lua` — local target retirement.
+- `files/integrations/ew/possession_retire.lua` — network retire/handoff.
+
+Effects — `files/features/effects/`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- `catalog.lua` — available effects and metadata.
+- `policy.lua` — shared identity/safety policy.
+- `service.lua` — application, ownership, removal, expiry, snapshot and residue checks.
+- `files/ui/tabs/effects.lua` — presentation and commands.
+
+Weather — `files/features/weather/`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- `definitions.lua` — fields and presets.
+- `runtime_effects.lua` — rain/lightning/runtime weather effects.
+- `service.lua` — local user operations and ownership state.
+- `files/integrations/ew/weather_sync.lua` — network snapshot/mailbox and equal-rights routing.
 - `files/ui/tabs/weather.lua` — UI.
 
-Если погода локально работает, но расходится по сети — открывать `files/integrations/ew/weather_sync.lua` и `files/integrations/ew/bridge/weather.lua`, а не UI.
+World Rules — `files/features/world_rules/`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Правила мира — `files/features/world_rules/`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- `definitions.lua` — определения доступных правил;
-- `service.lua` — координация пользовательских overrides/reset/reassert;
-- `world_state.lua` — поля `WorldStateComponent`;
-- `physics.lua` — gravity/damping/physics bodies и локальная гравитация игрока;
-- `stains.lua` — правила загрязнений/статусов;
-- `magic_numbers.lua` — изменения magic-number параметров;
-- `gold_lifetime.lua` — lifetime золота;
-- `files/integrations/ew/world_rules_sync.lua` — EW snapshot, mailbox и равные права peers;
+- `definitions.lua` — rule definitions and choices.
+- `service.lua` — public state machine and orchestration.
+- `world_state.lua` — WorldState fields.
+- `physics.lua` — bounded runtime physics/character gravity and damping ownership.
+- `stains.lua` — stain/status rules.
+- `magic_numbers.lua` — MagicNumbers ownership/transactions.
+- `gold_lifetime.lua` — gold lifetime behavior.
+- `files/integrations/ew/world_rules_sync.lua` — EW snapshots/mailbox/equal peer rights.
 - `files/ui/tabs/world_rules.lua` — UI.
 
-Если сломалась гравитация — `physics.lua`; если конкретное поле мира — `world_state.lua`; если только сеть — `files/integrations/ew/world_rules_sync.lua` и `files/integrations/ew/bridge/world_rules.lua`.
+Companion — `files/features/companion/`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Помощник игрока — `files/features/companion/`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- `player_avatar.lua` — создание и жизненный цикл сетевого/QA avatar-клона;
-- `files/integrations/ew/companion_request.lua` — client → host mailbox запроса создания помощника;
-- `ai.lua` — AI помощника;
-- `health.lua` — узкая логика ремонта стартового HP без лечения полученного боевого урона;
-- `spawn_guard.lua` — per-entity fallback для отдельного Lua VM;
-- `player_clone.xml` — сущность клона.
+- `player_avatar.lua` — companion creation/lifecycle.
+- `ai.lua` — companion AI.
+- `health.lua` — narrow initial-health repair without undoing combat damage.
+- `spawn_guard.lua` — per-entity fallback for separate Lua VMs.
+- `player_clone.xml` — clone entity.
+- `files/integrations/ew/companion_request.lua` — peer-to-host request transport when required by EW.
 
 Entangled Worlds — `files/integrations/ew/`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- `bootstrap.lua` — маленькая точка подключения модуля к EW;
-- `runtime.lua` — обнаружение/общие runtime-возможности EW;
-- `perk_sync.lua` — совместимый слой perk sync;
-- `world_items.lua` — world-item/inventory transport;
-- `possession_retire.lua` — сетевой retire possession target;
-- `companion_request.lua` — очередь client → host запроса companion;
-- `serialization.lua` — EW-specific decoding сериализованных backup-данных, используемых при восстановлении человека;
-- `form_death_channel.lua` — единая регистрация/отправка CrossCall события реальной смерти формы;
-- `weather_sync.lua` — feature-side weather mailbox/snapshot;
-- `world_rules_sync.lua` — feature-side world-rules mailbox/snapshot;
-- `resilience.lua` — применение, проверка и публикация статуса compatibility-patches для конкретной версии EW;
-- `resilience_patches.lua` — чистые текстовые преобразования upstream Lua-кода EW/Noita без runtime-координации;
-- `bridge/protocol.lua` — порядок и версия RPC namespace; позиции нельзя сдвигать без изменения протокола;
-- `bridge/world_rules.lua`, `weather.lua`, `forms.lua`, `items.lua`, `companion.lua`, `possession.lua`, `qa.lua`, `perks.lua` — соответствующие сетевые мосты;
-- `bridge/common.lua` — только общие bridge-примитивы.
+- `bootstrap.lua` — small EW attachment point.
+- `runtime.lua` — EW discovery/common runtime capabilities.
+- `perk_sync.lua`, `world_items.lua`, `possession_retire.lua`, `companion_request.lua`, `weather_sync.lua`, `world_rules_sync.lua` — feature-specific integration.
+- `serialization.lua` — EW-specific serialized-data handling where needed.
+- `form_death_channel.lua` — CrossCall registration/sending for form death.
+- `resilience.lua` and `resilience_patches.lua` — version-sensitive EW compatibility patches and status reporting.
+- `bridge/protocol.lua` — RPC namespace/order/version; protocol slots must not move silently.
+- `bridge/*.lua` — feature-specific network bridges.
 
-Любая логика вида «работает локально, но не у второго игрока» должна сначала проверяться на границе конкретной feature и её EW-моста. Нельзя решать сетевой баг добавлением host-only ограничения: пользовательские права peers по контракту одинаковы.
+A network bug should be debugged at the boundary between the feature and its EW bridge. Do not "fix" a network bug by adding a host-only user restriction.
 
-Критические source-patches EW не считаются успешно установленными только потому, что мод продолжил загрузку. `resilience.lua` различает состояния `applied`, `already_present`, `anchor_mismatch`, `read_failed`, `write_failed` и публикует их в diagnostics. Если новая версия quant.ew изменила upstream-код и anchor больше не совпадает, это должно быть видно явно, а не проявляться позже как случайный сетевой рассинхрон.
+Noita platform — `files/platform/noita/`
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Noita adapter layer — `files/platform/noita/`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- `inventory_slots.lua` — vanilla inventory slot/pickup mechanics;
-- `entity_tree.lua` — обход и поиск root в Noita entity tree;
-- `player_locator.lua` — поиск локальной player entity;
-- `keycodes.lua` — единая загрузка/нормализация keycodes Noita;
-- `input_guard.lua` — защита действий и тяжёлых обновлений после Alt-Tab/focus gap;
-- `localization.lua` — безопасный доступ к игровым переводам;
-- `assets.lua` — работа с игровыми asset/XML paths;
-- `patcher_bridge.lua` — доступ к возможностям NoitaPatcher;
-- `menu_inventory_guard.lua` — подавление конфликта wheel-scroll меню с vanilla inventory и восстановление выбранного предмета.
-
-Этот слой скрывает низкоуровневые детали движка от UI и от тех feature-модулей, которым не нужно их знать.
+- `inventory_slots.lua` — vanilla inventory mechanics.
+- `entity_tree.lua` — entity tree/root traversal.
+- `player_locator.lua` — local player lookup.
+- `keycodes.lua` — keycode normalization.
+- `input_guard.lua` — Alt-Tab/focus-gap action quarantine.
+- `localization.lua` — safe translation lookup.
+- `assets.lua` — asset/XML path helpers.
+- `patcher_bridge.lua` — NoitaPatcher capability provider/reuse.
+- `menu_inventory_guard.lua` — wheel-scroll conflict suppression and held-item restoration.
 
 Diagnostics — `files/diagnostics/`
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- `logger.lua` — bounded persistent log, crash recovery и runtime errors;
-- `entity_inspection.lua` — общий безопасный summary сущности и чтение диагностических VariableStorage значений;
-- `runtime_context.lua` — единое описание QA/EW runtime-контекста для логов и отчётов;
-- `scan_support.lua` — общие примитивы формирования диагностического отчёта;
-- `catalog_scanner.lua` — проверки каталогов заклинаний, предметов, перков, эффектов и мобов;
-- `runtime_scanner.lua` — состояние мира, форм, peers, EW mailboxes и compatibility-status;
-- `runtime_recorder.lua` — лёгкое постоянное наблюдение за игроком, input, peers и frame spikes;
-- `scanner.lua` — координатор полного диагностического прохода и performance sampling;
-- `service.lua` — небольшой lifecycle facade.
+- `logger.lua` — bounded persistent log and runtime error capture.
+- `entity_inspection.lua` — safe entity summaries/diagnostic storage reads.
+- `runtime_context.lua` — shared QA/EW runtime context.
+- `scan_support.lua`, `catalog_scanner.lua`, `runtime_scanner.lua`, `runtime_recorder.lua`, `scanner.lua`, `service.lua` — bounded diagnostics and performance sampling.
 
 QA — `files/qa/`
 ~~~~~~~~~~~~~~~~~
 
-- `controller.lua` — только клавиша Z и lazy loading тяжёлого runner;
-- `runner.lua` — последовательная state machine полного игрового regression-сценария;
-- `cases.lua` — наборы обязательных кейсов и таймауты;
-- `baselines.lua` — снимки, rollback и residue-проверки;
-- `spell_roundtrip.lua` — отдельный сценарий проверки заклинаний.
+- `controller.lua` — Z key and lazy loading of the heavy runner.
+- `runner.lua` — sequential in-game regression scenario state machine.
+- `cases.lua` — required cases and timeouts.
+- `baselines.lua` — snapshots, rollback and residue checks.
+- `spell_roundtrip.lua` — spell-specific roundtrip scenario.
 
-`runner.lua` намеренно остаётся последовательным координатором, потому что порядок apply → verify → rollback является частью безопасности полного игрового теста. Данные кейсов и низкоуровневое восстановление уже вынесены из него, чтобы добавление тестов не превращало runner обратно в универсальный god-object.
+The QA runner intentionally remains sequential because apply -> verify -> rollback order is part of test safety.
 
-Правила зависимостей
-~~~~~~~~~~~~~~~~~~~~
+Dependency rules
+~~~~~~~~~~~~~~~~
 
-При дальнейшем развитии должны соблюдаться следующие правила:
+1. UI displays state and calls feature services; it does not own gameplay transactions or network protocols.
+2. UI should not perform low-level Entity/Component mutations when a platform/feature boundary exists.
+3. `core` must not depend on Noita APIs, gameplay features, UI, EW or diagnostics.
+4. `platform` must not depend on gameplay features or EW.
+5. Gameplay features must not depend on UI, diagnostics or QA.
+6. EW-specific transport/mailbox/RPC belongs in `integrations/ew` rather than tabs or general gameplay services. A standalone entity script may inspect EW role only to prevent duplicate simulation, not to remove user rights.
+7. Large services/coordinators should be split by responsibility before becoming god objects.
+8. New production modules need a real runtime consumer unless they are documented stable extension points.
+9. External registry paths and wire-protocol slots are compatibility surfaces; do not rename/reorder them for aesthetics.
+10. Compatibility aliases may remain temporarily, but new internal names should describe actual roles (`service`, `runtime`, `catalog`, `sync`, `adapter`, etc.).
+11. Exported module tables should be named after responsibility rather than generic `api` in production code.
+12. Network mailbox/CrossCall implementation details belong to the integration layer.
 
-1. UI не реализует игровые транзакции и сетевой протокол; он отображает состояние и вызывает feature-service.
-2. UI не должен напрямую вызывать низкоуровневые `Entity*`/`Component*` операции, если для них существует или может существовать platform/feature boundary.
-3. `core` не зависит от Noita API, игровых feature, UI, EW или diagnostics; любой код с `Entity*`/`Component*`/`Game*`/`Mod*` относится как минимум к platform или feature.
-4. `platform` не зависит от gameplay-feature или EW; это адаптер к Noita.
-5. Gameplay-feature не зависит от UI, diagnostics или QA.
-6. EW-специфичный transport, mailbox и RPC живут в `integrations/ew`, а не размазываются по вкладкам или gameplay-service. Исключение — самостоятельные per-entity runtime scripts, которым технически требуется знать роль EW peer для предотвращения двойной симуляции; это не ограничение пользовательских прав.
-7. Большой service/coordinator должен разрезаться по ответственности до того, как снова превратится в god-object. Для ключевых coordinator-файлов существуют автоматические line-budget проверки.
-8. Новый production-модуль не должен оставаться без реального runtime-потребителя. Architecture test считает такой файл ошибкой, кроме намеренно стабильных extension entrypoints.
-9. Существующие внешние registry paths и wire-protocol slots нельзя переименовывать/сдвигать только ради красоты.
-10. Старые singleton-имена могут временно сохраняться как compatibility aliases, но новые внутренние названия должны описывать реальную роль (`service`, `runtime`, `catalog`, `sync`, `adapter`), а не историческое слово `editor`.
-11. Экспортируемая таблица модуля должна иметь имя по своей ответственности (`form_manager`, `perk_service`, `ghost_adapter`, `ui_runtime` и т. п.); безымянное `local api = {}` в production-коде запрещено architecture-test.
-12. Сетевые mailbox/CrossCall детали должны принадлежать `integrations/ew`; gameplay-код может вызывать этот слой, но не дублировать transport state.
+Testing
+-------
 
-О тестировании
+Static tests are appropriate for syntax, dependency direction, protocol layout, localization completeness and other genuinely static contracts. They should not replace behavior verification with fragile searches for a specific source line or documentation sentence.
+
+Prefer executable Lua mock/integration scenarios that load production modules, replace only the Noita/EW boundary and assert observable state/rollback/network results.
+
+After risky changes, run real in-game checks for transformations, TAB return, form death, Boss Dragon/Maggot Tiny, possession, inventory operations, perk apply/remove, effects, weather/World Rules synchronization, equal host/peer rights and rollback/residue cleanup.
+
+Completeness of this document
+-----------------------------
+
+This document focuses on behavior and ownership boundaries. Additional helper entities, caches, backup states, temporary components, RPCs, special-case handlers, compatibility patches, optimizations and diagnostics may exist to implement those behaviors.
+
+The goal of refactoring is not to minimize line count at any cost. The goal is a smaller, clearer, faster and more reliable project without losing verified functionality.
+
+Developer mode
 --------------
 
-Статические тесты полезны для проверки структуры, протоколов и обязательных контрактов, но они не должны подменять проверку поведения простым поиском конкретных строк исходного кода или текста документации.
+`dev_mode.lua` controls only built-in diagnostics/QA infrastructure.
 
-По возможности тесты должны проверять результат работы модулей и их состояние через контролируемые mock-окружения.
-
-После изменений в наиболее рискованных системах необходимы игровые проверки, особенно для:
-
-- превращения в мобов и возврата в человека;
-- смерти внутри формы моба;
-- Boss Dragon и Maggot Tiny;
-- превращения в моба под курсором;
-- операций с инвентарём;
-- применения и полного удаления перков;
-- синхронизации предметов, форм, погоды и правил;
-- одинаковых возможностей хоста и клиента;
-- восстановления состояния после тестов и временных изменений.
-
-О полноте этого описания
-------------------------
-
-Я перечислил прежде всего те функции и особенности проекта, которые вижу и понимаю со стороны пользователя. Внутри проекта могут существовать дополнительные механизмы, необходимые для реализации этих возможностей, в том числе вспомогательные сущности, резервные состояния, механизмы восстановления, сетевые RPC, временные компоненты, специальные обработчики отдельных мобов и перков, исправления особенностей игрового движка, механизмы совместимости с Entangled Worlds, оптимизации, диагностические функции и игровые тесты.
-
-Поэтому при дальнейшем анализе и переработке проекта необходимо одновременно учитывать фактический код, подтверждённое поведение мода в игре и требования этого README. Цель рефакторинга — не сократить код любой ценой, а сделать проект меньше, понятнее, быстрее и надёжнее, не потеряв уже работающие возможности.
-
-Режим разработчика
-------------------
-Корневой файл `dev_mode.lua` управляет только встроенной отладочной инфраструктурой.
-Для обычной игры и Steam-релиза значение должно оставаться:
+For normal play and public releases:
 
     dev_mode = 0
 
-При `0` мод не загружает runtime diagnostics service и Z QA controller, не выполняет
-их per-frame update, не показывает MOBS review/logging controls и в Entangled Worlds
-не загружает QA telemetry bridge. Сетевой RPC-слот QA при этом остается зарезервирован
-пустым обработчиком, поэтому порядок остальных RPC и совместимость протокола не меняются.
+At `0`, MCM does not load the runtime diagnostics service or Z QA controller, does not run their per-frame updates, does not show MOBS review/logging controls and does not load EW QA telemetry. The QA RPC slot remains reserved with a no-op handler so protocol ordering does not change.
 
-Для разработки можно временно установить:
+For development only:
 
     dev_mode = 1
 
-Тогда возвращаются persistent diagnostics, Z QA, MOBS review logging и EW QA telemetry.
-Offline regression tests из `tests/` от `dev_mode` не зависят и запускаются вручную.
-Перед публикацией архива значение должно быть возвращено в `0`.
+This enables persistent diagnostics, Z QA, MOBS review logging and EW QA telemetry. Offline tests in `tests/` are independent of `dev_mode` and are run manually. Restore `dev_mode = 0` before publishing a player build.
