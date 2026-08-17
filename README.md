@@ -14,7 +14,7 @@
 
 | Language | Guide |
 |---|---|
-| English | [Open English guide](#en) |
+| English | [Open guide](#en) |
 | Русский | [Открыть руководство](#ru) |
 | Português (Brasil) | [Abrir guia](#pt-br) |
 | Español | [Abrir guía](#es) |
@@ -26,7 +26,7 @@
 | 日本語 | [ガイドを開く](#ja) |
 | 한국어 | [가이드 열기](#ko) |
 
-## Download / Скачать
+## Download
 
 | Package | Download |
 |---|---|
