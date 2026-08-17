@@ -1,0 +1,29 @@
+name: Cleanup temporary banner upload branches
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cleanup-temp-branches.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove temporary branches and workflow
+        shell: bash
+        run: |
+          git push origin --delete tmp-banner-upload tmp-banner-upload-2 tmp-banner-upload-3 tmp-banner-upload-4 || true
+          rm -f .github/workflows/cleanup-temp-branches.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/cleanup-temp-branches.yml
+          if ! git diff --cached --quiet; then
+            git commit -m "Remove temporary banner upload workflow"
+            git push
+          fi
