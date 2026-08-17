@@ -1,0 +1,87 @@
+name: Publish ready-to-install build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-ready-build
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Keep one-click download table in README
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('README.md')
+          text = path.read_text(encoding='utf-8')
+          if '## Download / Скачать' not in text:
+              needle = '| 한국어 | [한국어](#ko) |\n\n'
+              block = '''| 한국어 | [한국어](#ko) |
+
+## Download / Скачать
+
+| Build / Сборка | Download / Скачать |
+|---|---|
+| **Ready-to-install / Готовая версия** | **[⬇️ Download ZIP / Скачать ZIP](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/download/latest-build/Metamorph-Creative-Menu.zip)** |
+| Build page / Страница сборки | [Open / Открыть](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/tag/latest-build) |
+
+> The ZIP already contains the `metamorph_creative_menu` folder. Extract/copy that folder directly into `Noita/mods/`.  
+> ZIP уже содержит папку `metamorph_creative_menu`. Распакуйте/скопируйте её прямо в `Noita/mods/`.
+
+'''
+              if needle not in text:
+                  raise SystemExit('Language table marker not found in README.md')
+              text = text.replace(needle, block, 1)
+              path.write_text(text, encoding='utf-8')
+          PY
+
+          if ! git diff --quiet -- README.md; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add README.md
+            git commit -m "Add one-click ready build download"
+            git push
+          fi
+
+      - name: Package playable mod
+        shell: bash
+        run: |
+          rm -f Metamorph-Creative-Menu.zip
+          zip -r -9 Metamorph-Creative-Menu.zip metamorph_creative_menu \
+            -x 'metamorph_creative_menu/tests/*' \
+               'metamorph_creative_menu/README.txt'
+          unzip -l Metamorph-Creative-Menu.zip | grep -q 'metamorph_creative_menu/mod.xml'
+          unzip -l Metamorph-Creative-Menu.zip | grep -q 'metamorph_creative_menu/init.lua'
+
+      - name: Publish stable download URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          git tag -f latest-build HEAD
+          git push origin refs/tags/latest-build --force
+
+          if gh release view latest-build >/dev/null 2>&1; then
+            gh release upload latest-build Metamorph-Creative-Menu.zip --clobber
+            gh release edit latest-build \
+              --title "Latest ready-to-install build" \
+              --notes "Automatically packaged from the current main branch. Download Metamorph-Creative-Menu.zip, then copy the included metamorph_creative_menu folder into Noita/mods/."
+          else
+            gh release create latest-build Metamorph-Creative-Menu.zip \
+              --title "Latest ready-to-install build" \
+              --notes "Automatically packaged from the current main branch. Download Metamorph-Creative-Menu.zip, then copy the included metamorph_creative_menu folder into Noita/mods/."
+          fi
