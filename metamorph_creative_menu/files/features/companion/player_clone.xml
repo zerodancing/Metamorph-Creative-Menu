@@ -1,0 +1,54 @@
+<Entity name="metamorph_creative_menu_player_clone"
+    tags="enemy,metamorph_creative_menu_player_clone,metamorph_creative_menu_companion,homing_target">
+    <Base file="data/entities/base_humanoid.xml">
+        <AnimalAIComponent _enabled="0" sense_creatures="0" attack_melee_enabled="0" attack_ranged_enabled="0"></AnimalAIComponent>
+        <PathFindingComponent _enabled="0"></PathFindingComponent>
+        <GenomeDataComponent herd_id="player" food_chain_rank="20" is_predator="1"></GenomeDataComponent>
+        <CameraBoundComponent max_count="24" distance="160000"></CameraBoundComponent>
+        <CharacterPlatformingComponent run_velocity="72" fly_velocity_x="54" fly_speed_max_up="95" fly_speed_max_down="85"></CharacterPlatformingComponent>
+        <ControlsComponent enabled="0"></ControlsComponent>
+    </Base>
+
+    <Inventory2Component quick_inventory_slots="8" full_inventory_slots_x="16" full_inventory_slots_y="1"></Inventory2Component>
+    <GunComponent></GunComponent>
+
+    <ItemPickUpperComponent
+        is_in_npc="1"
+        is_immune_to_kicks="1"
+        drop_items_on_death="1"
+        only_pick_this_entity="52395832806">
+    </ItemPickUpperComponent>
+
+    <HotspotComponent
+        _tags="right_arm_root"
+        sprite_hotspot_name="right_arm_start"
+        transform_with_scale="1">
+    </HotspotComponent>
+
+    <Entity name="arm_r" tags="player_arm_r">
+        <SpriteComponent
+            _tags="with_item"
+            image_file="data/enemies_gfx/player_arm.xml"
+            rect_animation="default"
+            z_index="0.59">
+        </SpriteComponent>
+        <InheritTransformComponent parent_hotspot_tag="right_arm_root" only_position="1"></InheritTransformComponent>
+        <HotspotComponent _tags="hand" sprite_hotspot_name="hand" transform_with_scale="1"></HotspotComponent>
+    </Entity>
+
+    <HotspotComponent _tags="cape_root" sprite_hotspot_name="cape"></HotspotComponent>
+    <Entity name="cape">
+        <Base file="data/entities/verlet_chains/cape/cape.xml"></Base>
+    </Entity>
+
+    <Entity name="inventory_quick"></Entity>
+    <Entity name="inventory_full"></Entity>
+
+    <VariableStorageComponent _tags="mcm_companion_next_fire" name="mcm_companion_next_fire" value_int="0"></VariableStorageComponent>
+
+    <LuaComponent
+        _tags="metamorph_creative_menu_companion_ai"
+        script_source_file="mods/metamorph_creative_menu/files/features/companion/ai.lua"
+        execute_every_n_frame="1">
+    </LuaComponent>
+</Entity>

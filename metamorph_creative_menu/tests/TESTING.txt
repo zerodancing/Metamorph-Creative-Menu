@@ -1,0 +1,212 @@
+Metamorph: Creative Menu — тестовая инфраструктура
+=======================================
+
+Этот файл описывает только automated regression tests. Описание самого проекта,
+обязательных игровых механик и архитектуры находится в корневом `README.txt`.
+
+Главный принцип тестов
+----------------------
+
+Тест должен по возможности отвечать на вопрос:
+
+  «Сохранится ли нужная механика при рефакторинге?»
+
+а не:
+
+  «Осталась ли конкретная строка в конкретном файле?»
+
+Поэтому основная защита проекта — исполняемые Lua mock/integration scenarios. Они
+загружают настоящий production-модуль, подменяют только Noita/EW boundary и проверяют
+наблюдаемый результат: состояние сущностей, rollback, сетевой mailbox, переключение
+player authority, inventory overflow и т. д.
+
+Source-level contracts оставлены только там, где само свойство по определению является
+статическим: синтаксис, направление зависимостей, циклы модулей, локализация и
+целостность графа встроенного QA-runner.
+
+Запуск
+------
+
+Из корня мода:
+
+  python3 tests/run_all.py .
+
+`run_all.py` автоматически находит:
+
+- все `*_contract.py`;
+- все `*_mock.lua`.
+
+Поэтому новый тест не нужно вручную добавлять в список runner'а. Если файл соответствует
+этому имени, он автоматически участвует в полном regression-suite.
+
+Behavior coverage
+-----------------
+
+`behavior_coverage_contract.py` содержит карту обязательных пользовательских механик и
+исполняемых тестов, которые их защищают. Это не карта файлов production-кода: внутреннюю
+архитектуру механики можно менять сколько угодно, если ее наблюдаемое поведение остается
+тем же и соответствующий scenario продолжает проходить.
+
+Сейчас отдельными сценариями защищены, среди прочего:
+
+- верхняя панель меню продолжает работать даже при runtime-ошибке активной вкладки;
+- состояние vanilla inventory корректно сохраняется при работе меню;
+- spell catalog и операции с wand, включая синхронизацию;
+- LMB world-spawn предмета и его регистрация в EW;
+- RMB помещение предмета в inventory и inventory resync;
+- отдельные 4 wand + 4 item slots и безопасный overflow вместо замены предметов;
+- наполненные колбы и cleanup preview-probe;
+- LMB spawn перка, canonical pickup и RMB direct apply;
+- транзакционный rollback перков и специальные inverse для сложных перков;
+- MOBS catalog, prewarm и LMB spawn моба;
+- RMB transform с созданием полноценной form-session;
+- TAB return и отсутствие пересечения TAB с G-possession;
+- native death form -> живой human на месте погибшего моба + corpse handoff;
+- Boss Dragon/Maggot Tiny: AI выключен, WormPlayer driver включен, ввод управляет формой;
+- form combat, authority switch, transform flash ownership и runtime reset;
+- G-possession: исходный моб удаляется только после подтвержденного превращения;
+- client fallback поиска цели possession 32 -> 64;
+- effect add -> active -> remove -> bounded cleanup;
+- time presets, точная настройка weather и EW latest-snapshot round-trip;
+- world rules apply/reset, exact WorldState round-trip, restart recovery, gravity/stain ownership,
+  MagicNumbers без накопления, bounded physics scans, dirty-state publication и EW mailbox snapshot;
+- одинаковые пользовательские права EW host/client;
+- companion health/spawn guard и client->host request;
+- EW RPC namespace, serialization и status критических compatibility patches;
+- bounded diagnostics log и выполнение runtime scanner;
+- Alt-Tab/focus quarantine и корректное разделение TAB/G;
+- lazy loading встроенного Z QA.
+
+Статические контракты
+---------------------
+
+1. `syntax_contract.py`
+
+Парсит все Lua-файлы через `texluac -p`. Ловит синтаксические ошибки после переносов и
+переименований. Он ничего не утверждает о поведении игры.
+
+2. `architecture_contract.py`
+
+Проверяет только архитектурные границы, которые действительно помогают избежать
+регрессий:
+
+- существуют основные слои `core / platform / integrations / features / ui / diagnostics / qa`;
+- старые смешанные директории не возвращаются;
+- generic `core` не зависит от Noita/EW/gameplay;
+- platform не зависит от gameplay/network/UI;
+- gameplay/integrations не зависят от UI/diagnostics/QA;
+- UI не реализует EW protocol и не вызывает low-level Entity/Component API напрямую;
+- EW peer policy не расползается по gameplay-коду;
+- внутренний `dofile` graph не содержит циклов;
+- production-модули не остаются полностью бесхозными;
+- тесты не используют README как executable contract.
+
+Он намеренно НЕ проверяет:
+
+- количество строк в файле;
+- конкретные имена local variables;
+- обязательное наличие конкретного helper-файла;
+- точное расположение функции;
+- конкретную строку вызова service;
+- старые source markers из предыдущих реализаций.
+
+Если две архитектуры соблюдают те же границы и одинаково проходят behavioral tests,
+обе считаются допустимыми.
+
+3. `localization_contract.py`
+
+Собирает все реально используемые `$mcm_*` ссылки по всему runtime и проверяет, что
+для них есть корректные translation rows и заполнены 11 игровых языков. Перемещение
+вкладки или функции между файлами на тест не влияет.
+
+Один существующий ключ `mcm_perk_apply_failed` пока использует fallback UI-string и
+помечен как известный долг; на этом test-only этапе runtime/translations не менялись.
+Новые отсутствующие ключи будут считаться регрессией.
+
+4. `qa_phase_contract.py`
+
+Не фиксирует исторический список фаз Z QA. Он только строит граф state machine и
+проверяет, что у каждого literal transition target существует handler. Конкретные
+игровые сценарии проверяются behavioral mocks и настоящим in-game QA.
+
+Что удалено
+-----------
+
+Старый `regression_static.py` удален полностью. Он содержал десятки проверок вида:
+
+- «в этом файле должна находиться такая строка»;
+- «эта local function должна называться именно так»;
+- «этот вызов должен стоять после другого вызова»;
+- «coordinator должен быть короче N строк».
+
+Такие проверки мешали безопасному рефакторингу и часто проверяли форму реализации
+вместо механики.
+
+Защита от случайного удаления кода
+----------------------------------
+
+Нельзя надежно определить полезность участка production-кода по количеству строк или
+по наличию его имени. Поэтому защита от случайного удаления строится в три слоя:
+
+1. синтаксис и dependency graph ловят физически сломанные модули;
+2. behavior coverage не дает незаметно удалить сам regression scenario;
+3. исполняемый mock вызывает production API и проверяет конечный результат.
+
+Если удалить важную ветку, но интерфейс останется существовать, должен упасть именно
+behavioral test этой механики.
+
+При разработке новых тестов следует предпочитать проверки результата, например:
+
+  «пятый wand не помещается в заполненный ряд и остается в мире»
+
+вместо:
+
+  «в inventory_slots.lua существует QUICK_SLOT_COUNT = 4».
+
+Проверка качества новых behavioral tests
+-----------------------------------------
+
+При этой переработке тестов дополнительно выполнялись временные mutation probes на
+копиях проекта. Искусственно ломались пять разных механик: inventory capacity, weather
+publication, effect removal, default form duration и Boss Dragon movement. Каждый раз
+соответствующий новый/существующий behavioral test падал. Эти мутации не являются частью
+обычного suite и не изменяли production-код проекта.
+
+Что offline tests не доказывают
+-------------------------------
+
+Даже хороший mock-suite не заменяет настоящие Noita + Entangled Worlds. Он не может
+полностью воспроизвести scheduling движка, физику, отдельные Lua VM сущностей,
+NoitaPatcher, реальную сериализацию EW и гонки двух процессов игры.
+
+После изменений runtime в forms, perks, inventory, EW, weather/world rules или physics
+по-прежнему нужен игровой regression run. Но обычный рефакторинг теперь должен гораздо
+чаще ломаться сначала в конкретном behavioral test, а не обнаруживаться только вручную
+в игре.
+
+MOBS COMPATIBILITY REVIEW
+-------------------------
+The MOBS review UI logs exact XML paths with verdicts SAFE / UNSAFE / RETEST. These
+verdicts are intentionally human evidence; filename fragments are not compatibility
+rules. To summarize a diagnostics log after an in-game review session, run:
+
+    python tests/creature_review_report.py <path-to-diagnostics-log>
+
+The helper also prints the last attempted creature transform. It does NOT automatically
+label an interrupted/crashed session as unsafe, because a process exit can have unrelated
+causes. Confirmed exact paths should be copied into:
+
+    files/features/creatures/compatibility_overrides.lua
+
+`safe`, `unsafe`, and `canonical` entries in that file are exact-path knowledge only.
+
+DEVELOPER MODE / RELEASE RUNTIME
+--------------------------------
+`dev_mode.lua` is intentionally `dev_mode = 0` in packaged release builds. In that mode
+in-game diagnostics, the Z QA controller, MOBS review logging and EW QA telemetry are not
+loaded into the gameplay runtime. The EW QA RPC position remains a no-op reserved slot so
+later protocol indices do not move.
+
+Set `dev_mode = 1` only for an in-game developer/debug session. This file does not disable
+or alter the offline tests in this directory; `python tests/run_all.py` always runs the
+full regression suite regardless of release runtime mode.

@@ -1,0 +1,5 @@
+local root = assert(arg[1], "root required")
+local xml_utils = dofile(root .. "/files/core/xml_utils.lua")
+local escaped = xml_utils.escape_attribute([[a&"<b>]])
+assert(escaped == "a&amp;&quot;&lt;b&gt;", "XML attribute escaping changed: " .. tostring(escaped))
+print("xml_utils=PASS")
