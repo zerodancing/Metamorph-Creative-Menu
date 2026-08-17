@@ -78,7 +78,7 @@ allowed = {Path("README.md"), ROOT / "translations.csv"}
 cyrillic = re.compile(r"[\u0400-\u04FF]")
 violations = []
 for path in Path(".").rglob("*"):
-    if not path.is_file() or ".git" in path.parts or path in allowed or ".github/tmp" in path.as_posix():
+    if not path.is_file() or ".git" in path.parts or ".github" in path.parts or path in allowed:
         continue
     if path.suffix.lower() in {".dll", ".png", ".jpg", ".jpeg", ".gif", ".zip"}:
         continue
