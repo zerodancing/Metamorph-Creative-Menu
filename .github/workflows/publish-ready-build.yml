@@ -48,14 +48,19 @@ jobs:
               if needle not in text:
                   raise SystemExit('Language table marker not found in README.md')
               text = text.replace(needle, block, 1)
-              path.write_text(text, encoding='utf-8')
+          text = text.replace(
+              '> ZIP уже содержит папку `metamorph_creative_menu`. Распакуйте/скопируйте её прямо в `Noita/mods/`.\n> Choose your language above.',
+              '> ZIP уже содержит папку `metamorph_creative_menu`. Распакуйте/скопируйте её прямо в `Noita/mods/`.\n\n> Choose your language above.',
+              1,
+          )
+          path.write_text(text, encoding='utf-8')
           PY
 
           if ! git diff --quiet -- README.md; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add README.md
-            git commit -m "Add one-click ready build download"
+            git commit -m "Polish one-click download section"
             git push
           fi
 
