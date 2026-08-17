@@ -1,4 +1,4 @@
-# one-shot maintenance workflow
+# one-shot maintenance workflow - corrected localization rows
 name: English source cleanup
 
 on:
