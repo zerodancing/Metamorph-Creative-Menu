@@ -20,49 +20,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Keep one-click download table in README
+      - name: Validate release links and mod entrypoints
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('README.md')
-          text = path.read_text(encoding='utf-8')
-          if '## Download / Скачать' not in text:
-              needle = '| 한국어 | [한국어](#ko) |\n\n'
-              lines = [
-                  '| 한국어 | [한국어](#ko) |',
-                  '',
-                  '## Download / Скачать',
-                  '',
-                  '| Build / Сборка | Download / Скачать |',
-                  '|---|---|',
-                  '| **Ready-to-install / Готовая версия** | **[⬇️ Download ZIP / Скачать ZIP](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/download/latest-build/Metamorph-Creative-Menu.zip)** |',
-                  '| Build page / Страница сборки | [Open / Открыть](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/tag/latest-build) |',
-                  '',
-                  '> The ZIP already contains the `metamorph_creative_menu` folder. Extract/copy that folder directly into `Noita/mods/`.  ',
-                  '> ZIP уже содержит папку `metamorph_creative_menu`. Распакуйте/скопируйте её прямо в `Noita/mods/`.',
-                  '',
-              ]
-              block = '\n'.join(lines)
-              if needle not in text:
-                  raise SystemExit('Language table marker not found in README.md')
-              text = text.replace(needle, block, 1)
-          text = text.replace(
-              '> ZIP уже содержит папку `metamorph_creative_menu`. Распакуйте/скопируйте её прямо в `Noita/mods/`.\n> Choose your language above.',
-              '> ZIP уже содержит папку `metamorph_creative_menu`. Распакуйте/скопируйте её прямо в `Noita/mods/`.\n\n> Choose your language above.',
-              1,
-          )
-          path.write_text(text, encoding='utf-8')
-          PY
-
-          if ! git diff --quiet -- README.md; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add README.md
-            git commit -m "Polish one-click download section"
-            git push
-          fi
+          grep -Fq 'releases/download/latest-build/Metamorph-Creative-Menu.zip' README.md
+          test -f metamorph_creative_menu/mod.xml
+          test -f metamorph_creative_menu/init.lua
 
       - name: Package playable mod
         shell: bash
