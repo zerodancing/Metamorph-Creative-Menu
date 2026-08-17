@@ -60,19 +60,16 @@ rules.write_text(text, encoding="utf-8")
 
 translations = ROOT / "translations.csv"
 raw = translations.read_text(encoding="utf-8-sig")
-rows = [
-    "mcm_perk_apply_failed,Could not apply perk,Не удалось применить перк,Não foi possível aplicar o benefício,No se pudo aplicar el perk,Perk konnte nicht angewendet werden,Impossible d’appliquer l’atout,Impossibile applicare il perk,Nie udało się zastosować perka,无法应用天赋,パークを適用できませんでした,퍽을 적용하지 못했습니다,,,","[:-1],
-    "mcm_weather_unavailable,Weather editing unavailable,Редактирование погоды недоступно,Edição do clima indisponível,La edición del clima no está disponible,Wetterbearbeitung nicht verfügbar,Modification de la météo indisponible,Modifica del meteo non disponibile,Edycja pogody jest niedostępna,天气编辑不可用,天候編集を利用できません,날씨 편집을 사용할 수 없습니다,,,","[:-1],
-    "mcm_rules_unavailable,World-rule editing unavailable,Редактирование правил мира недоступно,Edição das regras do mundo indisponível,La edición de reglas del mundo no está disponible,Weltregel-Bearbeitung nicht verfügbar,Modification des règles du monde indisponible,Modifica delle regole del mondo non disponibile,Edycja zasad świata jest niedostępna,世界规则编辑不可用,ワールドルール編集を利用できません,세계 규칙 편집을 사용할 수 없습니다,,,","[:-1],
-    "mcm_rules_error,RULE ERROR,ОШИБКА ПРАВИЛА,ERRO DE REGRA,ERROR DE REGLA,REGELFEHLER,ERREUR DE RÈGLE,ERRORE REGOLA,BŁĄD ZASADY,规则错误,ルールエラー,규칙 오류,,,","[:-1],
+new_rows = [
+    ["mcm_perk_apply_failed", "Could not apply perk", "Не удалось применить перк", "Não foi possível aplicar o benefício", "No se pudo aplicar el perk", "Perk konnte nicht angewendet werden", "Impossible d’appliquer l’atout", "Impossibile applicare il perk", "Nie udało się zastosować perka", "无法应用天赋", "パークを適用できませんでした", "퍽을 적용하지 못했습니다", "", "", ""],
+    ["mcm_weather_unavailable", "Weather editing unavailable", "Редактирование погоды недоступно", "Edição do clima indisponível", "La edición del clima no está disponible", "Wetterbearbeitung nicht verfügbar", "Modification de la météo indisponible", "Modifica del meteo non disponibile", "Edycja pogody jest niedostępna", "天气编辑不可用", "天候編集を利用できません", "날씨 편집을 사용할 수 없습니다", "", "", ""],
+    ["mcm_rules_unavailable", "World-rule editing unavailable", "Редактирование правил мира недоступно", "Edição das regras do mundo indisponível", "La edición de reglas del mundo no está disponible", "Weltregel-Bearbeitung nicht verfügbar", "Modification des règles du monde indisponible", "Modifica delle regole del mondo non disponibile", "Edycja zasad świata jest niedostępna", "世界规则编辑不可用", "ワールドルール編集を利用できません", "세계 규칙 편집을 사용할 수 없습니다", "", "", ""],
+    ["mcm_rules_error", "RULE ERROR", "ОШИБКА ПРАВИЛА", "ERRO DE REGRA", "ERROR DE REGLA", "REGELFEHLER", "ERREUR DE RÈGLE", "ERRORE REGOLA", "BŁĄD ZASADY", "规则错误", "ルールエラー", "규칙 오류", "", "", ""],
 ]
-# Remove the helper quote marker from each row. The resulting CSV row ends with three empty fields.
-rows = [row for row in rows]
 existing = {line.split(",", 1)[0].lstrip("\ufeff") for line in raw.splitlines() if line}
-for row in rows:
-    key = row.split(",", 1)[0]
-    if key not in existing:
-        raw = raw.rstrip("\r\n") + "\n" + row + "\n"
+for fields in new_rows:
+    if fields[0] not in existing:
+        raw = raw.rstrip("\r\n") + "\n" + ",".join(fields) + "\n"
 translations.write_text("\ufeff" + raw, encoding="utf-8")
 
 # Everything except the root multilingual README and translations must be English-only.
