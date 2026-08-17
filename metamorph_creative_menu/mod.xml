@@ -1,7 +1,6 @@
 <Mod
     name="Metamorph: Creative Menu"
-    description="Creative toolkit: wands, items, reversible perks/effects, weather, world rules, curated creatures and reversible forms. Partial experimental Entangled Worlds support; further compatibility development is planned."
-    request_no_api_restrictions="1"
+    description="Steam Workshop build of the creative toolkit for Noita. Core editors, spawning, forms, weather and rules are available where supported; advanced NoitaPatcher-powered recovery and native features require the standalone GitHub build."
     is_game_mode="0"
 >
 </Mod>

@@ -1,0 +1,145 @@
+name: Validate Workshop build
+
+on:
+  push:
+    branches: [workshop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Workshop package rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f metamorph_creative_menu/workshop.xml
+          test -f metamorph_creative_menu/workshop_preview_image.png
+          test ! -d metamorph_creative_menu/NoitaPatcher
+          if grep -q 'request_no_api_restrictions' metamorph_creative_menu/mod.xml; then
+            echo 'Workshop mod.xml still requests unrestricted API' >&2
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+          allowed = {'.txt','.csv','.xml','.json','.bmp','.png','.lua','.frag','.vert','.bank','.bin','.plz'}
+          root = Path('metamorph_creative_menu')
+          bad = []
+          for p in root.rglob('*'):
+              if not p.is_file():
+                  continue
+              rel = p.relative_to(root)
+              if rel.parts and rel.parts[0] == 'tests':
+                  continue
+              if rel.as_posix() == 'README.txt':
+                  continue
+              if p.suffix.lower() not in allowed:
+                  bad.append(rel.as_posix())
+          if bad:
+              raise SystemExit('Unsupported Workshop file types: ' + ', '.join(bad))
+          print('Workshop extension whitelist: PASS')
+          PY
+
+      - name: Check unrestricted Lua API usage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('metamorph_creative_menu')
+          candidates = list((root / 'files').rglob('*.lua')) + [root / 'init.lua', root / 'settings.lua']
+          pattern = re.compile(r'(?<![A-Za-z0-9_])(?:io\.|os\.|ffi\.|require\s*\(\s*[\"\']ffi[\"\'])')
+
+          # QA is loaded only when dev_mode=1 and is not part of the release runtime.
+          # bounded_log.lua intentionally probes io.open and returns a clean failure when
+          # the restricted Workshop sandbox does not expose it; the guard itself is safe.
+          allowed_guarded = Path('metamorph_creative_menu/files/core/bounded_log.lua')
+          guard_text = allowed_guarded.read_text(encoding='utf-8')
+          required_guard = 'if type(io) ~= "table" or type(io.open) ~= "function" then'
+          if required_guard not in guard_text:
+              raise SystemExit('bounded_log.lua no longer guards io.open before use')
+
+          bad = []
+          for path in candidates:
+              rel = path.as_posix()
+              if '/files/qa/' in rel:
+                  continue
+              text = path.read_text(encoding='utf-8')
+              if not pattern.search(text):
+                  continue
+              if path == allowed_guarded:
+                  continue
+              for lineno, line in enumerate(text.splitlines(), 1):
+                  if pattern.search(line):
+                      bad.append(f'{rel}:{lineno}: {line.strip()}')
+
+          if bad:
+              raise SystemExit('Potential unguarded unrestricted Lua API use:\n' + '\n'.join(bad))
+          print('Restricted-API runtime scan: PASS')
+          PY
+
+      - name: Install texlua
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends texlive-binaries >/dev/null
+
+      - name: Run Workshop regression suite
+        working-directory: metamorph_creative_menu
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          import subprocess
+          import sys
+
+          root = Path('.').resolve()
+          texlua = shutil.which('texlua')
+          if not texlua:
+              raise SystemExit('texlua not found')
+
+          # This contract intentionally belongs only to the full standalone build.
+          # Workshop must omit the bundled NoitaPatcher DLL, so only this one contract
+          # is excluded; all other discovered contracts and every behavioral Lua mock run.
+          excluded_contracts = {'standalone_patcher_contract.py'}
+          preferred = [
+              'syntax_contract.py',
+              'architecture_contract.py',
+              'behavior_coverage_contract.py',
+              'localization_contract.py',
+              'qa_phase_contract.py',
+          ]
+
+          contracts = {
+              p.name: p for p in (root / 'tests').glob('*_contract.py')
+              if p.name not in excluded_contracts
+          }
+          ordered = []
+          for name in preferred:
+              path = contracts.pop(name, None)
+              if path is not None:
+                  ordered.append(path)
+          ordered.extend(contracts[name] for name in sorted(contracts))
+          mocks = sorted((root / 'tests').glob('*_mock.lua'), key=lambda p: p.name)
+
+          commands = [[sys.executable, str(p), str(root)] for p in ordered]
+          commands.extend([[texlua, str(p), str(root)] for p in mocks])
+          for command in commands:
+              print('+', ' '.join(command), flush=True)
+              subprocess.run(command, check=True)
+
+          print(
+              'WORKSHOP_REGRESSION_TESTS=PASS '
+              f'count={len(commands)} contracts={len(ordered)} behavioral_mocks={len(mocks)} '
+              'excluded=standalone_patcher_contract.py'
+          )
+          PY
