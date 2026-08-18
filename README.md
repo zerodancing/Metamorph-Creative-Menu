@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="assets/metamorph-creative-menu-banner.jpg" alt="Metamorph: Creative Menu" width="100%">
-</p>
-
 <h1 align="center">Metamorph: Creative Menu</h1>
 
 <p align="center">
