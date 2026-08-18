@@ -1,0 +1,243 @@
+name: Validate Workshop build
+
+on:
+  push:
+    branches: [workshop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Workshop metadata and package rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          import struct
+          import xml.etree.ElementTree as ET
+
+          root = Path('metamorph_creative_menu')
+          required = [
+              root / 'mod.xml',
+              root / 'mod_id.txt',
+              root / 'init.lua',
+              root / 'settings.lua',
+              root / 'translations.csv',
+              root / 'workshop.xml',
+              root / 'workshop_preview_image.png',
+              root / 'dev_mode.lua',
+          ]
+          missing = [p.relative_to(root).as_posix() for p in required if not p.is_file()]
+          if missing:
+              raise SystemExit('Missing Workshop files: ' + ', '.join(missing))
+
+          if (root / 'NoitaPatcher').exists():
+              raise SystemExit('Workshop branch must not contain NoitaPatcher/')
+          dlls = [p.relative_to(root).as_posix() for p in root.rglob('*.dll')]
+          if dlls:
+              raise SystemExit('Native DLLs are not allowed in Workshop build: ' + ', '.join(dlls))
+
+          mod_id = (root / 'mod_id.txt').read_text(encoding='utf-8').strip()
+          if mod_id != 'metamorph_creative_menu':
+              raise SystemExit(f'Unexpected mod_id.txt value: {mod_id!r}')
+
+          dev_text = (root / 'dev_mode.lua').read_text(encoding='utf-8')
+          if not re.search(r'(?m)^\s*dev_mode\s*=\s*0\s*$', dev_text):
+              raise SystemExit('Workshop build must ship with dev_mode = 0')
+
+          mod_root = ET.parse(root / 'mod.xml').getroot()
+          if mod_root.tag != 'Mod':
+              raise SystemExit('mod.xml root must be <Mod>')
+          if mod_root.attrib.get('name') != 'Metamorph: Creative Menu':
+              raise SystemExit('Unexpected mod.xml name')
+          if 'request_no_api_restrictions' in mod_root.attrib:
+              raise SystemExit('Workshop mod.xml must not request unrestricted API')
+          if mod_root.attrib.get('is_game_mode', '0') not in {'0', 'false'}:
+              raise SystemExit('Workshop build must not be a game mode')
+
+          workshop_root = ET.parse(root / 'workshop.xml').getroot()
+          if workshop_root.tag != 'Mod':
+              raise SystemExit('workshop.xml root must be <Mod>')
+          if workshop_root.attrib.get('name') != 'Metamorph: Creative Menu':
+              raise SystemExit('Unexpected workshop.xml name')
+          if workshop_root.attrib.get('description') != '':
+              raise SystemExit('workshop.xml description must remain empty so Steam page text is not overwritten')
+
+          documented_tags = {
+              'gameplay','graphics','quality of life','translations','perks','spells',
+              'player characters','loadouts','biomes','total conversions','game modes',
+              'creatures','bosses','alchemy','tweaks','items','audio','cheats','funny',
+              'streaming integration','mod dependencies',
+          }
+          tags = [x.strip() for x in workshop_root.attrib.get('tags', '').split(',') if x.strip()]
+          unknown_tags = sorted(set(tags) - documented_tags)
+          if unknown_tags:
+              raise SystemExit('Unknown Workshop tags: ' + ', '.join(unknown_tags))
+          if 'gameplay' not in tags:
+              raise SystemExit('Workshop tags must include gameplay')
+
+          def split_pipe(value):
+              return [x.strip().replace('\\', '/') for x in value.split('|') if x.strip()]
+
+          excluded_dirs = set(split_pipe(workshop_root.attrib.get('dont_upload_folders', '')))
+          excluded_files = set(split_pipe(workshop_root.attrib.get('dont_upload_files', '')))
+          required_excluded_dirs = {'NoitaPatcher', 'tests', 'files/qa', 'files/diagnostics'}
+          missing_exclusions = sorted(required_excluded_dirs - excluded_dirs)
+          if missing_exclusions:
+              raise SystemExit('Missing Workshop folder exclusions: ' + ', '.join(missing_exclusions))
+          if 'README.txt' not in excluded_files:
+              raise SystemExit('README.txt must be excluded from Workshop upload')
+
+          preview = root / 'workshop_preview_image.png'
+          data = preview.read_bytes()
+          if len(data) < 24 or data[:8] != b'\x89PNG\r\n\x1a\n' or data[12:16] != b'IHDR':
+              raise SystemExit('workshop_preview_image.png is not a valid PNG with IHDR header')
+          width, height = struct.unpack('>II', data[16:24])
+          if (width, height) != (1280, 720):
+              raise SystemExit(f'Workshop preview must be 1280x720, got {width}x{height}')
+          if width * 9 != height * 16:
+              raise SystemExit('Workshop preview must be exactly 16:9')
+          if preview.stat().st_size >= 1_000_000:
+              raise SystemExit('Workshop preview should stay below 1 MB')
+
+          allowed = {'.txt','.csv','.xml','.json','.bmp','.png','.lua','.frag','.vert','.bank','.bin','.plz'}
+          bad = []
+          uploaded = []
+          symlinks = []
+          for p in root.rglob('*'):
+              if not p.is_file():
+                  continue
+              rel = p.relative_to(root)
+              rel_s = rel.as_posix()
+              if p.is_symlink():
+                  symlinks.append(rel_s)
+                  continue
+              if any(rel_s == d or rel_s.startswith(d + '/') for d in excluded_dirs):
+                  continue
+              if rel_s in excluded_files:
+                  continue
+              uploaded.append(rel_s)
+              if p.suffix.lower() not in allowed:
+                  bad.append(rel_s)
+          if symlinks:
+              raise SystemExit('Symlinks are not allowed in Workshop package: ' + ', '.join(symlinks))
+          if bad:
+              raise SystemExit('Unsupported Workshop file types: ' + ', '.join(bad))
+          for essential in ['mod.xml','mod_id.txt','init.lua','settings.lua','translations.csv','workshop.xml','workshop_preview_image.png']:
+              if essential not in uploaded:
+                  raise SystemExit('Essential file excluded from upload: ' + essential)
+
+          if (root / 'workshop_id.txt').exists():
+              print('Workshop metadata: existing workshop_id.txt detected (update mode)')
+          else:
+              print('Workshop metadata: no workshop_id.txt yet (first-publication mode)')
+          print(f'Workshop metadata/package: PASS uploaded_files={len(uploaded)} preview={width}x{height} preview_bytes={preview.stat().st_size}')
+          PY
+
+      - name: Check unrestricted Lua API usage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('metamorph_creative_menu')
+          candidates = list((root / 'files').rglob('*.lua')) + [root / 'init.lua', root / 'settings.lua']
+          pattern = re.compile(r'(?<![A-Za-z0-9_])(?:io\.|os\.|ffi\.|require\s*\(\s*[\"\']ffi[\"\'])')
+
+          # Development-only QA/diagnostic folders are excluded by workshop.xml.
+          excluded_runtime_dirs = ('/files/qa/', '/files/diagnostics/')
+
+          # bounded_log.lua intentionally probes io.open and returns a clean failure when
+          # the restricted Workshop sandbox does not expose it; the guard itself is safe.
+          allowed_guarded = Path('metamorph_creative_menu/files/core/bounded_log.lua')
+          guard_text = allowed_guarded.read_text(encoding='utf-8')
+          required_guard = 'if type(io) ~= "table" or type(io.open) ~= "function" then'
+          if required_guard not in guard_text:
+              raise SystemExit('bounded_log.lua no longer guards io.open before use')
+
+          bad = []
+          for path in candidates:
+              rel = '/' + path.as_posix()
+              if any(marker in rel for marker in excluded_runtime_dirs):
+                  continue
+              text = path.read_text(encoding='utf-8')
+              if not pattern.search(text):
+                  continue
+              if path == allowed_guarded:
+                  continue
+              for lineno, line in enumerate(text.splitlines(), 1):
+                  if pattern.search(line):
+                      bad.append(f'{path.as_posix()}:{lineno}: {line.strip()}')
+
+          if bad:
+              raise SystemExit('Potential unguarded unrestricted Lua API use:\n' + '\n'.join(bad))
+          print('Restricted-API uploaded-runtime scan: PASS')
+          PY
+
+      - name: Install texlua
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends texlive-binaries >/dev/null
+
+      - name: Run Workshop regression suite
+        working-directory: metamorph_creative_menu
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          import subprocess
+          import sys
+
+          root = Path('.').resolve()
+          texlua = shutil.which('texlua')
+          if not texlua:
+              raise SystemExit('texlua not found')
+
+          # This contract intentionally belongs only to the full standalone build.
+          # Workshop must omit the bundled NoitaPatcher DLL, so only this one contract
+          # is excluded; all other discovered contracts and every behavioral Lua mock run.
+          excluded_contracts = {'standalone_patcher_contract.py'}
+          preferred = [
+              'syntax_contract.py',
+              'architecture_contract.py',
+              'behavior_coverage_contract.py',
+              'localization_contract.py',
+              'qa_phase_contract.py',
+          ]
+
+          contracts = {
+              p.name: p for p in (root / 'tests').glob('*_contract.py')
+              if p.name not in excluded_contracts
+          }
+          ordered = []
+          for name in preferred:
+              path = contracts.pop(name, None)
+              if path is not None:
+                  ordered.append(path)
+          ordered.extend(contracts[name] for name in sorted(contracts))
+          mocks = sorted((root / 'tests').glob('*_mock.lua'), key=lambda p: p.name)
+
+          commands = [[sys.executable, str(p), str(root)] for p in ordered]
+          commands.extend([[texlua, str(p), str(root)] for p in mocks])
+          for command in commands:
+              print('+', ' '.join(command), flush=True)
+              subprocess.run(command, check=True)
+
+          print(
+              'WORKSHOP_REGRESSION_TESTS=PASS '
+              f'count={len(commands)} contracts={len(ordered)} behavioral_mocks={len(mocks)} '
+              'excluded=standalone_patcher_contract.py'
+          )
+          PY

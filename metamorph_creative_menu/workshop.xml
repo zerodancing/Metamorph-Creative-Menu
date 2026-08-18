@@ -1,0 +1,8 @@
+<Mod
+    name="Metamorph: Creative Menu"
+    description=""
+    tags="gameplay,quality of life,spells,perks,player characters,creatures,items,cheats"
+    dont_upload_folders="NoitaPatcher|tests|files\qa|files\diagnostics"
+    dont_upload_files="README.txt"
+>
+</Mod>

@@ -1,0 +1,106 @@
+name: Publish Workshop build
+
+on:
+  push:
+    branches: [workshop]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Workshop build first
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f metamorph_creative_menu/mod.xml
+          test -f metamorph_creative_menu/mod_id.txt
+          test -f metamorph_creative_menu/init.lua
+          test -f metamorph_creative_menu/workshop.xml
+          test -f metamorph_creative_menu/workshop_preview_image.png
+          test ! -d metamorph_creative_menu/NoitaPatcher
+          if find metamorph_creative_menu -type f -iname '*.dll' | grep -q .; then
+            echo 'Workshop package contains a DLL' >&2
+            exit 1
+          fi
+          if grep -q 'request_no_api_restrictions' metamorph_creative_menu/mod.xml; then
+            echo 'Workshop mod.xml requests unrestricted API' >&2
+            exit 1
+          fi
+
+      - name: Package ready-to-upload Workshop mod
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist/metamorph_creative_menu
+          cp -a metamorph_creative_menu/. dist/metamorph_creative_menu/
+          rm -rf \
+            dist/metamorph_creative_menu/NoitaPatcher \
+            dist/metamorph_creative_menu/tests \
+            dist/metamorph_creative_menu/files/qa \
+            dist/metamorph_creative_menu/files/diagnostics
+          rm -f dist/metamorph_creative_menu/README.txt
+          (
+            cd dist
+            zip -qr ../Metamorph-Creative-Menu-Workshop.zip metamorph_creative_menu
+          )
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          archive = Path('Metamorph-Creative-Menu-Workshop.zip')
+          with zipfile.ZipFile(archive) as z:
+              names = set(z.namelist())
+              required = {
+                  'metamorph_creative_menu/mod.xml',
+                  'metamorph_creative_menu/mod_id.txt',
+                  'metamorph_creative_menu/init.lua',
+                  'metamorph_creative_menu/workshop.xml',
+                  'metamorph_creative_menu/workshop_preview_image.png',
+              }
+              missing = sorted(required - names)
+              if missing:
+                  raise SystemExit('Missing required files in Workshop ZIP: ' + ', '.join(missing))
+              forbidden = [
+                  n for n in names
+                  if n.lower().endswith('.dll')
+                  or n.startswith('metamorph_creative_menu/NoitaPatcher/')
+                  or n.startswith('metamorph_creative_menu/tests/')
+                  or n.startswith('metamorph_creative_menu/files/qa/')
+                  or n.startswith('metamorph_creative_menu/files/diagnostics/')
+              ]
+              if forbidden:
+                  raise SystemExit('Forbidden files in Workshop ZIP: ' + ', '.join(sorted(forbidden)))
+          print(f'Workshop ZIP: PASS bytes={archive.stat().st_size}')
+          PY
+
+      - name: Publish stable Workshop download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=workshop-latest
+          ASSET=Metamorph-Creative-Menu-Workshop.zip
+
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG" --force
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "Latest Steam Workshop build" \
+              --notes "Ready-to-upload Steam Workshop edition. This build intentionally excludes bundled NoitaPatcher/DLL and unrestricted API access."
+          else
+            gh release create "$TAG" \
+              --title "Latest Steam Workshop build" \
+              --notes "Ready-to-upload Steam Workshop edition. This build intentionally excludes bundled NoitaPatcher/DLL and unrestricted API access."
+          fi
+
+          gh release upload "$TAG" "$ASSET" --clobber
