@@ -1,14 +1,12 @@
-\<a id="languages">\</a>
+<a id="languages"></a>
 
 [English](README.md) · [**Русский**](README.ru.md) · [Português (Brasil)](README.pt-BR.md) · [Español](README.es.md) · [Deutsch](README.de.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
-\<h1 align="center">Metamorph: Creative Menu\</h1>
+<h1 align="center">Metamorph: Creative Menu</h1>
 
-\<p align="center">   Расширенный творческий режим для Ноита: заклинания, жезлы, предметы, материалы, перки, существа, превращения, эффекты, телепортация, погода, правила мира и многое другое. \</p>
+<p align="center">Расширенный творческий режим для Ноита: заклинания, жезлы, предметы, материалы, перки, существа, превращения, эффекты, телепортация, погода, правила мира и многое другое.</p>
 
-\<p align="center">\
-&#x20; \<strong>Версия 2.0.0\</strong>\
-\</p>
+<p align="center"><strong>Версия 2.0.0</strong></p>
 
 ---
 
