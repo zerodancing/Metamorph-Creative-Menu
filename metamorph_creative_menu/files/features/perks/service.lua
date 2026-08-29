@@ -6,6 +6,8 @@ local transactions = dofile("mods/metamorph_creative_menu/files/features/perks/t
 local root_companions = dofile("mods/metamorph_creative_menu/files/features/perks/root_companions.lua")
 local nested_pickups = dofile("mods/metamorph_creative_menu/files/features/perks/nested_pickups.lua")
 local locomotion_guard = dofile("mods/metamorph_creative_menu/files/features/perks/locomotion_guard.lua")
+local ew_world_items = dofile("mods/metamorph_creative_menu/files/integrations/ew/world_items.lua")
+local ew_perk_visibility = dofile("mods/metamorph_creative_menu/files/integrations/ew/perk_visibility.lua")
 
 local function valid(entity)
     return entity ~= nil and entity ~= 0 and EntityGetIsAlive(entity)
@@ -13,6 +15,17 @@ end
 
 local last_human_player_entity_id = nil
 local failed_pickup_rollbacks = {}
+local FAILED_ROLLBACK_RETRY_INITIAL_FRAMES = 30
+local FAILED_ROLLBACK_RETRY_MAX_FRAMES = 300
+local FAILED_ROLLBACK_RETRY_BUDGET = 2
+local BATCH_OPERATION_BUDGET = 4
+local BATCH_REMOVE_LIMIT = 1000
+local ew_runtime = nil
+
+local function inventory_sync()
+    if ew_runtime == nil then ew_runtime = dofile("mods/metamorph_creative_menu/files/integrations/ew/runtime.lua") end
+    return ew_runtime.force_inventory_sync()
+end
 
 local function is_polymorphed_player(entity_id)
     if not valid(entity_id) or type(EntityHasTag) ~= "function" then return false end
@@ -110,7 +123,8 @@ local function revert_nested_children(player, parent_transaction_id)
     return true, "nested_children_reverted:" .. tostring(#children)
 end
 
-function perk_service.remove_one(player, perk)
+function perk_service.remove_one(player, perk, options)
+    options = type(options) == "table" and options or {}
     if not valid(player) or type(perk) ~= "table" or type(perk.id) ~= "string" then return false, "target" end
     local current = perk_service.count(perk.id)
     if current <= 0 then return false, "none" end
@@ -139,9 +153,8 @@ function perk_service.remove_one(player, perk)
         else
             strategy = inverse_reason or "tracked_inverse"
         end
-        -- Structural tracking deliberately does not snapshot arbitrary Globals/run
-        -- flags. Only inverses which own such state run after the exact delta. Calling
-        -- every inverse here used to consume a second RESPAWN effect from the next stack.
+        -- Structural tracking does not snapshot arbitrary Globals/run flags. Run only
+        -- inverses that own such state, so one stack cannot consume another stack's effect.
         if type(inverses.post_tracked_cleanup) == "function" then
             pcall(inverses.post_tracked_cleanup, player, perk.id, current)
         end
@@ -186,14 +199,20 @@ function perk_service.remove_one(player, perk)
     if type(locomotion_guard.repair_if_idle) == "function" then
         pcall(locomotion_guard.repair_if_idle, player, type(transactions.active_count)=="function" and transactions.active_count() or 0)
     end
+    -- Only tracked MCM-created copies are hidden from EW's global-perk advertisement.
+    -- Ordinary vanilla pickups retain EW's native semantics, and untracked copies are
+    -- deliberately not hidden because we could not later prove when that exact layer left.
+    if options.defer_sync ~= true then pcall(ew_perk_visibility.refresh, perk.id, player, transactions) end
     return true, strategy, new_count
 end
 
 function perk_service.remove_all(player, perk)
+    -- Synchronous compatibility path used by EW reconciliation and QA. The menu uses the
+    -- bounded job below, so one UI command never runs this loop in a GUI frame.
     local perk_id = type(perk) == "table" and perk.id or ""
     local removed = 0
     while perk_service.count(perk_id) > 0 do
-        if removed >= 1000 then return removed, "limit_reached" end
+        if removed >= BATCH_REMOVE_LIMIT then return removed, "limit_reached" end
         local ok, reason = perk_service.remove_one(player, perk)
         if not ok then return removed, reason end
         removed = removed + 1
@@ -201,23 +220,198 @@ function perk_service.remove_all(player, perk)
     return removed, "ok"
 end
 
+local active_job = nil
+local terminal_job_notice = nil
+local next_job_id = 0
+
+local function copy_job(job)
+    if type(job) ~= "table" then return nil end
+    return {
+        id=job.id, kind=job.kind, perk_id=job.perk_id, total=job.total,
+        completed=job.completed, state=job.state, reason=job.reason,
+        waiting_async=job.waiting_transaction_id ~= nil,
+    }
+end
+
+local function flush_job_sync(job)
+    if type(job) ~= "table" or job.sync_dirty ~= true then return end
+    if valid(job.player) then
+        pcall(ew_perk_visibility.refresh, job.perk_id, job.player, transactions)
+        if job.kind == "take" then pcall(inventory_sync) end
+    end
+    job.sync_dirty = false
+end
+
+local function finish_job(state, reason)
+    local job = active_job
+    if type(job) ~= "table" then return false end
+    flush_job_sync(job)
+    job.state = tostring(state or "done")
+    job.reason = tostring(reason or job.state)
+    if job.state ~= "done" then terminal_job_notice = copy_job(job) end
+    active_job = nil
+    return true
+end
+
+local function begin_job(kind, player, perk, total)
+    if active_job ~= nil then return false, "busy" end
+    if not valid(player) or is_polymorphed_player(player) then return false, "target" end
+    if type(perk) ~= "table" or type(perk.id) ~= "string" or perk.id == "" then return false, "invalid" end
+    total = math.max(1, math.floor(tonumber(total) or 1))
+    next_job_id = next_job_id + 1
+    active_job = {
+        id=next_job_id, kind=kind, player=player, perk=perk, perk_id=perk.id,
+        total=total, completed=0, state="running", sync_dirty=false,
+        waiting_transaction_id=nil,
+    }
+    return true, "queued", active_job.id
+end
+
+function perk_service.start_take_job(player, perk, amount)
+    amount = math.floor(tonumber(amount) or 0)
+    if amount ~= 1 and amount ~= 10 and amount ~= 100 then return false, "amount" end
+    return begin_job("take", player, perk, amount)
+end
+
+function perk_service.start_remove_all_job(player, perk)
+    if not valid(player) or type(perk) ~= "table" then return false, "target" end
+    local allowed, reason = perk_service.can_remove(perk, player)
+    if not allowed then return false, reason end
+    local count = perk_service.count(perk.id)
+    if count <= 0 then return false, "none" end
+    return begin_job("remove_all", player, perk, math.min(BATCH_REMOVE_LIMIT, count))
+end
+
+function perk_service.job_status()
+    return copy_job(active_job)
+end
+
+function perk_service.consume_job_notice()
+    local notice = terminal_job_notice
+    terminal_job_notice = nil
+    return notice
+end
+
+function perk_service.cancel_job()
+    if active_job == nil then return false, "idle" end
+    finish_job("cancelled", "cancelled")
+    return true, "cancelled"
+end
+
+local function process_active_job(player)
+    local job = active_job
+    if type(job) ~= "table" then return end
+    if not valid(player) or player ~= job.player or not valid(job.player) or is_polymorphed_player(player) then
+        finish_job("stopped", "player_changed")
+        return
+    end
+
+    if job.waiting_transaction_id ~= nil then
+        local pending = type(nested_pickups.scope_open) == "function"
+            and nested_pickups.scope_open(job.player, job.waiting_transaction_id) == true
+        if pending then return end
+        job.waiting_transaction_id = nil
+    end
+
+    local budget = BATCH_OPERATION_BUDGET
+    local operations = 0
+    while budget > 0 and active_job == job do
+        if job.kind == "take" then
+            if job.completed >= job.total then
+                finish_job("done", "complete")
+                break
+            end
+            local ok, reason, tracked, track_reason, transaction_id = perk_service.apply(job.player, job.perk, {
+                ignore_debounce=true, defer_sync=true, batch=true,
+            })
+            if not ok then
+                finish_job("error", tostring(reason))
+                break
+            end
+            -- apply() may complete the vanilla pickup even when its structural delta is
+            -- not safely reversible. Count and synchronize that real copy before
+            -- stopping the batch; reporting 0/N here would be false and would leave EW
+            -- inventory/perk state one successful operation behind.
+            job.completed = job.completed + 1
+            job.sync_dirty = true
+            operations = operations + 1
+            budget = budget - 1
+            if tracked ~= true or tonumber(transaction_id) == nil then
+                finish_job("error", "transaction:" .. tostring(track_reason or "untracked"))
+                break
+            end
+            if job.perk_id == "GAMBLE" and type(nested_pickups.scope_open) == "function"
+                and nested_pickups.scope_open(job.player, transaction_id) == true
+            then
+                job.waiting_transaction_id = transaction_id
+                break
+            end
+        elseif job.kind == "remove_all" then
+            if perk_service.count(job.perk_id) <= 0 then
+                finish_job("done", "complete")
+                break
+            end
+            if job.completed >= BATCH_REMOVE_LIMIT then
+                finish_job("error", "limit_reached")
+                break
+            end
+            local ok, reason = perk_service.remove_one(job.player, job.perk, {defer_sync=true, batch=true})
+            if not ok then
+                finish_job("error", tostring(reason))
+                break
+            end
+            job.completed = job.completed + 1
+            job.total = math.max(job.total, job.completed + perk_service.count(job.perk_id))
+            job.sync_dirty = true
+            operations = operations + 1
+            budget = budget - 1
+        else
+            finish_job("error", "unknown_job")
+            break
+        end
+    end
+    if active_job == job and operations > 0 then flush_job_sync(job) end
+    if active_job == job and job.kind == "take" and job.completed >= job.total and job.waiting_transaction_id == nil then
+        finish_job("done", "complete")
+    elseif active_job == job and job.kind == "remove_all" and perk_service.count(job.perk_id) <= 0 then
+        finish_job("done", "complete")
+    end
+end
+
 function perk_service.update(player)
     if type(transactions.update) == "function" then pcall(transactions.update) end
+    local frame = tonumber(GameGetFrameNum()) or 0
+    local rollback_budget = FAILED_ROLLBACK_RETRY_BUDGET
     for index = #failed_pickup_rollbacks, 1, -1 do
+        if rollback_budget <= 0 then break end
         local pending = failed_pickup_rollbacks[index]
         local owner = type(pending) == "table" and pending.player or 0
-        if valid(owner) then
+        if valid(owner) and frame >= (tonumber(pending.next_retry_frame) or frame) then
+            rollback_budget = rollback_budget - 1
             local ok = select(1, transactions.revert_transaction(pending.perk_id, owner, pending.transaction_id)) == true
-            if ok then table.remove(failed_pickup_rollbacks, index) end
+            if ok then
+                table.remove(failed_pickup_rollbacks, index)
+            else
+                local delay = math.max(FAILED_ROLLBACK_RETRY_INITIAL_FRAMES, tonumber(pending.retry_delay) or FAILED_ROLLBACK_RETRY_INITIAL_FRAMES)
+                delay = math.min(FAILED_ROLLBACK_RETRY_MAX_FRAMES, delay * 2)
+                pending.retry_delay = delay
+                pending.next_retry_frame = frame + delay
+            end
         end
     end
     if type(nested_pickups.update) == "function" then pcall(nested_pickups.update) end
-    if not valid(player) then return end
+    if not valid(player) then
+        if active_job ~= nil then finish_job("stopped", "player_changed") end
+        return
+    end
     -- Perks belong to the human player state. During native polymorph the original human
     -- is serialized away; running its delayed ownership/presentation maintenance against
     -- the temporary creature would discard watches and associate cleanup with the wrong
     -- entity. Pause until the human returns, then rebind first.
-    if is_polymorphed_player(player) then return end
+    if is_polymorphed_player(player) then
+        if active_job ~= nil then finish_job("stopped", "player_changed") end
+        return
+    end
 
     local has_active_transactions = type(transactions.active_count) == "function" and transactions.active_count() > 0
     if last_human_player_entity_id ~= nil and last_human_player_entity_id ~= player and has_active_transactions then
@@ -235,8 +429,8 @@ function perk_service.update(player)
             last_human_player_entity_id = player
         end
         -- A just-deserialized player can expose its child/component tree one frame later.
-        -- Keep the old owner on failure so update() retries instead of permanently
-        -- stranding the transaction on stale ids.
+        -- Keep the existing owner on failure so update() retries instead of stranding
+        -- the transaction on stale ids.
         if not rebound then return end
     else
         last_human_player_entity_id = player
@@ -248,6 +442,7 @@ function perk_service.update(player)
             pcall(inverses.maintenance_cleanup, owner, perk_id)
         end
     end)
+    process_active_job(player)
 end
 
 function perk_service.begin_pickup(player, perk)
@@ -291,12 +486,6 @@ end
 
 
 local last_direct_apply_frame = {}
-local ew_runtime = nil
-
-local function inventory_sync()
-    if ew_runtime == nil then ew_runtime = dofile("mods/metamorph_creative_menu/files/integrations/ew/runtime.lua") end
-    ew_runtime.force_inventory_sync()
-end
 
 local function cleanup_pickup_entity(entity_id)
     if not valid(entity_id) then return end
@@ -320,11 +509,17 @@ function perk_service.spawn(player_entity_id, perk)
     local player_x, player_y = EntityGetTransform(player_entity_id)
     if player_x == nil or type(perk_spawn) ~= "function" then return false, "unavailable" end
     local pickup_entity_id = perk_spawn(player_x + 12, player_y - 8, perk.id) or 0
+    if pickup_entity_id ~= 0 then
+        -- perk.xml is intentionally excluded from EW's generic item-spawn hook. Creative
+        -- world spawns therefore need the same explicit vanilla/EW handoff used by items.
+        -- The adapter is a no-op in singleplayer and uses EW's native ew_thrown path when
+        -- networking is active, so the receiving peer does not need MCM installed.
+        ew_world_items.notify_world_item(pickup_entity_id)
+    end
     return pickup_entity_id ~= 0, pickup_entity_id ~= 0 and "spawned" or "spawn_failed", pickup_entity_id
 end
 
--- Canonical immediate pickup path. UI RMB, QA and compatibility callers all enter here
--- so test and player behavior cannot silently diverge again.
+-- Canonical immediate pickup path shared by UI, QA and compatibility callers.
 function perk_service.apply(player_entity_id, perk, options)
     options = type(options) == "table" and options or {}
     if not valid(player_entity_id) or type(perk) ~= "table" or type(perk.id) ~= "string" then
@@ -332,7 +527,7 @@ function perk_service.apply(player_entity_id, perk, options)
     end
     local current_frame = tonumber(GameGetFrameNum()) or 0
     local previous_frame = tonumber(last_direct_apply_frame[perk.id]) or -100000
-    if options.ignore_debounce ~= true and current_frame - previous_frame < 15 then return false, "debounced" end
+    if options.ignore_debounce ~= true and current_frame == previous_frame then return false, "debounced" end
     -- stackable controls vanilla perk-pool reappearance, not whether perk_pickup itself
     -- can execute again. Creative mode intentionally allows another real pickup of any
     -- perk; each copy receives its own rollback transaction.
@@ -347,6 +542,7 @@ function perk_service.apply(player_entity_id, perk, options)
     if player_x == nil or player_y == nil then return false, "player_transform" end
     local count_before = perk_service.count(perk.id)
     local token = perk_service.begin_pickup(player_entity_id, perk)
+    if type(token) == "table" then token.source = "mcm_creative" end
 
     -- EW's persistent-flag hook can live in another Lua VM. Persistent discovery is
     -- optional here; vanilla still owns the actual local perk application.
@@ -364,9 +560,8 @@ function perk_service.apply(player_entity_id, perk, options)
     local pickup_entity_id = 0
     METAMORPH_CREATIVE_MENU_PERK_CAPTURE_ACTIVE = true
     local pickup_succeeded, pickup_error = xpcall(function()
-        -- Spawn a real vanilla perk entity before calling perk_pickup. Passing entity 0
-        -- skipped entity-dependent behavior in several perks and made QA test a different
-        -- mechanic than RMB in the menu.
+        -- Spawn a real vanilla perk entity because several perk paths depend on pickup
+        -- entity state and cannot be reproduced correctly with entity id 0.
         -- Build the same perk item a player would touch, but mark it not to destroy
         -- neighboring perks because Creative Menu is not a Holy Mountain selection.
         pickup_entity_id = perk_spawn(player_x, player_y, perk.id, true) or 0
@@ -400,8 +595,10 @@ function perk_service.apply(player_entity_id, perk, options)
             if tracked then
                 rollback_ok, rollback_reason = transactions.revert_transaction(perk.id, player_entity_id, token.transaction_id)
                 if not rollback_ok then
+                    local retry_delay = FAILED_ROLLBACK_RETRY_INITIAL_FRAMES
                     failed_pickup_rollbacks[#failed_pickup_rollbacks + 1] = {
                         perk_id=perk.id, player=player_entity_id, transaction_id=token.transaction_id,
+                        retry_delay=retry_delay, next_retry_frame=(tonumber(GameGetFrameNum()) or 0) + retry_delay,
                     }
                 end
             else
@@ -421,29 +618,13 @@ function perk_service.apply(player_entity_id, perk, options)
 
     local tracked, track_reason = true, "no_token"
     if token ~= nil then tracked, track_reason = perk_service.commit_pickup(token) end
-    inventory_sync()
-    return true, "applied", tracked == true, track_reason
-end
-
-function perk_service.root_companion_debug()
-    return root_companions.debug()
-end
-
-function perk_service.debug_ownership_state()
-    local global_owners, flag_owners = 0, 0
-    if type(transactions.debug_active_global_owners) == "function" then
-        global_owners, flag_owners = transactions.debug_active_global_owners()
+    if options.defer_sync ~= true then
+        if tracked == true then pcall(ew_perk_visibility.refresh, perk.id, player_entity_id, transactions) end
+        inventory_sync()
     end
-    return {
-        transactions = type(transactions.active_count) == "function" and transactions.active_count() or 0,
-        mutations = type(transactions.debug_active_mutations) == "function" and transactions.debug_active_mutations() or 0,
-        global_owners = tonumber(global_owners) or 0,
-        run_flag_owners = tonumber(flag_owners) or 0,
-        cleanup = type(transactions.debug_cleanup_state) == "function" and transactions.debug_cleanup_state() or {pending=0,failed=0},
-        nested = type(nested_pickups.debug_state) == "function" and nested_pickups.debug_state() or {scopes=0,children=0},
-        locomotion_baselines = type(locomotion_guard.debug_baseline_count)=="function" and locomotion_guard.debug_baseline_count() or 0,
-    }
+    return true, "applied", tracked == true, track_reason, type(token) == "table" and token.transaction_id or nil
 end
+
 
 METAMORPH_CREATIVE_MENU_PERK_SERVICE = perk_service
 return perk_service

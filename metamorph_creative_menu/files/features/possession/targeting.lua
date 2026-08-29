@@ -7,6 +7,11 @@ local CREATURE_MOTOR_COMPONENTS = {
     "IKLimbWalkerComponent", "IKLimbsAnimatorComponent", "LimbBossComponent",
 }
 
+local EW_REPLICA_CREATURE_TAGS = {
+    "enemy", "helpless_animal", "worm", "boss", "boss_centipede",
+    "plague_rat", "perk_fungus_tiny", "seed_c", "seed_d", "seed_e", "seed_f",
+}
+
 local function valid_entity(entity)
     return entity ~= nil and entity ~= 0 and EntityGetIsAlive(entity)
 end
@@ -39,20 +44,66 @@ function targeting.is_creature(entity, player_entity)
             local checked, is_helper = pcall(creature_service.is_internal_helper_path, entity_filename)
             if checked and is_helper == true then return false end
         end
-        -- Apply the same exact-path compatibility policy to world possession as the MOBS
-        -- menu. This blocks confirmed crash targets without introducing filename bans;
-        -- structurally valid uncatalogued mod creatures can still pass the service check.
-        if type(creature_service.is_transformable_creature_path) == "function" then
-            local checked, is_root_creature = pcall(creature_service.is_transformable_creature_path, entity_filename)
-            if checked and is_root_creature ~= true then return false end
+        -- The catalogue is intentionally not an allow-list here. Naturally spawned and
+        -- modded creatures can be absent from it even though their live component tree is
+        -- perfectly valid. Reject only exact known-unsafe paths, then validate structure.
+        if type(creature_service.unsafe_reason) == "function" then
+            local checked, reason = pcall(creature_service.unsafe_reason, entity_filename)
+            if checked and reason ~= nil then return false end
         end
     end
 
     if not tree_has_component(entity, "DamageModelComponent") then return false end
+
+    -- Entangled Worlds deliberately removes AnimalAI/PhysicsAI/FishAI from client-side
+    -- replicas. Requiring those components made possession accept only mobs authored by
+    -- this machine. A replicated enemy is still a valid target when its path/tag
+    -- identifies a creature and its live tree retains a damage model.
+    if EntityHasTag(entity, "ew_replicated") then
+        if string.sub(entity_filename, 1, 22) == "data/entities/animals/" then return true end
+        for _, tag in ipairs(EW_REPLICA_CREATURE_TAGS) do
+            if EntityHasTag(entity, tag) then return true end
+        end
+    end
     for _, component_type in ipairs(CREATURE_MOTOR_COMPONENTS) do
         if tree_has_component(entity, component_type) then return true end
     end
     return false
+end
+
+local function creature_from_entity(raw_entity, player_entity)
+    local current, seen, structural_fallback = raw_entity, {}, 0
+    for _ = 1, 64 do
+        if not valid_entity(current) or seen[current] then break end
+        seen[current] = true
+        if targeting.is_creature(current, player_entity) then
+            if EntityGetFirstComponentIncludingDisabled(current, "DamageModelComponent") ~= nil then
+                return current
+            end
+            if structural_fallback == 0 then structural_fallback = current end
+        end
+        if type(EntityGetParent) ~= "function" then break end
+        local parent_ok, parent = pcall(EntityGetParent, current)
+        if not parent_ok or parent == nil or parent == 0 then break end
+        current = parent
+    end
+
+    -- EW and some creature XMLs add a non-creature synchronization/controller root.
+    -- If the radius query returned that wrapper, inspect its tree for the actual mob.
+    local root = entity_tree.root(raw_entity)
+    local found = 0
+    if valid_entity(root) then
+        entity_tree.walk(root, function(candidate)
+            if targeting.is_creature(candidate, player_entity) then
+                if EntityGetFirstComponentIncludingDisabled(candidate, "DamageModelComponent") ~= nil then
+                    found = candidate
+                    return false
+                end
+                if structural_fallback == 0 then structural_fallback = candidate end
+            end
+        end)
+    end
+    return found ~= 0 and found or structural_fallback
 end
 
 function targeting.center(entity)
@@ -72,19 +123,17 @@ function targeting.target_under_cursor(player_entity, radius)
     if not query_succeeded or type(nearby_entities) ~= "table" then return 0 end
 
     local best_entity, best_distance_squared = 0, math.huge
-    local visited_roots = {}
+    local visited_creatures = {}
     for _, raw_entity in ipairs(nearby_entities) do
-        local root_entity = entity_tree.root(raw_entity)
-        if valid_entity(root_entity) and not visited_roots[root_entity] then
-            visited_roots[root_entity] = true
-            if targeting.is_creature(root_entity, player_entity) then
-                local center_x, center_y = targeting.center(root_entity)
-                if center_x ~= nil then
-                    local delta_x, delta_y = center_x - mouse_x, center_y - mouse_y
-                    local distance_squared = delta_x * delta_x + delta_y * delta_y
-                    if distance_squared < best_distance_squared then
-                        best_entity, best_distance_squared = root_entity, distance_squared
-                    end
+        local creature = creature_from_entity(raw_entity, player_entity)
+        if valid_entity(creature) and not visited_creatures[creature] then
+            visited_creatures[creature] = true
+            local center_x, center_y = targeting.center(creature)
+            if center_x ~= nil then
+                local delta_x, delta_y = center_x - mouse_x, center_y - mouse_y
+                local distance_squared = delta_x * delta_x + delta_y * delta_y
+                if distance_squared < best_distance_squared then
+                    best_entity, best_distance_squared = creature, distance_squared
                 end
             end
         end

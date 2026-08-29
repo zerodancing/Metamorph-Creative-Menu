@@ -2,7 +2,6 @@ if type(METAMORPH_CREATIVE_MENU_POSSESSION) == "table" then return METAMORPH_CRE
 
 local possession_service = {}
 local form_manager = dofile("mods/metamorph_creative_menu/files/features/forms/manager.lua")
-local ew_runtime = dofile("mods/metamorph_creative_menu/files/integrations/ew/runtime.lua")
 local targeting = dofile("mods/metamorph_creative_menu/files/features/possession/targeting.lua")
 local retirement = dofile("mods/metamorph_creative_menu/files/features/possession/retirement.lua")
 local ew_retirement = dofile("mods/metamorph_creative_menu/files/integrations/ew/possession_retire.lua")
@@ -124,12 +123,13 @@ end
 function possession_service.possess_under_cursor(player)
     if pending ~= nil then return false, "pending" end
     if not valid(player) then return false, "player" end
-    local target = possession_service.target_under_cursor(player, 32)
-    if not valid(target) and ew_runtime.mode() == "client" then
-        -- The client's visual remote pose can be ahead of the local authoritative entity
-        -- by a few dozen pixels. Keep the exact cursor behavior first, then use a bounded
-        -- fallback instead of treating a synchronization offset as "no target".
-        target = possession_service.target_under_cursor(player, 64)
+    local target = possession_service.target_under_cursor(player, 48)
+    if not valid(target) then
+        -- Large natural mobs can have their entity origin well outside the visible body;
+        -- network interpolation can add another small offset. The bounded second pass is
+        -- therefore useful for both host and client without turning the possession action
+        -- (G by default) into a map-wide pick.
+        target = possession_service.target_under_cursor(player, 96)
     end
     if not valid(target) then return false, "no_target" end
     return begin_possession_target(player, target)

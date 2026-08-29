@@ -2,6 +2,7 @@ local root = assert(arg[1], "root required")
 local native_dofile = dofile
 local bridge_calls = 0
 local component_writes = {}
+local controls_enabled = true
 
 local patcher_bridge = {
     get = function(request)
@@ -29,7 +30,7 @@ function EntityGetFirstComponentIncludingDisabled(entity_id, component_type)
 end
 function EntityGetComponentIsEnabled(player_entity_id, component_id) return true end
 function ComponentGetValue2(component_id, field_name)
-    if component_id == 20 and field_name == "enabled" then return true end
+    if component_id == 20 and field_name == "enabled" then return controls_enabled end
     if component_id == 21 and field_name == "mActive" then return true end
     if component_id == 22 and field_name == "mActiveItem" then return 10 end
     if component_id == 22 and field_name == "mActualActiveItem" then return 11 end
@@ -37,6 +38,7 @@ function ComponentGetValue2(component_id, field_name)
 end
 function ComponentSetValue2(component_id, field_name, value)
     component_writes[field_name] = value
+    if component_id == 20 and field_name == "enabled" then controls_enabled = value end
 end
 function EntityGetAllChildren() return {} end
 function EntityGetName() return "" end
@@ -52,4 +54,13 @@ assert(component_writes.mButtonFrameChangeItemR == -1 and component_writes.mButt
 assert(guard.restore_scroll_selection(snapshot) == true, "selection restore failed")
 assert(bridge_calls == 1, "NoitaPatcher held-item restore was not used")
 assert(component_writes.mActiveItem == 10 and component_writes.mActualActiveItem == 11 and component_writes.mForceRefresh == true, "inventory ids/refresh not restored")
-print("menu_inventory_guard=PASS capture_restore=true")
+assert(guard.acquire_manual_controls(1)==true and controls_enabled==false and guard.manual_controls_owned(),
+    'manual menu did not suppress gameplay controls')
+assert(guard.release_manual_controls()==true and controls_enabled==true and not guard.manual_controls_owned(),
+    'manual menu did not restore its controls baseline')
+controls_enabled=false
+assert(guard.acquire_manual_controls(1)==true)
+controls_enabled=true -- a later external owner re-enabled controls
+assert(guard.release_manual_controls()==true and controls_enabled==true,
+    'manual menu overwrote a later external controls decision')
+print("menu_inventory_guard=PASS capture_restore=true manual_controls=true compare_and_swap=true")

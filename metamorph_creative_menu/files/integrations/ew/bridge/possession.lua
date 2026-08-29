@@ -38,7 +38,10 @@ function possession_bridge.register(shared_rpc, shared_common)
     rpc.opts_reliable()
     rpc.opts_everywhere()
     function rpc.retire_possession_target(path, x, y)
-        if type(path) ~= "string" or #path == 0 or #path > 512 or string.sub(path, 1, 22) ~= "data/entities/animals/" then return end
+        if type(path) ~= "string" or #path == 0 or #path > 512
+            or string.find(path, "..", 1, true) ~= nil
+            or (string.sub(path, 1, 14) ~= "data/entities/" and string.sub(path, 1, 5) ~= "mods/")
+        then return end
         x, y = tonumber(x), tonumber(y)
         if not common.finite_number(x) or not common.finite_number(y) then return end
         local sender_data = ctx.rpc_player_data

@@ -104,5 +104,48 @@ function keycodes.matching_name_fragment(fragment)
     return matching_codes
 end
 
+local PRETTY_KEYS = {
+    RETURN="ENTER", ESCAPE="ESC", BACKSPACE="BACKSPACE", SPACE="SPACE", TAB="TAB",
+    DELETE="DELETE", INSERT="INSERT", HOME="HOME", END="END", PAGEUP="PAGE UP",
+    PAGEDOWN="PAGE DOWN", LEFT="LEFT", RIGHT="RIGHT", UP="UP", DOWN="DOWN",
+    LSHIFT="LEFT SHIFT", RSHIFT="RIGHT SHIFT", LCTRL="LEFT CTRL", RCTRL="RIGHT CTRL",
+    LALT="LEFT ALT", RALT="RIGHT ALT", CAPSLOCK="CAPS LOCK", NUMLOCKCLEAR="NUM LOCK",
+    PRINTSCREEN="PRINT SCREEN", SCROLLLOCK="SCROLL LOCK", PAUSE="PAUSE",
+}
+
+function keycodes.pretty_name(name)
+    local raw = string.gsub(tostring(name or ""), "^Key_", "")
+    if PRETTY_KEYS[raw] ~= nil then return PRETTY_KEYS[raw] end
+    if string.match(raw, "^[a-z]$") then return string.upper(raw) end
+    if string.match(raw, "^%d$") or string.match(raw, "^F%d+$") then return raw end
+    raw = string.gsub(raw, "^KP_", "NUM ")
+    return string.upper(string.gsub(raw, "_", " "))
+end
+
+local available_cache = nil
+function keycodes.available()
+    if available_cache ~= nil then return available_cache end
+    ensure_noita_globals()
+    local by_code = {}
+    local function consider(name, value)
+        value = tonumber(value)
+        if type(name) ~= "string" or string.sub(name, 1, 4) ~= "Key_" or value == nil then return end
+        local current = by_code[value]
+        if current == nil or #name < #current then by_code[value] = name end
+    end
+    for name, value in pairs(_G) do consider(name, value) end
+    for name, value in pairs(load_parsed_codes()) do consider(name, value) end
+    local result = {}
+    for code, name in pairs(by_code) do
+        result[#result + 1] = { code=code, name=name, label=keycodes.pretty_name(name) }
+    end
+    table.sort(result, function(a, b)
+        if a.code == b.code then return a.name < b.name end
+        return a.code < b.code
+    end)
+    available_cache = result
+    return result
+end
+
 METAMORPH_CREATIVE_MENU_NOITA_KEYCODES = keycodes
 return keycodes

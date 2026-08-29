@@ -2,6 +2,7 @@ if type(METAMORPH_CREATIVE_MENU_MENU_INVENTORY_GUARD) == "table" then return MET
 
 local menu_inventory_guard = {}
 local patcher_bridge = dofile("mods/metamorph_creative_menu/files/platform/noita/patcher_bridge.lua")
+local manual_owner = nil
 
 local function valid_component(component_id)
     return component_id ~= nil and component_id ~= 0
@@ -33,6 +34,39 @@ function menu_inventory_guard.inventory_open(player_entity_id)
         end
     end
     return inventory_open
+end
+
+-- Editable creative-menu fields temporarily reserve player input while the user types.
+-- The menu itself no longer owns gameplay controls: movement, firing, interaction and
+-- item selection remain live whenever no text/numeric field has focus. On release,
+-- restore the captured value only while the field still reads disabled; same-value
+-- writes by another system cannot be distinguished.
+function menu_inventory_guard.acquire_manual_controls(player_entity_id)
+    player_entity_id = tonumber(player_entity_id) or 0
+    if manual_owner ~= nil and manual_owner.player == player_entity_id then return true end
+    menu_inventory_guard.release_manual_controls()
+    if player_entity_id == 0 or not EntityGetIsAlive(player_entity_id) then return false end
+    local controls = EntityGetFirstComponentIncludingDisabled(player_entity_id, "ControlsComponent")
+    if not valid_component(controls) then return false end
+    local ok, baseline = pcall(ComponentGetValue2, controls, "enabled")
+    if not ok then return false end
+    if not pcall(ComponentSetValue2, controls, "enabled", false) then return false end
+    manual_owner = { player=player_entity_id, component=controls, baseline=baseline == true }
+    return true
+end
+
+function menu_inventory_guard.release_manual_controls()
+    local owner = manual_owner
+    manual_owner = nil
+    if owner == nil or owner.player == 0 or not EntityGetIsAlive(owner.player) then return false end
+    local ok, current = pcall(ComponentGetValue2, owner.component, "enabled")
+    if not ok then return false end
+    if current == false then pcall(ComponentSetValue2, owner.component, "enabled", owner.baseline) end
+    return true
+end
+
+function menu_inventory_guard.manual_controls_owned()
+    return manual_owner ~= nil
 end
 
 function menu_inventory_guard.capture_scroll_selection(player_entity_id)

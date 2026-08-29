@@ -4,7 +4,6 @@ local audit = ui.audit
 local world_rule_service = dofile("mods/metamorph_creative_menu/files/features/world_rules/service.lua")
 
 local search = ""
-local last_action_error = nil
 local ICONS = {
     relations = "data/ui_gfx/perk_icons/peace_with_gods.png",
     gold_forever = "data/ui_gfx/perk_icons/gold_is_forever.png",
@@ -34,17 +33,15 @@ end
 local function run_rule_action(action_name, fn, ...)
     local call_ok, result, reason = pcall(fn, ...)
     if not call_ok then
-        last_action_error = tostring(result)
-        audit(action_name, "result=false reason=exception:" .. last_action_error)
-        if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
-            pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "ui.rules.action", action_name .. ":" .. last_action_error)
-        end
+        local detail=tostring(result)
+        audit(action_name, "result=false reason=exception:" .. detail)
+        ui.report_error_once("world_rules.action", ui.tr("$mcm_rules_error", "RULE ERROR"), detail, "ui.rules.action")
         return false, "exception"
     end
     if result == true then
-        last_action_error = nil
+        ui.clear_error_notice("world_rules.action")
     else
-        last_action_error = tostring(reason or "failed")
+        ui.report_error_once("world_rules.action", ui.tr("$mcm_rules_error", "RULE ERROR"), tostring(reason or "failed"), "ui.rules.action")
     end
     return result == true, reason
 end
@@ -52,22 +49,23 @@ end
 function world_rules_tab.draw(_, panel_width, screen_height)
     local can_edit, mode = world_rule_service.can_edit()
     GuiLayoutBeginVertical(ui.gui(), 0, 2, true)
-    GuiLayoutBeginHorizontal(ui.gui(), 0, 0, true)
-    ui.white_text(0, 1, ui.tr("$mcm_rules_title", "WORLD RULES"))
-    if world_rule_service.has_overrides() and ui.button(0, 0, ui.tr("$mcm_rules_reset", "RESET")) and can_edit then
+    local reset_label = ui.tr("$mcm_rules_reset", "RESET")
+    if world_rule_service.has_overrides() and can_edit and ui.confirm_button("rules.reset", reset_label,
+        ui.tr("$mcm_confirm", "CONFIRM") .. ": " .. reset_label, nil, math.max(32,panel_width-10))
+    then
         local ok, reason = run_rule_action("rules.reset", world_rule_service.reset)
         audit("rules.reset", "result="..tostring(ok).." reason="..tostring(reason))
     end
-    GuiLayoutEnd(ui.gui())
     if not can_edit then ui.white_text(0, 0, ui.tr("$mcm_rules_unavailable", "World-rule editing unavailable")) end
-    if last_action_error ~= nil then ui.white_text(0, 0, ui.tr("$mcm_rules_error", "RULE ERROR") .. ": " .. tostring(last_action_error)) end
-    search = ui.search_input(search, math.max(88, panel_width - 54), 64, "world_rules")
+    search = ui.search_input(search, math.max(68, panel_width - 28), 64, "world_rules")
 
-    local rules = world_rule_service.rules()
-    local columns = ui.columns(panel_width)
-    local h = ui.grid_height(screen_height, 196, 132)
-    GuiBeginScrollContainer(ui.gui(), 13100, 0, 0, panel_width - 4, h, false, 1, 1)
-    local _, _, hov = GuiGetPreviousWidgetInfo(ui.gui()); ui.mark_hovered(hov)
+    local rules = ui.rank_entries(search, world_rule_service.rules(), function(rule)
+        return {rule.label, rule.description, ui.tr(rule.label, rule.id), rule.id, choice_text(rule)}
+    end, function(rule) return rule.id end)
+    ui.search_status(search, #rules)
+    local h = ui.scroll_height(screen_height, 132)
+    local scroll = ui.begin_scroll_viewport("world_rules.catalog", 13100, 0, 0, panel_width - 4, h, {layout="free"})
+    local columns = ui.columns(scroll.content_width, ui.ICON_STEP, {reserve_scrollbar=false})
     local visible = 0
     for _, rule in ipairs(rules) do
         local title = ui.tr(rule.label, rule.id)
@@ -79,19 +77,17 @@ function world_rules_tab.draw(_, panel_width, screen_height)
         desc = desc .. "\n" .. ui.tr("$mcm_rule_value", "VALUE") .. ": " .. value_text
             .. "\n" .. ui.tr("$mcm_rule_click_cycle", "LMB: next   RMB: previous")
         if not world_rule_service.supported(rule) then desc = desc .. "\n" .. ui.tr("$mcm_rule_unsupported", "UNSUPPORTED IN THIS BUILD") end
-        if ui.matches_search(search, title, rule.id, desc, value_text) then
-            local i = visible; visible = visible + 1
-            local clicked, right = ui.tile((i % columns) * ui.ICON_STEP, math.floor(i / columns) * ui.ICON_STEP,
-                ui.EMPTY_SLOT, ICONS[rule.id], ui.EMPTY_SLOT, title, desc, selected,
-                { target_size=18, icon_box_size=18, max_scale=6, fill=1.1, padding=0 })
-            if can_edit and (clicked or right) then
-                local ok, reason
-                ok, reason = run_rule_action("rule.step", world_rule_service.step, rule, right and -1 or 1)
-                audit("rule.step", "id="..tostring(rule.id).." direction="..tostring(right and -1 or 1).." result="..tostring(ok).." reason="..tostring(reason))
-            end
+        local i = visible; visible = visible + 1
+        local clicked, right = ui.tile(scroll.padding_left + (i % columns) * ui.ICON_STEP, ui.scroll_y(scroll, math.floor(i / columns) * ui.ICON_STEP),
+            ui.EMPTY_SLOT, ICONS[rule.id], ui.EMPTY_SLOT, title, desc, selected,
+            { target_size=18, icon_box_size=18, max_scale=6, fill=1.1, padding=0 })
+        if can_edit and (clicked or right) then
+            local ok, reason
+            ok, reason = run_rule_action("rule.step", world_rule_service.step, rule, right and -1 or 1)
+            audit("rule.step", "id="..tostring(rule.id).." direction="..tostring(right and -1 or 1).." result="..tostring(ok).." reason="..tostring(reason))
         end
     end
-    GuiEndScrollContainer(ui.gui())
+    ui.end_scroll_viewport(scroll, math.ceil(visible / columns) * ui.ICON_STEP)
     local mode_label = mode == "ew_host" and ui.tr("$mcm_weather_mode_ew_host", "EW HOST")
         or (mode == "ew_peer" and ui.tr("$mcm_weather_mode_ew_client", "EW CLIENT")
         or ui.tr("$mcm_weather_mode_local", "LOCAL"))

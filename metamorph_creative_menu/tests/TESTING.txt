@@ -35,27 +35,40 @@ Behavior coverage
 Covered scenarios include, among others:
 
 - top menu/header survival when the active tab throws a runtime error;
+- full title-bar movement, four-edge/corner resizing, persistent two-dimensional layout
+  and visible frame affordances;
+- measured catalogue height shared by every scrollable section, including translated
+  narrow layouts and enlarged windows;
+- native scroll-container coordinate ownership, preventing detached viewport contents
+  from starting at the screen origin;
 - vanilla inventory state preservation while the menu is open;
-- spell catalog and wand operations, including synchronization;
+- spell catalog and wand operations, including transactional DROP and EW world-item handoff;
 - item LMB world spawn and EW registration;
 - item RMB inventory delivery and inventory resync;
 - separate four-wand/four-item quick-slot capacity and safe world overflow;
-- filled containers and liquid-preview cleanup;
-- perk LMB spawn, canonical pickup and RMB direct apply;
-- perk transaction rollback and special inverses;
-- MOBS catalog/prewarm and LMB spawn;
+- filled containers, shared Items/Materials liquid previews and hidden probe cleanup;
+- authored material texture/tint inheritance and colour fallback behavior;
+- nonstandard vanilla item roles including Sampo/Crystal Key/rewards without admitting
+  true creature hybrids;
+- perk LMB spawn, vanilla/EW world-item handoff, canonical pickup and RMB direct apply;
+- perk transaction rollback, creative-source accounting, bounded failed-cleanup backoff and special inverses;
+- sender-side EW global-perk filtering that preserves stock EW semantics for ordinary pickups;
+- MOBS catalog/prewarm, single LMB spawn and exact-coordinate drag spawn;
 - RMB transform with a complete form session;
 - TAB return and TAB/G separation;
 - form death -> living human + corpse handoff;
 - Boss Dragon/Maggot Tiny player-driver behavior;
-- form combat, authority switching, transform-flash ownership and runtime reset;
+- form combat, authority switching, transform-flash ownership, event-driven network metadata and runtime reset;
 - possession retirement only after confirmed transformation;
 - EW target-search tolerance/fallback;
 - time presets, advanced weather and EW latest-snapshot roundtrips;
 - World Rules/MagicNumbers/physics ownership, bounded scans, dirty publication and EW mailbox state;
 - equal user-facing host/peer rights;
+- demand-driven player/location teleport streaming, safe free-space placement and
+  targeted BRING HERE requests;
 - companion health/spawn guard and peer-to-host request routing;
-- EW RPC namespace, serialization and compatibility-patch status;
+- EW RPC namespace, serialization/profiling, remote-form generation reset and compatibility-patch status;
+- bounded material-paint mailboxes, backpressure recovery and stock-EW terrain/entity transport for peers without MCM;
 - bounded diagnostics and runtime scanning;
 - Alt-Tab/focus quarantine and TAB/G separation;
 - lazy loading of the built-in Z QA runner.

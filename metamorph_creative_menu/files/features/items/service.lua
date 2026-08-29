@@ -9,18 +9,35 @@ local function valid_component(component)
     return component ~= nil and component ~= 0
 end
 
-function item_service.world_sync_state(entity)
-    return ew_world_items.world_sync_state(entity)
+local function valid_coordinate(value)
+    value = tonumber(value)
+    return value ~= nil and value == value and value > -1000000000 and value < 1000000000
 end
 
-function item_service.world_item_outbox_state()
-    return ew_world_items.outbox_state()
+local function kill_tree(entity)
+    if entity == nil or entity == 0 or not EntityGetIsAlive(entity) then return end
+    if type(EntityGetAllChildren) == "function" then
+        local ok, children = pcall(EntityGetAllChildren, entity)
+        if ok and type(children) == "table" then
+            for _, child in ipairs(children) do kill_tree(child) end
+        end
+    end
+    if EntityGetIsAlive(entity) then pcall(EntityKill, entity) end
 end
 
--- Public only for items that must be constructed/customized before they become a world
--- entity (for example a liquid-filled flask). Normal catalogue spawns should use spawn_near.
-function item_service.notify_world_item(entity)
-    return ew_world_items.notify_world_item(entity)
+local function commit_world_entity(entity)
+    if entity == nil or entity == 0 or not EntityGetIsAlive(entity) then return false, "invalid" end
+    local enabled = pcall(inventory_slots.enable_world, entity)
+    if not enabled or not EntityGetIsAlive(entity) then
+        kill_tree(entity)
+        return false, "world_enable"
+    end
+    local call_ok, synced, sync_reason = pcall(ew_world_items.notify_world_item, entity)
+    if not call_ok or synced ~= true then
+        kill_tree(entity)
+        return false, call_ok and (sync_reason or "world_sync") or "world_sync"
+    end
+    return true, sync_reason or "singleplayer"
 end
 
 local function drop_near(player, entity)
@@ -51,15 +68,15 @@ end
 function item_service.spawn_near(player, path, offset_x, offset_y)
     local entity, reason = load_near(player, path, offset_x, offset_y)
     if entity == 0 then return entity, reason end
-    -- LMB world-spawns never pass through vanilla throw callbacks. Without explicitly
-    -- registering them, EW has no gid/authority handoff and wands appear late or only on
-    -- the spawning peer. ew_thrown itself defers serialization by one frame, so velocity
-    -- and physics initialization are still allowed to settle normally.
-    local synced, sync_reason = ew_world_items.notify_world_item(entity)
-    return entity, synced and ("spawned_" .. tostring(sync_reason or "queued")) or "spawned_unsynced"
+    -- World state is enabled before the single optional EW handoff; failure rolls back the
+    -- newly created entity tree instead of leaving a local-only partial item.
+    local committed, sync_reason = commit_world_entity(entity)
+    if not committed then return 0, sync_reason end
+    return entity, "spawned_" .. tostring(sync_reason or "queued")
 end
 
-function item_service.give_existing_entity(player, entity, play_sound)
+local function give_existing_entity(player, entity, play_sound, options)
+    options = type(options) == "table" and options or {}
     if player == nil or player == 0 or not EntityGetIsAlive(player)
         or entity == nil or entity == 0 or not EntityGetIsAlive(entity)
     then
@@ -81,11 +98,19 @@ function item_service.give_existing_entity(player, entity, play_sound)
 
     local picked, pickup_reason = inventory_slots.pickup(player, entity, play_sound == true)
     if not picked then
+        if options.rollback_on_failure == true then
+            kill_tree(entity)
+            return false, pickup_reason or "pickup_failed", 0, false
+        end
         local spawned_nearby = EntityGetIsAlive(entity) == true
         if spawned_nearby then drop_near(player, entity) end
         return false, pickup_reason or "pickup_failed", entity, spawned_nearby
     end
     if not EntityGetIsAlive(entity) or not inventory_slots.is_inside_player_inventory(player, entity) then
+        if options.rollback_on_failure == true then
+            kill_tree(entity)
+            return false, "pickup_not_committed", 0, false
+        end
         local spawned_nearby = EntityGetIsAlive(entity) == true
         if spawned_nearby then drop_near(player, entity) end
         return false, "pickup_not_committed", entity, spawned_nearby
@@ -98,20 +123,69 @@ function item_service.give_existing_entity(player, entity, play_sound)
     return true, "picked", entity, false
 end
 
+local function create_filled_flask(material_id, x, y)
+    if type(material_id) ~= "string" or material_id == "" or not valid_coordinate(x) or not valid_coordinate(y) then
+        return 0, "invalid"
+    end
+    local entity = EntityLoad("data/entities/items/pickup/potion_empty.xml", tonumber(x), tonumber(y)) or 0
+    if entity == 0 then return 0, "load" end
+    pcall(RemoveMaterialInventoryMaterial, entity)
+    local material_added = pcall(AddMaterialInventoryMaterial, entity, material_id, 1000)
+    if not material_added then kill_tree(entity); return 0, "material" end
+    return entity, "filled"
+end
+
+-- Exact world placement used only after a catalog drag has completed. The entity is not
+-- created before release; world enablement and the single EW handoff are part of the same
+-- transaction, so a failed handoff cannot leave a half-committed item behind.
+function item_service.spawn_at(path, x, y)
+    if type(path) ~= "string" or path == "" or not valid_coordinate(x) or not valid_coordinate(y)
+        or not ModDoesFileExist(path)
+    then
+        return 0, "invalid"
+    end
+    local entity = EntityLoad(path, tonumber(x), tonumber(y)) or 0
+    if entity == 0 then return 0, "load" end
+    local committed, reason = commit_world_entity(entity)
+    if not committed then return 0, reason end
+    return entity, "spawned_" .. tostring(reason)
+end
+
+function item_service.spawn_filled_flask_at(material_id, x, y)
+    local entity, reason = create_filled_flask(material_id, x, y)
+    if entity == 0 then return false, reason, 0, false end
+    local committed, sync_reason = commit_world_entity(entity)
+    if not committed then return false, sync_reason, 0, false end
+    return true, "spawned_" .. tostring(sync_reason), entity, true
+end
+
+function item_service.give_strict(player, path, play_sound)
+    local entity, reason = load_near(player, path)
+    if entity == 0 then return false, reason, 0, false end
+    return give_existing_entity(player, entity, play_sound, {rollback_on_failure=true})
+end
+
+function item_service.give_filled_flask_strict(player, material_id)
+    if player == nil or player == 0 or not EntityGetIsAlive(player) then return false, "invalid", 0, false end
+    local player_x, player_y = EntityGetTransform(player)
+    if player_x == nil then return false, "position", 0, false end
+    local entity, reason = create_filled_flask(material_id, player_x + 12, player_y - 8)
+    if entity == 0 then return false, reason, 0, false end
+    return give_existing_entity(player, entity, true, {rollback_on_failure=true})
+end
+
 function item_service.spawn_filled_flask(player, material_id, pick_up)
     if player == nil or player == 0 or not EntityGetIsAlive(player) or type(material_id) ~= "string" or material_id == "" then
         return false, "invalid", 0, false
     end
     local player_x, player_y = EntityGetTransform(player)
     if player_x == nil then return false, "position", 0, false end
-    local entity = EntityLoad("data/entities/items/pickup/potion_empty.xml", player_x + 12, player_y - 8) or 0
-    if entity == 0 then return false, "load", 0, false end
-    pcall(RemoveMaterialInventoryMaterial, entity)
-    local material_added = pcall(AddMaterialInventoryMaterial, entity, material_id, 1000)
-    if not material_added then EntityKill(entity); return false, "material", 0, false end
-    if pick_up then return item_service.give_existing_entity(player, entity, true) end
-    local synced = item_service.notify_world_item(entity)
-    return true, synced and "spawned_synced" or "spawned", entity, true
+    local entity, reason = create_filled_flask(material_id, player_x + 12, player_y - 8)
+    if entity == 0 then return false, reason, 0, false end
+    if pick_up then return give_existing_entity(player, entity, true) end
+    local committed, sync_reason = commit_world_entity(entity)
+    if not committed then return false, sync_reason, 0, false end
+    return true, "spawned_synced", entity, true
 end
 
 function item_service.give(player, path, play_sound)
@@ -120,7 +194,7 @@ function item_service.give(player, path, play_sound)
     -- committed inventory snapshot below is the single authority path for this case.
     local entity, reason = load_near(player, path)
     if entity == 0 then return false, reason, 0, false end
-    return item_service.give_existing_entity(player, entity, play_sound)
+    return give_existing_entity(player, entity, play_sound)
 end
 
 METAMORPH_CREATIVE_MENU_ITEM_SERVICE = item_service

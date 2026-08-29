@@ -21,50 +21,71 @@ local function preset(name)
     audit("weather.preset", "preset="..tostring(name).." result="..tostring(ok).." reason="..tostring(reason)..detail)
 end
 local function tile(icon,key,fallback,fn)
-    local clicked=ui.tile(0,0,ui.EMPTY_SLOT,icon,ui.EMPTY_SLOT,ui.tr(key,fallback),"",false,{target_size=18,max_scale=2.5})
+    local clicked=ui.tile(0,0,ui.EMPTY_SLOT,icon,ui.EMPTY_SLOT,ui.tr(key,fallback),nil,false,{target_size=18,max_scale=2.5})
     if clicked then fn() end
+end
+local function tile_group(items,panel_width,y)
+    local columns=math.max(1,ui.columns(math.max(ui.ICON_STEP,(tonumber(panel_width) or 220)-10),ui.ICON_STEP,{reserve_scrollbar=false}))
+    local cursor=1
+    while cursor<=#items do
+        GuiLayoutBeginHorizontal(ui.gui(),0,y or 0,true)
+        for _=1,columns do
+            local item=items[cursor]; if item==nil then break end
+            tile(item[1],item[2],item[3],item[4]); cursor=cursor+1
+        end
+        GuiLayoutEnd(ui.gui())
+        y=0
+    end
 end
 function weather_tab.draw(_, panel_width, screen_height)
     local can_edit,mode=weather_service.can_edit()
     GuiLayoutBeginVertical(ui.gui(),0,2,true)
+    local mode_label=mode=="ew_host" and ui.tr("$mcm_weather_mode_ew_host","EW HOST")
+        or (mode=="ew_peer" and ui.tr("$mcm_weather_mode_ew_client","EW CLIENT")
+        or ui.tr("$mcm_weather_mode_local","LOCAL"))
+    ui.wrapped_text(0,0,mode_label..(weather_service.is_locked() and (" • "..ui.tr("$mcm_weather_locked","LOCKED")) or ""),math.max(24,panel_width-10))
     if not can_edit then ui.white_text(0,0,ui.tr("$mcm_weather_unavailable","Weather editing unavailable"))
     elseif not advanced then
         ui.white_text(0,0,ui.tr("$mcm_weather_time_presets","TIME OF DAY"))
-        GuiLayoutBeginHorizontal(ui.gui(),0,0,true)
-        tile("data/ui_gfx/items/sunseed.png","$mcm_weather_morning","MORNING",function() time("morning") end)
-        tile("data/ui_gfx/items/sunseed_2.png","$mcm_weather_day","DAY",function() time("day") end)
-        tile("data/ui_gfx/items/moon.png","$mcm_weather_evening","EVENING",function() time("evening") end)
-        tile("data/ui_gfx/items/moon.png","$mcm_weather_night","NIGHT",function() time("night") end)
-        GuiLayoutEnd(ui.gui())
-        ui.white_text(0,2,ui.tr("$mcm_weather_presets","WEATHER"))
-        GuiLayoutBeginHorizontal(ui.gui(),0,0,true)
-        tile("data/ui_gfx/items/waterstone.png","$mcm_weather_clear","CLEAR",function() preset("clear") end)
-        tile("data/ui_gfx/items/material_pouch.png","$mcm_weather_cloudy","CLOUDY",function() preset("cloudy") end)
-        tile("data/ui_gfx/items/evil_eye.png","$mcm_weather_foggy","FOGGY",function() preset("foggy") end)
-        tile("data/ui_gfx/items/brimstone.png","$mcm_weather_storm","STORM",function() preset("storm") end)
-        GuiLayoutEnd(ui.gui())
-        GuiLayoutBeginHorizontal(ui.gui(),0,3,true)
-        if ui.button(0,0,ui.tr("$mcm_weather_advanced","ADVANCED")) then advanced=true end
-        if weather_service.is_locked() and ui.button(0,0,ui.tr("$mcm_weather_release","RELEASE")) then local ok=weather_service.release(); audit("weather.release", "result="..tostring(ok)) end
-        GuiLayoutEnd(ui.gui())
+        tile_group({
+            {"data/ui_gfx/items/sunseed.png","$mcm_weather_morning","MORNING",function() time("morning") end},
+            {"data/ui_gfx/items/sunseed_2.png","$mcm_weather_day","DAY",function() time("day") end},
+            {"data/ui_gfx/items/moon.png","$mcm_weather_evening","EVENING",function() time("evening") end},
+            {"data/ui_gfx/items/moon.png","$mcm_weather_night","NIGHT",function() time("night") end},
+        },panel_width,0)
+        tile_group({
+            {"data/ui_gfx/items/waterstone.png","$mcm_weather_clear","CLEAR",function() preset("clear") end},
+            {"data/ui_gfx/items/material_pouch.png","$mcm_weather_cloudy","CLOUDY",function() preset("cloudy") end},
+            {"data/ui_gfx/items/evil_eye.png","$mcm_weather_foggy","FOGGY",function() preset("foggy") end},
+            {"data/ui_gfx/items/brimstone.png","$mcm_weather_storm","STORM",function() preset("storm") end},
+        },panel_width,2)
+        local actions={{label=ui.tr("$mcm_weather_advanced","ADVANCED")}}
+        if weather_service.is_locked() then actions[#actions+1]={label=ui.tr("$mcm_weather_release","RELEASE")} end
+        local clicked=ui.button_grid(actions,math.max(32,panel_width-10))
+        if clicked==1 then advanced=true
+        elseif clicked==2 and weather_service.is_locked() then local ok=weather_service.release(); audit("weather.release", "result="..tostring(ok)) end
     else
-        GuiLayoutBeginHorizontal(ui.gui(),0,0,true)
-        if ui.button(0,0,ui.tr("$mcm_weather_back","BACK")) then advanced=false end
-        if weather_service.is_locked() and ui.button(0,0,ui.tr("$mcm_weather_release","RELEASE")) then local ok=weather_service.release(); audit("weather.release", "result="..tostring(ok)) end
-        GuiLayoutEnd(ui.gui())
+        local actions={{label=ui.tr("$mcm_weather_back","BACK")}}
+        if weather_service.is_locked() then actions[#actions+1]={label=ui.tr("$mcm_weather_release","RELEASE")} end
+        local clicked=ui.button_grid(actions,math.max(32,panel_width-10))
+        if clicked==1 then advanced=false
+        elseif clicked==2 and weather_service.is_locked() then local ok=weather_service.release(); audit("weather.release", "result="..tostring(ok)) end
+        local scroll_height=ui.scroll_height(screen_height,72)
+        local scroll=ui.begin_scroll_viewport("weather.advanced",12100,0,0,panel_width-4,scroll_height)
         for _,field in ipairs(weather_service.fields()) do
             local value=weather_service.get(field)
             if type(value)=="number" then
-                GuiLayoutBeginHorizontal(ui.gui(),0,1,true)
-                if ui.button(0,0,"  -  ") then weather_service.set(field,value-(tonumber(field.step) or 0.05)) end
-                if ui.button(0,0,"  +  ") then weather_service.set(field,value+(tonumber(field.step) or 0.05)) end
-                ui.white_text(0,1,ui.tr(field.label,field.id)..": "..string.format("%."..tostring(tonumber(field.decimals) or 2).."f",value))
-                GuiLayoutEnd(ui.gui())
+                local formatted=string.format("%."..tostring(tonumber(field.decimals) or 2).."f",value)
+                local delta=ui.stepper(ui.tr(field.label,field.id),formatted,{
+                    decrease_enabled=field.wrap==true or field.min==nil or value>field.min,
+                    increase_enabled=field.wrap==true or field.max==nil or value<field.max,
+                    max_width=scroll.content_width,
+                })
+                if delta~=0 then weather_service.set(field,value+delta*(tonumber(field.step) or 0.05)) end
             end
         end
+        ui.end_scroll_viewport(scroll)
     end
-    local label=mode=="ew_host" and ui.tr("$mcm_weather_mode_ew_host","EW HOST") or (mode=="ew_peer" and ui.tr("$mcm_weather_mode_ew_client","EW CLIENT") or ui.tr("$mcm_weather_mode_local","LOCAL"))
-    ui.white_text(0,4,label..(weather_service.is_locked() and (" • "..ui.tr("$mcm_weather_locked","LOCKED")) or ""))
     GuiLayoutEnd(ui.gui())
 end
 return weather_tab

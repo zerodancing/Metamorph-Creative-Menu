@@ -3,8 +3,53 @@ local rpc, common
 local last_remote_pose_frame = {}
 local last_pose_send_frame = -100000
 local last_remote_root_frame = {}
+local last_remote_entity = {}
 local remote_articulated_prepared = {}
 local form_pose_sent, form_pose_received = 0, 0
+local profiling_enabled = false
+
+local NETWORK_SOURCE_NAME = "metamorph_creative_menu_network_source"
+
+local function profile_now_ms()
+    if not profiling_enabled then return nil end
+    if type(GameGetRealWorldTimeSinceStarted) ~= "function" then return nil end
+    local ok, value = pcall(GameGetRealWorldTimeSinceStarted)
+    value = ok and tonumber(value) or nil
+    return value ~= nil and value * 1000 or nil
+end
+
+local function form_source(entity)
+    if entity == nil or entity == 0 then return "" end
+    for _, component in ipairs(EntityGetComponentIncludingDisabled(entity, "VariableStorageComponent") or {}) do
+        local ok_name, name = pcall(ComponentGetValue2, component, "name")
+        if ok_name and name == NETWORK_SOURCE_NAME then
+            local ok_value, value = pcall(ComponentGetValue2, component, "value_string")
+            if ok_value and type(value) == "string" then return value end
+        end
+    end
+    return ""
+end
+
+local function publish_remote_prepare_metrics(entity, kind, started_ms, visited, disabled)
+    if not profiling_enabled or type(GlobalsSetValue) ~= "function" then return end
+    local finished_ms = profile_now_ms()
+    local elapsed = started_ms ~= nil and finished_ms ~= nil and math.max(0, finished_ms - started_ms) or -1
+    pcall(GlobalsSetValue, "mcm_form_remote_prepare_ms_v1", string.format("%.3f", elapsed))
+    pcall(GlobalsSetValue, "mcm_form_remote_prepare_entities_v1", tostring(math.max(0, tonumber(visited) or 0)))
+    pcall(GlobalsSetValue, "mcm_form_remote_prepare_components_v1", tostring(math.max(0, tonumber(disabled) or 0)))
+    pcall(GlobalsSetValue, "mcm_form_remote_prepare_kind_v1", tostring(tonumber(kind) or 0))
+    pcall(GlobalsSetValue, "mcm_form_remote_prepare_source_v1", form_source(entity))
+    if type(GameGetFrameNum) == "function" then
+        local ok, frame = pcall(GameGetFrameNum)
+        if ok then pcall(GlobalsSetValue, "mcm_form_remote_prepare_frame_v1", tostring(tonumber(frame) or -1)) end
+    end
+    if type(print) == "function" then
+        print("[MCM EW profile] remote_prepare ms=" .. string.format("%.3f", elapsed)
+            .. " entities=" .. tostring(math.max(0, tonumber(visited) or 0))
+            .. " components=" .. tostring(math.max(0, tonumber(disabled) or 0))
+            .. " kind=" .. tostring(tonumber(kind) or 0) .. " source=" .. tostring(form_source(entity)))
+    end
+end
 
 
 local function finite_number(value)
@@ -77,13 +122,17 @@ local function remote_tree(root, fn)
 end
 
 local function disable_remote_ai(entity)
+    local visited, disabled = 0, 0
     remote_tree(entity, function(current)
+        visited = visited + 1
         for _, component_type in ipairs(REMOTE_GAMEPLAY_COMPONENTS) do
             for _, comp in ipairs(EntityGetComponentIncludingDisabled(current, component_type) or {}) do
-                pcall(EntitySetComponentIsEnabled, current, comp, false)
+                local ok = pcall(EntitySetComponentIsEnabled, current, comp, false)
+                if ok then disabled = disabled + 1 end
             end
         end
     end)
+    return visited, disabled
 end
 
 local function prepare_remote_articulated(entity, kind)
@@ -93,7 +142,8 @@ local function prepare_remote_articulated(entity, kind)
         if driver ~= nil and driver ~= 0 then return end
         remote_articulated_prepared[entity] = nil -- entity id may have been reused
     end
-    disable_remote_ai(entity)
+    local started_ms = profile_now_ms()
+    local visited, disabled = disable_remote_ai(entity)
     local worm = EntityGetFirstComponentIncludingDisabled(entity, "WormComponent")
     local driver = EntityGetFirstComponentIncludingDisabled(entity, "WormPlayerComponent")
     if kind == 5 then
@@ -125,6 +175,7 @@ local function prepare_remote_articulated(entity, kind)
     if worm ~= nil and worm ~= 0 then pcall(EntitySetComponentIsEnabled, entity, worm, true) end
     if driver ~= nil and driver ~= 0 then pcall(EntitySetComponentIsEnabled, entity, driver, true) end
     remote_articulated_prepared[entity] = kind
+    publish_remote_prepare_metrics(entity, kind, started_ms, visited, disabled)
 end
 
 local function apply_motion_state(entity, kind, x, y, speed)
@@ -160,10 +211,23 @@ function forms_bridge.register_pose(shared_rpc, shared_common)
     local data = ctx.rpc_player_data
     local frame = tonumber(source_frame) or -1
     if sender == nil or data == nil or sender == ctx.my_id or frame < 0 then return end
-    if frame <= (last_remote_pose_frame[sender] or -1) then return end
     if data.currently_polymorphed ~= true then return end
     local entity = tonumber(data.entity) or 0
     if entity == 0 or not EntityGetIsAlive(entity) or not EntityHasTag(entity, "ew_client") then return end
+
+    -- Source frame numbers are monotonic only for one concrete remote player entity.
+    -- A peer that reconnects/restarts (or whose EW player entity is replaced) may begin
+    -- again at a lower GameGetFrameNum(). Do not let the previous generation's anti-
+    -- reorder watermark suppress the new form for minutes. Clearing the old prepared
+    -- entry also bounds articulated lifecycle state across repeated transformations.
+    local previous_entity = last_remote_entity[sender]
+    if previous_entity ~= entity then
+        if previous_entity ~= nil then remote_articulated_prepared[previous_entity] = nil end
+        last_remote_entity[sender] = entity
+        last_remote_pose_frame[sender] = nil
+        last_remote_root_frame[sender] = nil
+    end
+    if frame <= (last_remote_pose_frame[sender] or -1) then return end
     x, y = tonumber(x), tonumber(y)
     rotation, scale_x, scale_y = tonumber(rotation) or 0, tonumber(scale_x) or 1, tonumber(scale_y) or 1
     if not finite_number(x) or not finite_number(y) or not finite_number(rotation) then return end
@@ -260,4 +324,5 @@ end
 
 function forms_bridge.update(frame) send_form_pose(frame) end
 function forms_bridge.metrics() return form_pose_sent, form_pose_received end
+function forms_bridge.set_profiling_enabled(enabled) profiling_enabled = enabled == true end
 return forms_bridge

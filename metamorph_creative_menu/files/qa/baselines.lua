@@ -4,7 +4,9 @@ local baselines = {}
 local world_rules = dofile("mods/metamorph_creative_menu/files/features/world_rules/service.lua")
 local weather = dofile("mods/metamorph_creative_menu/files/features/weather/service.lua")
 local perk_root_companions = dofile("mods/metamorph_creative_menu/files/features/perks/root_companions.lua")
-local perk_service = dofile("mods/metamorph_creative_menu/files/features/perks/service.lua")
+local perk_transactions = dofile("mods/metamorph_creative_menu/files/features/perks/transactions.lua")
+local perk_nested_pickups = dofile("mods/metamorph_creative_menu/files/features/perks/nested_pickups.lua")
+local perk_locomotion_guard = dofile("mods/metamorph_creative_menu/files/features/perks/locomotion_guard.lua")
 
 local function valid(entity)
     return entity ~= nil and entity ~= 0 and EntityGetIsAlive(entity)
@@ -166,10 +168,19 @@ local function perk_guard_snapshot(p)
         local ok_owned, owned_counts=pcall(perk_root_companions.owned_counts)
         if ok_owned and type(owned_counts)=="table" then result.owned_roots=owned_counts end
     end
-    if type(perk_service.debug_ownership_state)=="function" then
-        local ok_state, ownership=pcall(perk_service.debug_ownership_state)
-        if ok_state and type(ownership)=="table" then result.ownership=ownership end
+    local global_owners, flag_owners = 0, 0
+    if type(perk_transactions.active_global_owner_counts)=="function" then
+        local ok_counts, globals_count, flags_count=pcall(perk_transactions.active_global_owner_counts)
+        if ok_counts then global_owners, flag_owners=tonumber(globals_count) or 0, tonumber(flags_count) or 0 end
     end
+    result.ownership={
+        transactions=type(perk_transactions.active_count)=="function" and perk_transactions.active_count() or 0,
+        mutations=type(perk_transactions.active_mutation_count)=="function" and perk_transactions.active_mutation_count() or 0,
+        global_owners=global_owners, run_flag_owners=flag_owners,
+        cleanup=type(perk_transactions.cleanup_state)=="function" and perk_transactions.cleanup_state() or {pending=0,failed=0},
+        nested=type(perk_nested_pickups.state_snapshot)=="function" and perk_nested_pickups.state_snapshot() or {scopes=0,children=0},
+        locomotion_baselines=type(perk_locomotion_guard.baseline_count)=="function" and perk_locomotion_guard.baseline_count() or 0,
+    }
     if type(EntityGetWithTag)=="function" then
         local seen={homunculus={},lukki_minion={}}
         for _, tag in ipairs({"homunculus","lukki_minion","perk_lukki_minion","lukki_minion_friend"}) do

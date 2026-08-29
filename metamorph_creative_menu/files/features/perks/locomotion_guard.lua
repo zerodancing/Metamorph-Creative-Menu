@@ -70,7 +70,7 @@ function locomotion_guard.rebind_player(old_player_entity_id, new_player_entity_
     return true
 end
 
-function locomotion_guard.debug_baseline_count()
+function locomotion_guard.baseline_count()
     local count = 0
     for _ in pairs(baseline_by_player) do count = count + 1 end
     return count

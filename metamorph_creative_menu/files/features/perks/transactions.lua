@@ -11,8 +11,8 @@ function perk_transactions.update()
     pending_cleanup.update()
 end
 
-function perk_transactions.debug_cleanup_state()
-    return pending_cleanup.debug_state()
+function perk_transactions.cleanup_state()
+    return pending_cleanup.state_snapshot()
 end
 
 function perk_transactions.start_capture(token, environment)
@@ -106,7 +106,7 @@ function perk_transactions.commit(token)
         local before_charge = tonumber(token.special_before.mana_charge_speed)
         local after_charge = tonumber(special_after.mana_charge_speed)
         local delta = {
-            kind="extra_mana", perk_id=key, player=token.player, wand=token.special_before.wand,
+            kind="extra_mana", perk_id=key, player=token.player, source=token.source, wand=token.special_before.wand,
             ability=token.special_before.ability, before=token.special_before,
             after={ deck_capacity=special_after.deck_capacity, mana_max=special_after.mana_max,
                 mana_charge_speed=special_after.mana_charge_speed }, actions=action_states,
@@ -124,7 +124,7 @@ function perk_transactions.commit(token)
     if key == "NO_MORE_SHUFFLE" and type(token.no_shuffle_before) == "table" then
         local changes, shuffle_reason = no_more_shuffle_delta(token.no_shuffle_before)
         if changes == nil then return false, shuffle_reason end
-        local delta = { kind="no_more_shuffle", perk_id=key, player=token.player, changes=changes }
+        local delta = { kind="no_more_shuffle", perk_id=key, player=token.player, source=token.source, changes=changes }
         global_journal.attach_delta(delta, token)
         mutation_journal.attach_delta(delta, token)
         delta.player_locators = player_rebind.capture(token.player)
@@ -138,6 +138,7 @@ function perk_transactions.commit(token)
 
     delta.player = token.player
     delta.perk_id = key
+    delta.source = token.source
     global_journal.attach_delta(delta, token)
     mutation_journal.attach_delta(delta, token)
     delta.player_locators = player_rebind.capture(token.player)
@@ -162,6 +163,21 @@ function perk_transactions.has(perk_id, player)
         return type(delta) == "table" and delta.player == player
     end
     return true
+end
+
+function perk_transactions.source_count(perk_id, source, player)
+    local stack = history[tostring(perk_id or "")]
+    if type(stack) ~= "table" then return 0 end
+    local wanted = tostring(source or "")
+    local count = 0
+    for _, delta in ipairs(stack) do
+        if type(delta) == "table" and tostring(delta.source or "") == wanted
+            and (player == nil or player == 0 or delta.player == player)
+        then
+            count = count + 1
+        end
+    end
+    return count
 end
 
 
@@ -428,13 +444,13 @@ end
 
 function perk_transactions.clear() history = {} end
 
-function perk_transactions.debug_active_mutations()
-    return mutation_journal.debug_active_properties()
+function perk_transactions.active_mutation_count()
+    return mutation_journal.active_property_count()
 end
 
-function perk_transactions.debug_active_global_owners()
-    if type(global_journal.debug_active_owners) ~= "function" then return 0, 0 end
-    return global_journal.debug_active_owners()
+function perk_transactions.active_global_owner_counts()
+    if type(global_journal.active_owner_counts) ~= "function" then return 0, 0 end
+    return global_journal.active_owner_counts()
 end
 
 METAMORPH_CREATIVE_MENU_PERK_TRANSACTIONS = perk_transactions

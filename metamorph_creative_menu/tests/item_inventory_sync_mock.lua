@@ -38,10 +38,13 @@ function ComponentGetValue2(component, field)
     return nil
 end
 function ComponentSetValue2() return true end
+function ModDoesFileExist(path) return path == "data/test_item.xml" end
+function EntityLoad(path) if path == "data/test_item.xml" then return 10 end return 0 end
+function EntityGetTransform(entity) if entity == 1 then return 10,20 end return 0,0 end
 
 METAMORPH_CREATIVE_MENU_ITEM_SERVICE = nil
 local service = assert(native_dofile(root .. "/files/features/items/service.lua"))
-local ok, reason = service.give_existing_entity(1, 10, false)
+local ok, reason = service.give(1, "data/test_item.xml", false)
 assert(ok == true and reason == "picked", "inventory give did not commit")
 assert(sync_calls == 1, "committed inventory change did not request EW inventory sync")
 print("item_inventory_sync=PASS sync_calls=" .. tostring(sync_calls))

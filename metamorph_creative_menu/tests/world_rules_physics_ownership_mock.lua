@@ -2,9 +2,11 @@ local root = assert(arg[1], "root required")
 local native_dofile = dofile
 local player = 1
 local frame = 1
-local body_visible = true
+local body_in_active_area = true
+local body_in_restore_shell = true
 local body = { gravity=1.0, linear=0.2, angular=0.3 }
 local body_exists = true
+local body_getter_calls = 0
 local globals = {}
 
 function GlobalsGetValue(key, fallback) local v=globals[key]; if v==nil then return fallback end; return v end
@@ -16,10 +18,14 @@ function EntityGetComponentIncludingDisabled() return {} end
 function EntityGetFilename() return "data/entities/player.xml" end
 function ComponentGetTypeName() return nil end
 function ComponentGetEntity() return nil end
-function PhysicsBodyIDQueryBodies() return body_visible and {77} or {} end
-function PhysicsBodyIDGetGravityScale(id) if id~=77 or not body_exists then error("gone") end; return body.gravity end
+function PhysicsBodyIDQueryBodies(min_x, min_y, max_x, max_y)
+    local half_width = (max_x - min_x) / 2
+    if half_width <= 1024 then return body_in_active_area and {77} or {} end
+    return body_in_restore_shell and {77} or {}
+end
+function PhysicsBodyIDGetGravityScale(id) body_getter_calls=body_getter_calls+1; if id~=77 or not body_exists then error("gone") end; return body.gravity end
 function PhysicsBodyIDSetGravityScale(id, value) if id~=77 or not body_exists then error("gone") end; body.gravity=value end
-function PhysicsBodyIDGetDamping(id) if id~=77 or not body_exists then error("gone") end; return body.linear, body.angular end
+function PhysicsBodyIDGetDamping(id) body_getter_calls=body_getter_calls+1; if id~=77 or not body_exists then error("gone") end; return body.linear, body.angular end
 function PhysicsBodyIDSetDamping(id, linear, angular) if id~=77 or not body_exists then error("gone") end; body.linear,body.angular=linear,angular end
 function PhysicsBodyIDApplyForce() end
 
@@ -47,20 +53,20 @@ assert(math.abs(body.gravity-2.0)<1e-9, "gravity factor not applied")
 assert(math.abs(body.linear-0.4)<1e-9 and math.abs(body.angular-0.6)<1e-9, "damping factor not applied")
 
 -- Leaving the active neighbourhood must restore before releasing ownership.
-frame=2; body_visible=false
+frame=2; body_in_active_area=false; body_in_restore_shell=true
 physics.scan(player, 2.0, 2.0, frame)
 assert(math.abs(body.gravity-1.0)<1e-9, "offscreen body kept creative gravity")
 assert(math.abs(body.linear-0.2)<1e-9 and math.abs(body.angular-0.3)<1e-9, "offscreen body kept creative damping")
 assert(physics.has_overrides()==false, "offscreen restored body remained owned")
 
 -- Re-entering must capture the real native value again, not compound 2x -> 4x.
-frame=3; body_visible=true
+frame=3; body_in_active_area=true; body_in_restore_shell=true
 physics.scan(player, 2.0, 2.0, frame)
 assert(math.abs(body.gravity-2.0)<1e-9, "re-entry compounded gravity instead of reapplying from native")
 assert(math.abs(body.linear-0.4)<1e-9, "re-entry compounded damping instead of reapplying from native")
 
 -- Rule reset must restore a tracked body by ID even when the current spatial query no longer sees it.
-body_visible=false
+body_in_active_area=false; body_in_restore_shell=true
 local restored_g, reason_g=physics.restore_rule("physics_gravity")
 assert(restored_g==true and reason_g=="ok", "offscreen gravity restore failed")
 assert(math.abs(body.gravity-1.0)<1e-9, "restore_rule did not restore offscreen body gravity")
@@ -73,4 +79,14 @@ assert(restored_d==true and reason_d=="ok", "offscreen damping restore failed")
 assert(math.abs(body.linear-0.2)<1e-9 and math.abs(body.angular-0.3)<1e-9, "restore_rule did not restore offscreen damping")
 assert(physics.has_overrides()==false, "restored body ownership leaked")
 
-io.write("world_rules_physics_ownership=PASS offscreen_restore=true reentry_no_compound=true separate_rule_state=true\n")
+-- A body destroyed between scans must be forgotten without invoking any native
+-- PhysicsBodyID getter. Those getters emit engine errors even when wrapped in pcall.
+frame=4; body_exists=true; body_in_active_area=true; body_in_restore_shell=true
+physics.scan(player, 2.0, 2.0, frame)
+body_exists=false; body_in_active_area=false; body_in_restore_shell=false
+local before_destroyed_cleanup=body_getter_calls
+frame=5; physics.scan(player, 2.0, 2.0, frame)
+assert(body_getter_calls==before_destroyed_cleanup, "stale native body id was queried during cleanup")
+assert(physics.has_overrides()==false, "destroyed body ownership leaked")
+
+io.write("world_rules_physics_ownership=PASS offscreen_restore=true reentry_no_compound=true separate_rule_state=true stale_id_not_queried=true\n")

@@ -35,6 +35,20 @@ function nested_pickups.open_gamble_scope(player_entity_id, parent_transaction_i
     return true
 end
 
+function nested_pickups.scope_open(player_entity_id, parent_transaction_id)
+    local scope = scopes_by_player[tonumber(player_entity_id) or 0]
+    if type(scope) ~= "table" then return false end
+    if tonumber(parent_transaction_id) ~= nil and tonumber(scope.parent_transaction_id) ~= tonumber(parent_transaction_id) then
+        return false
+    end
+    local now = frame_now()
+    if now > (tonumber(scope.expires_frame) or now) or (tonumber(scope.remaining) or 0) <= 0 then
+        scopes_by_player[tonumber(player_entity_id) or 0] = nil
+        return false
+    end
+    return true
+end
+
 function nested_pickups.claim_parent(player_entity_id)
     player_entity_id = tonumber(player_entity_id) or 0
     local scope = scopes_by_player[player_entity_id]
@@ -96,7 +110,7 @@ function nested_pickups.update()
     end
 end
 
-function nested_pickups.debug_state()
+function nested_pickups.state_snapshot()
     local scopes, children = 0, 0
     for _ in pairs(scopes_by_player) do scopes = scopes + 1 end
     for _, rows in pairs(children_by_parent_transaction) do children = children + #(rows or {}) end

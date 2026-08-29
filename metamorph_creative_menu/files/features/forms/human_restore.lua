@@ -9,6 +9,32 @@ local function valid_component(component)
     return component ~= nil and component ~= 0
 end
 
+-- A transform can be requested by clicking the creative menu while its input guard
+-- temporarily owns ControlsComponent.enabled. Native polymorph serializes that exact
+-- player state, so the restored human can otherwise inherit disabled controls forever.
+-- Repair both the public field and the component's engine-enabled state, and clear the
+-- form-only polymorph flag once authority belongs to a human again.
+function human_restore.restore_controls(player_entity)
+    if player_entity == nil or player_entity == 0 or not EntityGetIsAlive(player_entity) then return false end
+
+    local components = EntityGetComponentIncludingDisabled(player_entity, "ControlsComponent") or {}
+    if #components == 0 then
+        local first = EntityGetFirstComponentIncludingDisabled(player_entity, "ControlsComponent")
+        if valid_component(first) then components = { first } end
+    end
+
+    local restored = false
+    for _, component in ipairs(components) do
+        if valid_component(component) then
+            local field_enabled = pcall(ComponentSetValue2, component, "enabled", true)
+            pcall(ComponentSetValue2, component, "polymorph_hax", false)
+            local component_enabled = pcall(EntitySetComponentIsEnabled, player_entity, component, true)
+            restored = restored or field_enabled or component_enabled
+        end
+    end
+    return restored
+end
+
 function human_restore.protect_player(player_entity, invincibility_frames)
     if player_entity == nil or player_entity == 0 then return end
     local damage_component = EntityGetFirstComponentIncludingDisabled(player_entity, "DamageModelComponent")

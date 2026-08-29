@@ -9,7 +9,9 @@ local REMOTE_VERSION_KEY = "mcm_weather_remote_version_v1"
 local REMOTE_SNAPSHOT_KEY = "mcm_weather_remote_snapshot_v1"
 local SYNC_FIELDS = { "rain", "rain_target", "fog", "fog_target", "wind", "wind_speed" }
 
-local outbox_sequence = tonumber(GlobalsGetValue(OUTBOX_SEQUENCE_KEY, "0")) or 0
+-- Initialized lazily after WorldState exists; top-level GlobalsGetValue is an engine
+-- error during mod startup and used to poison crash-recovery logs.
+local outbox_sequence = 0
 local last_remote_sequence = ""
 local last_publish_frame = -100000
 

@@ -1,6 +1,7 @@
 local item_catalog = {}
 
 local ITEM_CATALOG_PATH = "mods/metamorph_creative_menu/files/features/items/catalog.lua"
+local VANILLA_OUTLIERS_PATH = "mods/metamorph_creative_menu/files/features/items/vanilla_outliers.lua"
 local ITEM_REGISTRY_PATH = "mods/metamorph_creative_menu/files/item_registry.lua"
 local POTION_ICON = "data/ui_gfx/items/potion.png"
 
@@ -114,6 +115,12 @@ function item_catalog.collect(translate, translate_with_fallback)
     local entries = {}
     local seen_paths = {}
     for _, item in ipairs(base_entries) do add_entry(entries, seen_paths, item, translate, translate_with_fallback) end
+    local outliers_loaded, outliers = pcall(dofile, VANILLA_OUTLIERS_PATH)
+    if outliers_loaded and type(outliers) == "table" then
+        for _, item in ipairs(outliers) do
+            add_entry(entries, seen_paths, item, translate, translate_with_fallback)
+        end
+    end
     add_external_entries(entries, seen_paths, translate, translate_with_fallback)
     table.sort(entries, function(left, right)
         local left_name = string.lower(left.display_name or left.path)

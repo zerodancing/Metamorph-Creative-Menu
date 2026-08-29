@@ -1,8 +1,8 @@
 local root = assert(arg[1], "project root required")
 local original_dofile = dofile
 
--- This test intentionally does NOT define a global perk_service.  The QA baseline
--- module must own its dependency instead of accidentally borrowing runner.lua locals.
+-- The QA baseline module owns the perk introspection modules it reads; it must not
+-- borrow a service table from runner.lua globals.
 perk_service = nil
 
 local world_rules_stub = {
@@ -18,19 +18,24 @@ local weather_stub = {
 local root_companions_stub = {
     owned_counts = function() return {} end,
 }
-local service_calls = 0
-local perk_service_stub = {
-    debug_ownership_state = function()
-        service_calls = service_calls + 1
-        return { transactions = 0, mutations = 0, global_owners = 0, run_flag_owners = 0, cleanup = {pending=0, failed=0} }
-    end,
+local transaction_calls = 0
+local transactions_stub = {
+    active_count = function() transaction_calls = transaction_calls + 1; return 0 end,
+    active_mutation_count = function() return 0 end,
+    active_global_owner_counts = function() return 0, 0 end,
+    cleanup_state = function() return {pending=0, failed=0} end,
 }
+local nested_stub = {state_snapshot=function() return {scopes=0, children=0} end}
+local locomotion_stub = {baseline_count=function() return 0 end}
+
 
 dofile = function(path)
     if path == "mods/metamorph_creative_menu/files/features/world_rules/service.lua" then return world_rules_stub end
     if path == "mods/metamorph_creative_menu/files/features/weather/service.lua" then return weather_stub end
     if path == "mods/metamorph_creative_menu/files/features/perks/root_companions.lua" then return root_companions_stub end
-    if path == "mods/metamorph_creative_menu/files/features/perks/service.lua" then return perk_service_stub end
+    if path == "mods/metamorph_creative_menu/files/features/perks/transactions.lua" then return transactions_stub end
+    if path == "mods/metamorph_creative_menu/files/features/perks/nested_pickups.lua" then return nested_stub end
+    if path == "mods/metamorph_creative_menu/files/features/perks/locomotion_guard.lua" then return locomotion_stub end
     return original_dofile(path)
 end
 
@@ -52,6 +57,6 @@ assert(type(baselines) == "table", "baseline module did not load")
 local ok, snapshot = pcall(baselines.perk_guard_snapshot, 1)
 assert(ok, "perk_guard_snapshot must not depend on a global perk_service: " .. tostring(snapshot))
 assert(type(snapshot) == "table", "snapshot missing")
-assert(service_calls == 1, "owned perk service was not queried")
+assert(transaction_calls == 1, "owned transaction state was not queried")
 assert(type(snapshot.ownership) == "table" and snapshot.ownership.transactions == 0, "ownership snapshot missing")
-print("qa_baselines_scope=PASS explicit_perk_service_dependency=true")
+print("qa_baselines_scope=PASS explicit_perk_ownership_dependencies=true")

@@ -1,3 +1,5 @@
+if type(METAMORPH_CREATIVE_MENU_FORM_COMBAT) == "table" then return METAMORPH_CREATIVE_MENU_FORM_COMBAT end
+
 local form_combat = {}
 
 local entity_tree = dofile("mods/metamorph_creative_menu/files/platform/noita/entity_tree.lua")
@@ -579,4 +581,5 @@ form_combat.update_manual_aim = update_manual_aim
 form_combat.update_manual_lasers = update_manual_lasers
 form_combat.tree_has_laser = function(entity) return #tree_components(entity, "LaserEmitterComponent") > 0 end
 
+METAMORPH_CREATIVE_MENU_FORM_COMBAT = form_combat
 return form_combat

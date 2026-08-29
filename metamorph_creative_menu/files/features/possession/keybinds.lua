@@ -3,36 +3,18 @@ if type(METAMORPH_CREATIVE_MENU_KEYBINDS) == "table" then return METAMORPH_CREAT
 local possession_keybinds = {}
 local input_guard = dofile("mods/metamorph_creative_menu/files/platform/noita/input_guard.lua")
 local keycodes = dofile("mods/metamorph_creative_menu/files/platform/noita/keycodes.lua")
+local binding_codec = dofile("mods/metamorph_creative_menu/files/core/binding_codec.lua")
+local action_bindings = dofile("mods/metamorph_creative_menu/files/platform/noita/action_bindings.lua")
 local player_locator = dofile("mods/metamorph_creative_menu/files/platform/noita/player_locator.lua")
 local possession = dofile("mods/metamorph_creative_menu/files/features/possession/service.lua")
 
-local SETTING_ID = "metamorph_creative_menu.possession_key"
 local DEFAULT_BINDING = "Key_g"
-local cached_setting = nil
-local cached_binding = nil
-local next_refresh_frame = -1
 
 local function decode_binding(value)
-    value = type(value) == "string" and value or DEFAULT_BINDING
-    local mouse = string.match(value, "^Mouse:(%-?%d+)$")
-    if mouse ~= nil then
-        return { kind="mouse", code=tonumber(mouse), name=value }
-    end
-    local code, resolved_name = keycodes.resolve_binding(value, DEFAULT_BINDING)
-    value = resolved_name or DEFAULT_BINDING
-    code = tonumber(code) or 10
-    return { kind="key", code=code, name=value }
-end
-
-local function configured_binding()
-    local frame = tonumber(GameGetFrameNum()) or 0
-    if cached_binding ~= nil and frame < next_refresh_frame then return cached_binding end
-    next_refresh_frame = frame + 15
-
-    local ok, value = pcall(ModSettingGet, SETTING_ID)
-    local binding = decode_binding(ok and value or DEFAULT_BINDING)
-    cached_setting, cached_binding = binding.name, binding
-    return binding
+    local parsed = binding_codec.parse(type(value) == "string" and value or DEFAULT_BINDING)
+    if parsed == nil or parsed.kind == "none" then return {kind="none",code=nil,name="NONE"} end
+    if parsed.kind == "mouse" then return {kind="mouse",code=parsed.mouse_code,name=parsed.canonical} end
+    return {kind="key",code=keycodes.resolve(parsed.base),name=parsed.canonical}
 end
 
 local function inventory_open()
@@ -40,23 +22,13 @@ local function inventory_open()
     return ok and value == true
 end
 
-local function binding_just_down(binding)
-    if type(binding) ~= "table" or binding.code == nil then return false end
-    if binding.kind == "mouse" then
-        local ok, pressed = pcall(InputIsMouseButtonJustDown, binding.code)
-        return ok and pressed == true
-    end
-    local ok, pressed = pcall(InputIsKeyJustDown, binding.code)
-    return ok and pressed == true
-end
-
-function possession_keybinds.update()
+function possession_keybinds.update(menu_open)
     possession.update()
-    local binding = configured_binding()
-    if not input_guard.actions_allowed() or inventory_open() then return false end
-    if not binding_just_down(binding) then return false end
+    action_bindings.update()
+    if not input_guard.actions_allowed() or inventory_open() or menu_open == true then return false end
+    if not action_bindings.consume("possession") then return false end
     local success, reason = possession.possess_under_cursor(player_locator.get())
-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION) == "function" then pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION, "possession", "binding="..tostring(binding.name).." result="..tostring(success).." reason="..tostring(reason)) end
+    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION) == "function" then pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION, "possession", "binding="..tostring(action_bindings.get("possession")).." result="..tostring(success).." reason="..tostring(reason)) end
     if not success then
         if reason == "no_target" then GamePrint(GameTextGetTranslatedOrNot("$mcm_possess_no_target"))
         else GamePrint(GameTextGetTranslatedOrNot("$mcm_possess_failed") .. ": " .. tostring(reason or "")) end
@@ -65,17 +37,16 @@ function possession_keybinds.update()
 end
 
 function possession_keybinds.possess_key()
-    local binding = configured_binding()
+    local binding = decode_binding(action_bindings.get("possession"))
     return binding.kind == "key" and binding.code or nil
 end
 
 function possession_keybinds.possess_key_name()
-    configured_binding()
-    return cached_setting or DEFAULT_BINDING
+    return action_bindings.get("possession")
 end
 
 function possession_keybinds.possess_binding()
-    return configured_binding()
+    return decode_binding(action_bindings.get("possession"))
 end
 
 METAMORPH_CREATIVE_MENU_KEYBINDS = possession_keybinds

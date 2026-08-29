@@ -2,13 +2,13 @@ local world_items = {}
 local ew_runtime = dofile("mods/metamorph_creative_menu/files/integrations/ew/runtime.lua")
 
 -- Creative-menu code and EW's ew_thrown callback run in different Lua contexts. World
--- items therefore cross that boundary through this bounded event journal when a direct
--- CrossCall is unavailable. The EW-side consumer lives in bridge/items.lua.
+-- items therefore cross that boundary through a sequence-keyed event mailbox when a
+-- direct CrossCall is unavailable. The EW-side consumer lives in bridge/items.lua.
 local OUTBOX_SEQUENCE_KEY = "mcm_world_item_outbox_seq_v1"
 local OUTBOX_ENTITY_KEY = "mcm_world_item_outbox_entity_v1"
 local OUTBOX_ACK_KEY = "mcm_world_item_outbox_ack_v1"
 local OUTBOX_RESULT_KEY = "mcm_world_item_outbox_result_v1"
-local outbox_sequence = tonumber(GlobalsGetValue(OUTBOX_SEQUENCE_KEY, "0")) or 0
+local outbox_sequence = 0 -- merge the persisted value lazily in notify_world_item()
 
 local function valid_entity(entity)
     return entity ~= nil and entity ~= 0 and EntityGetIsAlive(entity)

@@ -4,7 +4,7 @@ local radii={}
 local target_module={
  target_under_cursor=function(player,radius)
   radii[#radii+1]=radius
-  if radius==64 then return 99 end
+  if radius==96 then return 99 end
   return 0
  end,
  is_creature=function() return true end,
@@ -47,5 +47,5 @@ EntityHasTag=function() return false end
 local possession=assert(native_dofile(root..'/files/features/possession/service.lua'))
 local ok,reason=possession.possess_under_cursor(1)
 assert(ok and reason=='pending',tostring(reason))
-assert(#radii==2 and radii[1]==32 and radii[2]==64,'client fallback radii changed')
-print('possession_client_fallback=PASS primary=32 fallback=64')
+assert(#radii==2 and radii[1]==48 and radii[2]==96,'network-safe fallback radii changed')
+print('possession_client_fallback=PASS primary=48 fallback=96')

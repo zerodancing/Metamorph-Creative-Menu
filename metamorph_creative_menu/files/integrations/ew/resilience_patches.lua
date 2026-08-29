@@ -1,5 +1,18 @@
 local resilience_patches = {}
 
+function resilience_patches.patch_wand_pickup_killself_source(content)
+    if type(content) ~= "string" or string.find(content, "mcm_wand_pickup_crosscall_guard_v1", 1, true) ~= nil then
+        return content, 0
+    end
+    local anchor = 'if not CrossCall("ew_is_wand_pickup") then'
+    local first, last = string.find(content, anchor, 1, true)
+    if first == nil then return content, 0 end
+    local replacement = [[-- mcm_wand_pickup_crosscall_guard_v1
+local mcm_pickup_ok, mcm_is_wand_pickup = pcall(CrossCall, "ew_is_wand_pickup")
+if not mcm_pickup_ok or not mcm_is_wand_pickup then]]
+    return string.sub(content, 1, first - 1) .. replacement .. string.sub(content, last + 1), 1
+end
+
 function resilience_patches.patch_crosscall_source(content)
     if type(content) ~= "string" or string.find(content, "CrossCall", 1, true) == nil
         or string.find(content, "mcm_safe_crosscall_v1", 1, true) ~= nil
@@ -60,11 +73,18 @@ function resilience_patches.patch_detour_source(content)
         end)
 end
 
-function resilience_patches.patch_world_sync_source(content)
+function resilience_patches.patch_world_sync_source(content, metrics_enabled)
     if type(content) ~= "string" or string.find(content, "mcm_poly_world_sync_v3", 1, true) ~= nil then
         return content, 0
     end
     local original = content
+    -- ModTextFileGetContent can return either LF or CRLF depending on how the EW build
+    -- was installed.  The patch below deliberately uses readable literal anchors, so
+    -- normalize line endings before matching them.  Returning `original` on any failed
+    -- anchor keeps the all-or-nothing guarantee; a successful patch is safe to publish
+    -- with canonical LF endings, which Noita accepts.
+    content = string.gsub(content, "\r\n", "\n")
+    content = string.gsub(content, "\r", "\n")
     local changed = 0
     local function replace_once(source, before, after)
         local first, last = string.find(source, before, 1, true)
@@ -76,15 +96,19 @@ function resilience_patches.patch_world_sync_source(content)
     -- has just left so destructive worm/dragon movement cannot outrun the normal EW
     -- camera-centred scheduler.
     local state_anchor = "local iter_slow_2 = 0"
+    local metrics_literal = metrics_enabled == true and "true" or "false"
     local state_block = [[local iter_slow_2 = 0
 
 -- mcm_poly_world_sync_v3
+local EWCM_METRICS_ENABLED = ]] .. metrics_literal .. [[
 local mcm_trail_queue = {}
 local mcm_trail_seen = {}
+local mcm_trail_head, mcm_trail_tail, mcm_trail_count = 1, 0, 0
 local mcm_last_poly_cx, mcm_last_poly_cy = nil, nil
 local mcm_sent_chunks, mcm_sent_bytes = 0, 0
 local mcm_recv_chunks, mcm_recv_bytes = 0, 0
 local mcm_trail_sent = 0
+local mcm_trail_dropped = 0
 local EWCM_TRAIL_LIMIT = 96]]
     local ok
     content, ok = replace_once(content, state_anchor, state_block)
@@ -97,8 +121,10 @@ local EWCM_TRAIL_LIMIT = 96]]
 end
 local int = 4 -- ctx.proxy_opt.world_sync_interval]]
     local send_block = [[            net.proxy_bin_send(KEY_WORLD_FRAME, str)
-            mcm_sent_chunks = mcm_sent_chunks + 1
-            mcm_sent_bytes = mcm_sent_bytes + #str
+            if EWCM_METRICS_ENABLED then
+                mcm_sent_chunks = mcm_sent_chunks + 1
+                mcm_sent_bytes = mcm_sent_bytes + #str
+            end
         end
     end
 end
@@ -106,12 +132,17 @@ end
 local function mcm_enqueue_trail(cx, cy)
     local key = tostring(cx) .. ":" .. tostring(cy)
     if mcm_trail_seen[key] then return end
-    while #mcm_trail_queue >= EWCM_TRAIL_LIMIT do
-        local old = table.remove(mcm_trail_queue, 1)
-        if old ~= nil then mcm_trail_seen[tostring(old[1]) .. ":" .. tostring(old[2])] = nil end
+    -- Preserve old trail chunks when saturated: they are no longer covered by EW's
+    -- player-centred scheduler, while the newest/current chunks still are.  A fixed ring
+    -- avoids the O(n) table.remove(1) shift in the network hot path.
+    if mcm_trail_count >= EWCM_TRAIL_LIMIT then
+        if EWCM_METRICS_ENABLED then mcm_trail_dropped = mcm_trail_dropped + 1 end
+        return
     end
+    mcm_trail_tail = (mcm_trail_tail % EWCM_TRAIL_LIMIT) + 1
     mcm_trail_seen[key] = true
-    mcm_trail_queue[#mcm_trail_queue + 1] = { cx, cy }
+    mcm_trail_queue[mcm_trail_tail] = { cx, cy }
+    mcm_trail_count = mcm_trail_count + 1
 end
 
 local function mcm_note_poly_chunk(cx, cy)
@@ -125,23 +156,34 @@ end
 
 local function mcm_drain_trail()
     -- One full authoritative chunk every other frame is enough to guarantee eventual
-    -- convergence without turning a fast worm into a bandwidth DoS.
-    if #mcm_trail_queue == 0 or GameGetFrameNum() % 2 ~= 1 then return end
-    local item = table.remove(mcm_trail_queue, 1)
+    -- convergence in steady state.  Drain every frame above half capacity so a burst can
+    -- recover without discarding the oldest, least likely to be revisited chunks.
+    if mcm_trail_count == 0
+        or (mcm_trail_count <= EWCM_TRAIL_LIMIT / 2 and GameGetFrameNum() % 2 ~= 1)
+    then return end
+    local item = mcm_trail_queue[mcm_trail_head]
+    mcm_trail_queue[mcm_trail_head] = nil
+    mcm_trail_head = (mcm_trail_head % EWCM_TRAIL_LIMIT) + 1
+    mcm_trail_count = mcm_trail_count - 1
     if item == nil then return end
     mcm_trail_seen[tostring(item[1]) .. ":" .. tostring(item[2])] = nil
     send_chunks(item[1], item[2])
-    mcm_trail_sent = mcm_trail_sent + 1
+    -- A binary world frame is a two-key protocol transaction. Closing this injected
+    -- chunk immediately prevents it from leaking into a later stock scheduler frame,
+    -- which can otherwise grow malformed native batches during sustained fast travel.
+    net.proxy_bin_send(KEY_WORLD_END, string.char(0) .. tostring(ctx.proxy_opt.world_num or 0))
+    if EWCM_METRICS_ENABLED then mcm_trail_sent = mcm_trail_sent + 1 end
 end
 
 local function mcm_publish_world_metrics()
-    if GameGetFrameNum() % 60 ~= 0 then return end
+    if not EWCM_METRICS_ENABLED or GameGetFrameNum() % 60 ~= 0 then return end
     GlobalsSetValue("mcm_world_sync_sent_chunks_v1", tostring(mcm_sent_chunks))
     GlobalsSetValue("mcm_world_sync_sent_bytes_v1", tostring(mcm_sent_bytes))
     GlobalsSetValue("mcm_world_sync_recv_chunks_v1", tostring(mcm_recv_chunks))
     GlobalsSetValue("mcm_world_sync_recv_bytes_v1", tostring(mcm_recv_bytes))
-    GlobalsSetValue("mcm_world_sync_trail_backlog_v1", tostring(#mcm_trail_queue))
+    GlobalsSetValue("mcm_world_sync_trail_backlog_v1", tostring(mcm_trail_count))
     GlobalsSetValue("mcm_world_sync_trail_sent_v1", tostring(mcm_trail_sent))
+    GlobalsSetValue("mcm_world_sync_trail_dropped_v1", tostring(mcm_trail_dropped))
     GlobalsSetValue("mcm_world_sync_last_poly_chunk_v1", tostring(mcm_last_poly_cx or "") .. ":" .. tostring(mcm_last_poly_cy or ""))
 end
 
@@ -228,8 +270,10 @@ local PixelRun_const_ptr]]
     local recv_anchor = [[function world_sync.handle_world_data(datum)
     local grid_world = world_ffi.get_grid_world()]]
     local recv_block = [[function world_sync.handle_world_data(datum)
-    mcm_recv_chunks = mcm_recv_chunks + 1
-    if type(datum) == "string" then mcm_recv_bytes = mcm_recv_bytes + #datum end
+    if EWCM_METRICS_ENABLED then
+        mcm_recv_chunks = mcm_recv_chunks + 1
+        if type(datum) == "string" then mcm_recv_bytes = mcm_recv_bytes + #datum end
+    end
     local grid_world = world_ffi.get_grid_world()]]
     content, ok = replace_once(content, recv_anchor, recv_block)
     if not ok then return original, 0 end
@@ -237,12 +281,216 @@ local PixelRun_const_ptr]]
     return content, changed
 end
 
--- EW deliberately treats a small perk set as global and mirrors it to every player.
--- Creative-menu editing needs per-peer ownership instead: removing/adding a perk on one
--- peer must never mutate another peer's perk count. Disable only EW's mirroring table;
--- local vanilla pickup mechanics remain untouched.
+local POLYMORPH_DEATH_ANCHOR = [[        if has_hp_component and hp <= 0 and not gameover_requested then
+            ctx.cap.health.on_poly_death()
+            gameover_requested = true
+        end]]
+
+local POLYMORPH_DEATH_BLOCK = [[        if has_hp_component and hp <= 0 and not gameover_requested then
+            -- mcm_poly_death_intercept_v1: a creative MCM form death is a form-lifecycle
+            -- transition, not an EW player death. Give MCM one synchronous chance to
+            -- commit its serialized human backup before local_health/shared-health can
+            -- create notplayer or trigger game over. Ordinary EW polymorphs keep the
+            -- exact upstream path when the acknowledgement is absent.
+            local mcm_old_entity = ctx.my_player.entity
+            local function mcm_death_ack_matches()
+                if type(GlobalsGetValue) ~= "function" then return false end
+                local ok_ack, ack = pcall(GlobalsGetValue, "mcm_form_death_intercept_ack_v1", "")
+                if not ok_ack then return false end
+                local ack_entity, ack_frame = tostring(ack or ""):match("^(%-?%d+):(%-?%d+)$")
+                if tonumber(ack_entity) ~= tonumber(mcm_old_entity) then return false end
+                if type(GameGetFrameNum) ~= "function" then return true end
+                local ok_frame, frame = pcall(GameGetFrameNum)
+                if not ok_frame then return true end
+                return math.abs((tonumber(frame) or 0) - (tonumber(ack_frame) or -100000)) <= 2
+            end
+            -- The entity-side death() callback may have run earlier in this same frame.
+            -- Accept that recent committed acknowledgement even though corpse handoff has
+            -- already removed the MCM player-form tag from the old body.
+            local mcm_poly_death_handled = mcm_death_ack_matches()
+            -- EW replaces the global CrossCall in its own VM with a private local
+            -- callback table. MCM's handler lives in the mod VM, so the synchronous
+            -- fallback must use NoitaPatcher's native cross-VM entry point when present.
+            local mcm_cross_call = type(np) == "table" and type(np.CrossCall) == "function"
+                and np.CrossCall or CrossCall
+            if not mcm_poly_death_handled
+                and type(EntityHasTag) == "function"
+                and EntityHasTag(mcm_old_entity, "metamorph_creative_menu_network_form")
+                and type(mcm_cross_call) == "function"
+            then
+                if type(GlobalsSetValue) == "function" then
+                    pcall(GlobalsSetValue, "mcm_form_death_intercept_ack_v1", "")
+                end
+                pcall(mcm_cross_call, "metamorph_creative_menu_form_died", mcm_old_entity,
+                    "ew_poly_death", 0, nil, 0)
+                mcm_poly_death_handled = mcm_death_ack_matches()
+            end
+            if not mcm_poly_death_handled then
+                ctx.cap.health.on_poly_death()
+                gameover_requested = true
+            end
+        end]]
+
+-- Keep the player-death guard independently patchable from optional profiling. A future
+-- EW revision may change serialization internals while retaining the same health path;
+-- losing metrics must never silently re-enable notplayer for an MCM creative form.
+function resilience_patches.patch_polymorph_death_source(content)
+    if type(content) ~= "string" or string.find(content, "mcm_poly_death_intercept_v1", 1, true) ~= nil then
+        return content, 0
+    end
+    local first, last = string.find(content, POLYMORPH_DEATH_ANCHOR, 1, true)
+    if first == nil then return content, 0 end
+    return string.sub(content, 1, first - 1) .. POLYMORPH_DEATH_BLOCK .. string.sub(content, last + 1), 1
+end
+
+-- Instrument only EW's polymorph entity replacement path. This is intentionally not
+-- installed in util.serialize_entity()/deserialize_entity(), because those helpers are also
+-- hot paths for projectiles and world items. The measurements below are one-shot per
+-- polymorph replacement and do not alter the serialized payload.
+function resilience_patches.patch_polymorph_profile_source(content)
+    if type(content) ~= "string" or string.find(content, "mcm_poly_profile_v1", 1, true) ~= nil then
+        return content, 0
+    end
+    local original = content
+    local function replace_once(source, before, after)
+        local first, last = string.find(source, before, 1, true)
+        if first == nil then return source, false end
+        return string.sub(source, 1, first - 1) .. after .. string.sub(source, last + 1), true
+    end
+
+    local module_anchor = "local module = {}"
+    local helpers = [=[local module = {}
+
+-- mcm_poly_profile_v1
+local function mcm_poly_profile_now()
+    if type(GameGetRealWorldTimeSinceStarted) ~= "function" then return nil end
+    local ok, value = pcall(GameGetRealWorldTimeSinceStarted)
+    value = ok and tonumber(value) or nil
+    return value
+end
+
+local function mcm_poly_profile_source(entity)
+    if entity == nil or entity == 0 then return "" end
+    for _, component in ipairs(EntityGetComponentIncludingDisabled(entity, "VariableStorageComponent") or {}) do
+        local ok_name, name = pcall(ComponentGetValue2, component, "name")
+        if ok_name and name == "metamorph_creative_menu_network_source" then
+            local ok_value, value = pcall(ComponentGetValue2, component, "value_string")
+            if ok_value and type(value) == "string" then return value end
+        end
+    end
+    local ok, filename = pcall(EntityGetFilename, entity)
+    return ok and tostring(filename or "") or ""
+end
+
+local function mcm_poly_profile_kind(entity)
+    if entity == nil or entity == 0 then return "unknown" end
+    if EntityGetFirstComponentIncludingDisabled(entity, "BossDragonComponent") ~= nil then return "boss_dragon" end
+    if EntityGetFirstComponentIncludingDisabled(entity, "WormComponent") ~= nil then return "worm" end
+    if EntityGetFirstComponentIncludingDisabled(entity, "CharacterDataComponent") ~= nil then return "character" end
+    if EntityGetFirstComponentIncludingDisabled(entity, "AdvancedFishAIComponent") ~= nil then return "fish" end
+    return "other"
+end
+
+local function mcm_poly_profile_publish(prefix, entity, byte_count, started, finished)
+    local tag_ok, is_mcm = false, false
+    if type(EntityHasTag) == "function" then tag_ok, is_mcm = pcall(EntityHasTag, entity, "metamorph_creative_menu_network_form") end
+    if not tag_ok or is_mcm ~= true then return end
+    local elapsed_ms = -1
+    if started ~= nil and finished ~= nil then elapsed_ms = math.max(0, (finished - started) * 1000) end
+    local bytes = math.max(0, tonumber(byte_count) or 0)
+    local source = mcm_poly_profile_source(entity)
+    local kind = mcm_poly_profile_kind(entity)
+    if type(GlobalsSetValue) == "function" then
+        pcall(GlobalsSetValue, prefix .. "_ms_v1", string.format("%.3f", elapsed_ms))
+        pcall(GlobalsSetValue, prefix .. "_bytes_v1", tostring(bytes))
+        pcall(GlobalsSetValue, prefix .. "_source_v1", source)
+        pcall(GlobalsSetValue, prefix .. "_kind_v1", kind)
+        if type(GameGetFrameNum) == "function" then
+            local ok, frame = pcall(GameGetFrameNum)
+            if ok then pcall(GlobalsSetValue, prefix .. "_frame_v1", tostring(tonumber(frame) or -1)) end
+        end
+    end
+    if type(print) == "function" then
+        print("[MCM EW profile] " .. tostring(prefix) .. " ms=" .. string.format("%.3f", elapsed_ms)
+            .. " bytes=" .. tostring(bytes) .. " kind=" .. tostring(kind) .. " source=" .. tostring(source))
+    end
+end]=]
+    local ok
+    content, ok = replace_once(content, module_anchor, helpers)
+    if not ok then return original, 0 end
+
+    if string.find(content, "mcm_poly_death_intercept_v1", 1, true) == nil then
+        local death_patched, death_count = resilience_patches.patch_polymorph_death_source(content)
+        if death_count ~= 1 then return original, 0 end
+        content = death_patched
+    end
+
+    local serialize_anchor = [[        rpc.change_entity({ data = util.serialize_entity(ctx.my_player.entity) })]]
+    local serialize_block = [[        local mcm_profile_serialize_started = mcm_poly_profile_now()
+        local mcm_profile_serialized = util.serialize_entity(ctx.my_player.entity)
+        local mcm_profile_serialize_finished = mcm_poly_profile_now()
+        mcm_poly_profile_publish("mcm_ew_poly_serialize", ctx.my_player.entity,
+            type(mcm_profile_serialized) == "string" and #mcm_profile_serialized or 0,
+            mcm_profile_serialize_started, mcm_profile_serialize_finished)
+        rpc.change_entity({ data = mcm_profile_serialized })]]
+    content, ok = replace_once(content, serialize_anchor, serialize_block)
+    if not ok then return original, 0 end
+
+    local deserialize_anchor = [[        local ent = util.deserialize_entity(seri_ent.data)]]
+    local deserialize_block = [[        local mcm_profile_deserialize_started = mcm_poly_profile_now()
+        local ent = util.deserialize_entity(seri_ent.data)
+        local mcm_profile_deserialize_finished = mcm_poly_profile_now()
+        mcm_poly_profile_publish("mcm_ew_poly_deserialize", ent,
+            type(seri_ent.data) == "string" and #seri_ent.data or 0,
+            mcm_profile_deserialize_started, mcm_profile_deserialize_finished)]]
+    content, ok = replace_once(content, deserialize_anchor, deserialize_block)
+    if not ok then return original, 0 end
+
+    return content, 1
+end
+
+
+-- EW mirrors LoadPixelScene calls by filename, but its stock RPC does not forward the
+-- color_to_material_table argument. MCM's solid brush uses one tiny mask file plus a
+-- dynamic color->material mapping, so replaying that scene remotely would either load
+-- the wrong material or reference an MCM-owned file on a peer that does not have MCM.
+-- Keep the local LoadPixelScene result and let EW's normal grid-world synchronization
+-- transport the resulting cells instead. This patch affects only MCM brush assets.
+function resilience_patches.patch_material_pixel_scene_source(content)
+    if type(content) ~= "string" then return content, 0 end
+    if string.find(content, "mcm_material_brush_pixel_scene_v1", 1, true) then return content, 0 end
+    local original = content
+    local function replace_material_scene_once(source, before, after)
+        local first, last = string.find(source, before, 1, true)
+        if first == nil then return source, false end
+        return string.sub(source, 1, first - 1) .. after .. string.sub(source, last + 1), true
+    end
+    local anchor = [[    -- TODO there are a couple more parameters, tho they don't seem to be used in vanilla
+    CrossCall(
+        "ew_sync_pixel_scene",]]
+    local replacement = [[    -- mcm_material_brush_pixel_scene_v1: the MCM solid brush supplies its
+    -- material dynamically through color_to_material_table. EW's stock pixel-scene
+    -- RPC intentionally forwards only filenames/position, so replaying this MCM-owned
+    -- mask remotely cannot preserve the selected material and breaks peers without MCM.
+    -- The scene has already been applied locally above. Do not send a filename-only
+    -- replay that cannot represent the selected material; stock EW world synchronization
+    -- remains responsible for whatever resulting grid state its normal model can encode.
+    -- All non-MCM pixel scenes keep the exact upstream path.
+    if string.find(tostring(materials_filename or ""),
+        "mods/metamorph_creative_menu/files/features/materials/brushes/", 1, true) == 1
+    then
+        return
+    end
+    -- TODO there are a couple more parameters, tho they don't seem to be used in vanilla
+    CrossCall(
+        "ew_sync_pixel_scene",]]
+    local changed, ok = replace_material_scene_once(content, anchor, replacement)
+    if not ok then return original, 0 end
+    return changed, 1
+end
+
 function resilience_patches.patch_peer_perk_isolation_source(content)
-    if type(content) ~= "string" or string.find(content, "mcm_peer_perk_sync_v3", 1, true) ~= nil then
+    if type(content) ~= "string" or string.find(content, "mcm_peer_perk_sync_v4", 1, true) ~= nil then
         return content, 0
     end
     local function replace_peer_once(source, before, after)
@@ -253,10 +501,9 @@ function resilience_patches.patch_peer_perk_isolation_source(content)
     local original = content
 
     -- 0) Some perks are known by EW itself to be unsafe when their full vanilla mechanics
-    -- are executed on the synthetic remote-player replica.  Keep the owner's real pickup
+    -- are executed on the synthetic remote-player replica. Keep the owner's real pickup
     -- untouched; only stop EW's replica reconstruction from running these mechanics a
-    -- second time.  The remote UI icon is still created by give_one_perk(), while shared
-    -- world/entity consequences continue through EW's existing systems.
+    -- second time.
     if string.find(content, "mcm_peer_perk_remote_safety_v1", 1, true) == nil then
         local ignore_anchor = "local perks_to_ignore = {"
         local ignore_block = [[local perks_to_ignore = {
@@ -270,17 +517,23 @@ function resilience_patches.patch_peer_perk_isolation_source(content)
         content = changed
     end
 
-    -- 1) Ownership stays peer-local. EW may still render the perk on the remote replica,
-    -- but its special "global_perks" list must not grant the same owned perk to every
-    -- real player.
-    local isolation_marker = "mcm_peer_perk_isolation_v1"
-    if string.find(content, isolation_marker, 1, true) == nil then
-        local start_at = string.find(content, "local global_perks = {", 1, true)
-        if start_at == nil then return original, 0 end
-        local close_at = string.find(content, "\n}", start_at, true)
-        if close_at == nil then return original, 0 end
-        local replacement = "local global_perks = {} -- " .. isolation_marker
-        content = string.sub(content, 1, start_at - 1) .. replacement .. string.sub(content, close_at + 2)
+    -- 1) Do not rewrite EW's global-perk policy. Instead, hide only tracked creative
+    -- copies from the *sender's* advertised count. A stock EW peer therefore never sees
+    -- that creative layer and cannot grant it to its own real player, while ordinary
+    -- vanilla pickups still follow EW's upstream global-perk semantics unchanged.
+    if string.find(content, "mcm_peer_perk_sender_filter_v1", 1, true) == nil then
+        local count_anchor = [[        local perk_count = tonumber(GlobalsGetValue(perk_flag_name .. "_PICKUP_COUNT", "0"))
+        if perk_count > 0 then]]
+        local count_block = [[        local perk_count = tonumber(GlobalsGetValue(perk_flag_name .. "_PICKUP_COUNT", "0"))
+        -- mcm_peer_perk_sender_filter_v1
+        if global_perks[perk_id] then
+            local mcm_hidden = math.max(0, tonumber(GlobalsGetValue("mcm_creative_perk_hidden_count_v1:" .. perk_id, "0")) or 0)
+            if mcm_hidden > 0 then perk_count = math.max(0, perk_count - mcm_hidden) end
+        end
+        if perk_count > 0 then]]
+        local changed, ok = replace_peer_once(content, count_anchor, count_block)
+        if not ok then return original, 0 end
+        content = changed
     end
 
     -- 2) Reuse EW's own remote-perk rebuild path for removals. get_my_perks() omits
@@ -302,12 +555,11 @@ function resilience_patches.patch_peer_perk_isolation_source(content)
         content = changed
     end
 
-    -- Single critical marker means peer-local ownership, safe remote reconstruction and
-    -- removal propagation are present. Keep the old v2 marker if a previous virtual-file
-    -- patch already added it; v3 is the current verification marker.
-    local marker_anchor = "local global_perks = {} -- " .. isolation_marker
-    if string.find(content, marker_anchor, 1, true) == nil then return original, 0 end
-    local marked, marked_ok = replace_peer_once(content, marker_anchor, marker_anchor .. " mcm_peer_perk_sync_v3")
+    -- The marker is attached to the unchanged upstream global-perk table declaration so
+    -- verification also proves we did not replace the table with an MCM-owned policy.
+    local marker_anchor = "local global_perks = {"
+    local marked, marked_ok = replace_peer_once(content, marker_anchor,
+        marker_anchor .. " -- mcm_peer_perk_sync_v4")
     if not marked_ok then return original, 0 end
     return marked, 1
 end

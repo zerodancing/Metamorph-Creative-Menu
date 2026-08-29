@@ -9,6 +9,9 @@ local pending = {}
 local failed = {}
 local fallback_tick = 0
 local VERIFY_FRAMES = 30
+local FAILED_RETRY_INITIAL_FRAMES = 30
+local FAILED_RETRY_MAX_FRAMES = 300
+local FAILED_RETRY_BUDGET = 4
 
 local function now_frame()
     if type(GameGetFrameNum) == "function" then
@@ -116,22 +119,38 @@ function pending_cleanup.update()
                 pending[key] = nil
                 record.failed = true
                 record.failed_frame = frame
+                record.retry_delay = FAILED_RETRY_INITIAL_FRAMES
+                record.next_retry_frame = frame + record.retry_delay
                 failed[key] = record
             end
         end
     end
 
     -- A timed-out object can still disappear later because another engine subsystem
-    -- finally completed the request. Keep retrying, and clear the diagnostic failure once clean.
+    -- finally completed the request. Do not hammer a permanently-stuck residue every
+    -- frame, though: failed cleanup is exceptional and must have bounded background cost.
     local failed_keys = {}
     for key in pairs(failed) do failed_keys[#failed_keys + 1] = key end
+    table.sort(failed_keys)
+    local retry_budget = FAILED_RETRY_BUDGET
     for _, key in ipairs(failed_keys) do
+        if retry_budget <= 0 then break end
         local record = failed[key]
-        if record ~= nil and select(1, attempt(record)) == true then failed[key] = nil end
+        if record ~= nil and frame >= (tonumber(record.next_retry_frame) or frame) then
+            retry_budget = retry_budget - 1
+            if select(1, attempt(record)) == true then
+                failed[key] = nil
+            else
+                local delay = math.max(FAILED_RETRY_INITIAL_FRAMES, tonumber(record.retry_delay) or FAILED_RETRY_INITIAL_FRAMES)
+                delay = math.min(FAILED_RETRY_MAX_FRAMES, delay * 2)
+                record.retry_delay = delay
+                record.next_retry_frame = frame + delay
+            end
+        end
     end
 end
 
-function pending_cleanup.debug_state()
+function pending_cleanup.state_snapshot()
     local pending_count, failed_count = 0, 0
     local pending_items, failed_items = {}, {}
     for key, record in pairs(pending) do

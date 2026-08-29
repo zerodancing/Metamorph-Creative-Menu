@@ -1,6 +1,6 @@
 <Mod
     name="Metamorph: Creative Menu"
-    description="Creative toolkit: wands, items, reversible perks/effects, weather, world rules, curated creatures and reversible forms. Partial experimental Entangled Worlds support; further compatibility development is planned."
+    description="v2.0.0 — localized, resizable creative toolkit for spells, items, materials, perks, effects, teleportation, weather, world rules and reversible forms. Optional Entangled Worlds integration."
     request_no_api_restrictions="1"
     is_game_mode="0"
 >

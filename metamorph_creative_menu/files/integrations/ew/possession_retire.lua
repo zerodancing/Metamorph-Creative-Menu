@@ -6,10 +6,7 @@ local OUTBOX_PATH_KEY = "mcm_possession_retire_outbox_path_v1"
 local OUTBOX_X_KEY = "mcm_possession_retire_outbox_x_v1"
 local OUTBOX_Y_KEY = "mcm_possession_retire_outbox_y_v1"
 local OUTBOX_ACK_KEY = "mcm_possession_retire_outbox_ack_v1"
-local sequence = math.max(
-    tonumber(GlobalsGetValue(OUTBOX_SEQUENCE_KEY, "0")) or 0,
-    tonumber(GlobalsGetValue(OUTBOX_ACK_KEY, "0")) or 0
-)
+local sequence = 0 -- WorldState-safe lazy initialization in queue_remote()
 
 local function valid_entity(entity)
     return entity ~= nil and entity ~= 0 and EntityGetIsAlive(entity)
@@ -18,6 +15,11 @@ end
 function possession_retire.is_owned_locally(entity)
     if not ew_runtime.enabled() then return true end
     if not valid_entity(entity) then return false end
+
+    -- EW client replicas intentionally have no ew_gid_lid storage, so util.do_i_own()
+    -- treats them as local by default. The explicit replication tag is authoritative:
+    -- the host owns this mob and must retire the original through the RPC bridge.
+    if EntityHasTag(entity, "ew_replicated") then return false end
 
     if ModDoesFileExist("mods/quant.ew/files/resource/util_min.lua") then
         local loaded, util_min = pcall(dofile, "mods/quant.ew/files/resource/util_min.lua")
@@ -43,7 +45,9 @@ function possession_retire.queue_remote(entity_filename, x, y)
     if not ew_runtime.enabled() then return false end
     if type(entity_filename) ~= "string" or entity_filename == "" or x == nil or y == nil then return false end
 
-    sequence = sequence + 1
+    sequence = math.max(sequence,
+        tonumber(GlobalsGetValue(OUTBOX_SEQUENCE_KEY, "0")) or 0,
+        tonumber(GlobalsGetValue(OUTBOX_ACK_KEY, "0")) or 0) + 1
     local suffix = "_" .. tostring(sequence)
     -- Keep latest values for diagnostics/backwards compatibility and sequence-scoped
     -- values for lossless processing of several possessions in quick succession.

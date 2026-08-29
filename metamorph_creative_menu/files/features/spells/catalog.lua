@@ -11,11 +11,16 @@ local BACKGROUND_BY_TYPE = nil
 
 local function load_vanilla_actions()
     if loaded then return unique_actions ~= nil end
-    loaded = true
 
     local enums_loaded = pcall(dofile_once, "data/scripts/gun/gun_enums.lua")
     local actions_loaded = pcall(dofile_once, "data/scripts/gun/gun_actions.lua")
-    if not enums_loaded or not actions_loaded or type(actions) ~= "table" then return false end
+    if not enums_loaded or not actions_loaded or type(actions) ~= "table" then
+        -- Loading can legitimately fail during an early/partial initialization frame.
+        -- Do not poison the catalogue for the rest of the Lua session; a later draw may retry.
+        loaded = false
+        return false
+    end
+    loaded = true
 
     unique_actions = {}
     actions_by_id = {}

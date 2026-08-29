@@ -18,6 +18,7 @@ local state = {
     rain_emitted_total = 0,
     rain_stop_guard_until = 0,
     last_lightning_update_frame = -1,
+    last_full_update_frame = -1,
     original_time_dt = nil,
     remote = false,
 }
@@ -41,6 +42,7 @@ local function clear_state()
     state.last_rain_emit_frame = -1
     state.rain_stop_guard_until = 0
     state.last_lightning_update_frame = -1
+    state.last_full_update_frame = -1
     state.original_time_dt = nil
 end
 
@@ -260,7 +262,14 @@ end
 function weather_service.is_locked() return state.active == true end
 
 function weather_service.update()
-    weather_sync.consume(state, world_component, clear_state)
+    local frame = tonumber(GameGetFrameNum()) or 0
+    local first_update_this_frame = state.last_full_update_frame ~= frame
+    if first_update_this_frame then
+        state.last_full_update_frame = frame
+        weather_sync.consume(state, world_component, clear_state)
+        -- A consumed RELEASE resets the state table, including the frame marker.
+        state.last_full_update_frame = frame
+    end
     if not state.active then return end
     local allowed = weather_service.can_edit()
     if not allowed and not state.remote then
@@ -277,14 +286,18 @@ function weather_service.update()
     end
     for field_name, value in pairs(state.values) do write_value(component, field_name, value) end
 
-    local frame = tonumber(GameGetFrameNum()) or 0
     if (tonumber(state.rain_stop_guard_until) or 0) >= frame and (tonumber(state.rainfall) or 0) <= 0 then
         write_value(component, "rain", 0)
         write_value(component, "rain_target", 0)
     end
-    runtime_effects.emit_rain(state)
-    runtime_effects.update_lightning(state, component, write_value)
-    if not state.remote then weather_sync.publish(state, world_component, false) end
+    -- init.lua calls update both before and after the engine tick: world fields must be
+    -- reasserted twice, but network mailbox work and particle/lightning simulation only
+    -- belong to the first call of a frame.
+    if first_update_this_frame then
+        runtime_effects.emit_rain(state)
+        runtime_effects.update_lightning(state, component, write_value)
+        if not state.remote then weather_sync.publish(state, world_component, false) end
+    end
 end
 
 function weather_service.debug_state()

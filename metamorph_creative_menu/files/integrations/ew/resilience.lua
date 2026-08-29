@@ -39,13 +39,18 @@ local SEEDED_RANDOM_FILES = {
 local EW_CROSSCALL_FILES = {}
 
 local resilience_patches = dofile("mods/metamorph_creative_menu/files/integrations/ew/resilience_patches.lua")
+local DEV_MODE = tonumber(dofile("mods/metamorph_creative_menu/dev_mode.lua")) == 1
 
 -- Compatibility exports: callers that used the old resilience.patch_* API keep working,
 -- while the implementation now lives in the dedicated pure patch module.
 ew_resilience.patch_crosscall_source = resilience_patches.patch_crosscall_source
+ew_resilience.patch_wand_pickup_killself_source = resilience_patches.patch_wand_pickup_killself_source
 ew_resilience.patch_seed_source = resilience_patches.patch_seed_source
 ew_resilience.patch_detour_source = resilience_patches.patch_detour_source
 ew_resilience.patch_world_sync_source = resilience_patches.patch_world_sync_source
+ew_resilience.patch_polymorph_death_source = resilience_patches.patch_polymorph_death_source
+ew_resilience.patch_polymorph_profile_source = resilience_patches.patch_polymorph_profile_source
+ew_resilience.patch_material_pixel_scene_source = resilience_patches.patch_material_pixel_scene_source
 ew_resilience.patch_peer_perk_isolation_source = resilience_patches.patch_peer_perk_isolation_source
 ew_resilience.patch_perk_helper_sync_source = resilience_patches.patch_perk_helper_sync_source
 ew_resilience.patch_perk_mutation_sync_source = resilience_patches.patch_perk_mutation_sync_source
@@ -64,15 +69,27 @@ local function patch_file(path, patcher)
 end
 
 local CRITICAL_PATCHES = {
+    form_death = {
+        path = "mods/quant.ew/files/system/polymorph/polymorph.lua",
+        marker = "mcm_poly_death_intercept_v1",
+        patcher = ew_resilience.patch_polymorph_death_source,
+        global_key = "mcm_compat_form_death_patch_v1",
+    },
     world_sync = {
         path = "mods/quant.ew/files/system/world_sync/world_sync.lua",
         marker = "mcm_poly_world_sync_v3",
-        patcher = ew_resilience.patch_world_sync_source,
+        patcher = function(content) return ew_resilience.patch_world_sync_source(content, DEV_MODE) end,
         global_key = "mcm_compat_world_sync_patch_v1",
+    },
+    material_scenes = {
+        path = "mods/quant.ew/files/system/wang_hooks/synced_pixel_scenes.lua",
+        marker = "mcm_material_brush_pixel_scene_v1",
+        patcher = ew_resilience.patch_material_pixel_scene_source,
+        global_key = "mcm_compat_material_scene_patch_v1",
     },
     peer_perks = {
         path = "mods/quant.ew/files/core/perk_fns.lua",
-        marker = "mcm_peer_perk_sync_v3",
+        marker = "mcm_peer_perk_sync_v4",
         patcher = ew_resilience.patch_peer_perk_isolation_source,
         global_key = "mcm_compat_peer_perk_patch_v1",
     },
@@ -90,7 +107,16 @@ local CRITICAL_PATCHES = {
     },
 }
 
-local critical_patch_status = {world_sync="unknown", peer_perks="unknown", perk_helpers="unknown", perk_mutations="unknown"}
+local critical_patch_status = {form_death="unknown", world_sync="unknown", material_scenes="unknown", peer_perks="unknown", perk_helpers="unknown", perk_mutations="unknown"}
+local surfaced_patch_failures = {}
+
+local function translated(key, fallback)
+    if type(GameTextGetTranslatedOrNot) == "function" then
+        local ok, value = pcall(GameTextGetTranslatedOrNot, key)
+        if ok and type(value) == "string" and value ~= "" and value ~= key then return value end
+    end
+    return fallback
+end
 
 local function publish_patch_status(name, status)
     critical_patch_status[name] = status
@@ -99,6 +125,28 @@ local function publish_patch_status(name, status)
         pcall(GlobalsSetValue, spec.global_key, tostring(status))
     end
     return status
+end
+
+local function surface_critical_patch_failures()
+    for name, status in pairs(critical_patch_status) do
+        if status ~= "applied" and status ~= "already_present" and status ~= "disabled" then
+            local signature = tostring(name) .. ":" .. tostring(status)
+            if not surfaced_patch_failures[signature] then
+                surfaced_patch_failures[signature] = true
+                local diagnostic_message = "[Metamorph: Creative Menu] Entangled Worlds compatibility patch failed: "
+                    .. tostring(name) .. " (" .. tostring(status) .. ")"
+                local user_message = translated("$mcm_ew_compat_failed",
+                    "Entangled Worlds compatibility error") .. ": "
+                    .. tostring(name) .. " (" .. tostring(status) .. ")"
+                print(diagnostic_message)
+                if type(GamePrint) == "function" then pcall(GamePrint, user_message) end
+                if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+                    pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE,
+                        "ew.compatibility." .. tostring(name), tostring(status))
+                end
+            end
+        end
+    end
 end
 
 local function apply_verified_patch(name)
@@ -127,6 +175,25 @@ local function patch_world_sync_file()
     return apply_verified_patch("world_sync")
 end
 
+local function patch_polymorph_profile_file()
+    local path = "mods/quant.ew/files/system/polymorph/polymorph.lua"
+    local function finish(status)
+        if type(GlobalsSetValue) == "function" then
+            pcall(GlobalsSetValue, "mcm_compat_poly_profile_patch_v1", tostring(status))
+        end
+        return status
+    end
+    local ok, content = pcall(ModTextFileGetContent, path)
+    if not ok or type(content) ~= "string" or content == "" then return finish("read_failed") end
+    if string.find(content, "mcm_poly_profile_v1", 1, true) ~= nil then return finish("already_present") end
+    local patch_ok, changed, count = pcall(ew_resilience.patch_polymorph_profile_source, content)
+    if not patch_ok or type(changed) ~= "string" or (tonumber(count) or 0) <= 0
+        or string.find(changed, "mcm_poly_profile_v1", 1, true) == nil
+    then return finish("anchor_mismatch") end
+    if not pcall(ModTextFileSetContent, path, changed) then return finish("write_failed") end
+    return finish("applied")
+end
+
 local function patch_peer_perk_isolation_file()
     return apply_verified_patch("peer_perks")
 end
@@ -137,7 +204,9 @@ end
 
 function ew_resilience.critical_patch_status()
     return {
+        form_death=critical_patch_status.form_death,
         world_sync=critical_patch_status.world_sync,
+        material_scenes=critical_patch_status.material_scenes,
         peer_perks=critical_patch_status.peer_perks,
         perk_helpers=critical_patch_status.perk_helpers,
         perk_mutations=critical_patch_status.perk_mutations,
@@ -190,18 +259,37 @@ local function patch_crosscall_files()
     for _, relative in ipairs(EW_CROSSCALL_FILES) do
         count = count + patch_file("mods/quant.ew/" .. relative, ew_resilience.patch_crosscall_source)
     end
+    -- This helper executes in an entity Lua VM. If a save resumes before EW's
+    -- ew_is_wand_pickup callback is registered, the unguarded line survives forever
+    -- and throws once per frame. Conservative failure semantics are to retire the
+    -- temporary helper, exactly as the normal false result does.
+    count = count + patch_file(
+        "mods/quant.ew/files/system/entity_sync_helper/scripts/killself.lua",
+        ew_resilience.patch_wand_pickup_killself_source)
     return count
 end
 
 function ew_resilience.pre_init()
     if not enabled() then
+        publish_patch_status("form_death", "disabled")
         publish_patch_status("world_sync", "disabled")
+        publish_patch_status("material_scenes", "disabled")
         publish_patch_status("peer_perks", "disabled")
         publish_patch_status("perk_helpers", "disabled")
         publish_patch_status("perk_mutations", "disabled")
+        if type(GlobalsSetValue) == "function" then
+            pcall(GlobalsSetValue, "mcm_compat_poly_profile_patch_v1", "disabled")
+        end
         return 0
     end
+    apply_verified_patch("form_death")
     patch_world_sync_file()
+    if DEV_MODE then
+        patch_polymorph_profile_file()
+    elseif type(GlobalsSetValue) == "function" then
+        pcall(GlobalsSetValue, "mcm_compat_poly_profile_patch_v1", "disabled")
+    end
+    apply_verified_patch("material_scenes")
     patch_peer_perk_isolation_file()
     patch_perk_helper_sync_file()
     apply_verified_patch("perk_mutations")
@@ -210,20 +298,33 @@ end
 
 function ew_resilience.post_init()
     if not enabled() then
+        publish_patch_status("form_death", "disabled")
         publish_patch_status("world_sync", "disabled")
+        publish_patch_status("material_scenes", "disabled")
         publish_patch_status("peer_perks", "disabled")
         publish_patch_status("perk_helpers", "disabled")
         publish_patch_status("perk_mutations", "disabled")
+        if type(GlobalsSetValue) == "function" then
+            pcall(GlobalsSetValue, "mcm_compat_poly_profile_patch_v1", "disabled")
+        end
         return 0, 0
     end
     local seeds = patch_seed_files()
     local detours = 0
     for _, path in ipairs(biome_scripts()) do detours = detours + patch_file(path, ew_resilience.patch_detour_source) end
     local crosscalls = patch_crosscall_files()
+    apply_verified_patch("form_death")
     patch_world_sync_file()
+    if DEV_MODE then
+        patch_polymorph_profile_file()
+    elseif type(GlobalsSetValue) == "function" then
+        pcall(GlobalsSetValue, "mcm_compat_poly_profile_patch_v1", "disabled")
+    end
+    apply_verified_patch("material_scenes")
     patch_peer_perk_isolation_file()
     patch_perk_helper_sync_file()
     apply_verified_patch("perk_mutations")
+    surface_critical_patch_failures()
     return seeds, detours, crosscalls
 end
 

@@ -25,10 +25,7 @@ for path in root.rglob('*'):
         if key.startswith('mcm_')
     )
 
-# This pre-existing key currently relies on the UI fallback string. It is accepted as a
-# known debt so improving tests does not change runtime data in this test-only stage.
-KNOWN_FALLBACK_ONLY = {'mcm_perk_apply_failed'}
-missing = sorted(referenced - set(by_key) - KNOWN_FALLBACK_ONLY)
+missing = sorted(referenced - set(by_key))
 if missing:
     raise SystemExit('localization_contract=FAIL missing referenced keys: ' + ','.join(missing))
 
@@ -51,5 +48,5 @@ if blank_game_languages:
 print(
     'localization_contract=PASS '
     f'referenced={len(referenced)} translated={len(referenced & set(by_key))} '
-    f'fallback_only={len(referenced & KNOWN_FALLBACK_ONLY)} languages=11'
+    'fallback_only=0 languages=11'
 )

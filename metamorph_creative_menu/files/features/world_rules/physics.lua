@@ -7,6 +7,11 @@ local recovery = dofile("mods/metamorph_creative_menu/files/features/world_rules
 
 local PHYSICS_SCAN_HALF_WIDTH = 1024
 local PHYSICS_SCAN_HALF_HEIGHT = 768
+-- Use a wider query shell when deciding whether a previously modified body is still
+-- safe to touch. If Box2D no longer returns it there, relinquish the record instead of
+-- calling native getters on a potentially expired body ID.
+local PHYSICS_RESTORE_HALF_WIDTH = PHYSICS_SCAN_HALF_WIDTH + 192
+local PHYSICS_RESTORE_HALF_HEIGHT = PHYSICS_SCAN_HALF_HEIGHT + 192
 local CHARACTER_SCAN_RADIUS = 1024
 
 local physics_state = {
@@ -212,14 +217,33 @@ local function restore_character_record(key, record)
     return true, "ok"
 end
 
-local function scan_physics_bodies(player)
+local function scan_physics_bodies(player, half_width, half_height)
     if type(PhysicsBodyIDQueryBodies) ~= "function" then return {} end
     player = player or player_locator.get()
     if player == nil or player == 0 or not EntityGetIsAlive(player) then return {} end
     local x, y = EntityGetTransform(player)
     if x == nil then return {} end
-    local ok, bodies = pcall(PhysicsBodyIDQueryBodies, x - PHYSICS_SCAN_HALF_WIDTH, y - PHYSICS_SCAN_HALF_HEIGHT, x + PHYSICS_SCAN_HALF_WIDTH, y + PHYSICS_SCAN_HALF_HEIGHT, false, false)
+    half_width = tonumber(half_width) or PHYSICS_SCAN_HALF_WIDTH
+    half_height = tonumber(half_height) or PHYSICS_SCAN_HALF_HEIGHT
+    local ok, bodies = pcall(PhysicsBodyIDQueryBodies, x - half_width, y - half_height, x + half_width, y + half_height, false, false)
     return ok and type(bodies) == "table" and bodies or {}
+end
+
+local function body_set(bodies)
+    local result = {}
+    for _, body_id in ipairs(bodies or {}) do result[body_id] = true end
+    return result
+end
+
+local function confirmed_restore_bodies(player)
+    return body_set(scan_physics_bodies(player, PHYSICS_RESTORE_HALF_WIDTH, PHYSICS_RESTORE_HALF_HEIGHT))
+end
+
+local function relinquish_body(record)
+    if record == nil then return end
+    record.last_gravity = nil
+    record.last_linear = nil
+    record.last_angular = nil
 end
 
 
@@ -448,6 +472,7 @@ end
 function physics_adapter.scan(player, gravity_factor, damping_factor, frame)
     if player == nil or player == 0 or not EntityGetIsAlive(player) then return end
     local scanned_bodies = scan_physics_bodies(player)
+    local confirmed_bodies = confirmed_restore_bodies(player)
     local live_bodies = {}
     for _, body_id in ipairs(scanned_bodies) do
         live_bodies[body_id] = true
@@ -462,8 +487,15 @@ function physics_adapter.scan(player, gravity_factor, damping_factor, frame)
     for _, body_id in ipairs(body_ids) do
         local record = physics_state.bodies[body_id]
         if record ~= nil and record.last_seen ~= frame and not live_bodies[body_id] then
-            local restored, reason = restore_body(body_id, record)
-            if restored or reason == "gone" then physics_state.bodies[body_id] = nil end
+            if confirmed_bodies[body_id] then
+                local restored, reason = restore_body(body_id, record)
+                if restored or reason == "gone" then physics_state.bodies[body_id] = nil end
+            else
+                -- Calling any PhysicsBodyID getter on an expired ID emits a native Lua
+                -- error even behind pcall. Never feed a stale ID back into Noita.
+                relinquish_body(record)
+                physics_state.bodies[body_id] = nil
+            end
         end
     end
     if gravity_factor ~= nil then scan_character_gravity(gravity_factor, frame, player) end
@@ -477,12 +509,17 @@ end
 
 function physics_adapter.restore_rule(kind)
     local all_restored = true
+    local confirmed_bodies = confirmed_restore_bodies(player_locator.get())
     local body_ids = {}
     for body_id in pairs(physics_state.bodies) do body_ids[#body_ids + 1] = body_id end
     for _, body_id in ipairs(body_ids) do
         local record = physics_state.bodies[body_id]
         local restored, reason
-        if kind == "physics_gravity" then
+        if not confirmed_bodies[body_id] then
+            relinquish_body(record)
+            physics_state.bodies[body_id] = nil
+            restored, reason = true, "gone"
+        elseif kind == "physics_gravity" then
             restored, reason = restore_body_gravity(body_id, record)
         else
             restored, reason = restore_body_damping(body_id, record)
@@ -504,11 +541,18 @@ end
 
 function physics_adapter.reset_all()
     local all_restored = true
+    local confirmed_bodies = confirmed_restore_bodies(player_locator.get())
     local body_ids = {}
     for body_id in pairs(physics_state.bodies) do body_ids[#body_ids + 1] = body_id end
     for _, body_id in ipairs(body_ids) do
         local record = physics_state.bodies[body_id]
-        local restored, reason = restore_body(body_id, record)
+        local restored, reason
+        if confirmed_bodies[body_id] then
+            restored, reason = restore_body(body_id, record)
+        else
+            relinquish_body(record)
+            restored, reason = true, "gone"
+        end
         if restored or reason == "gone" then physics_state.bodies[body_id] = nil else all_restored = false end
     end
     local character_keys = {}

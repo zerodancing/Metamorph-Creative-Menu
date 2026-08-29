@@ -18,12 +18,29 @@ function GameGetPotionColorUint(entity_id)
     return 0x00332211
 end
 function EntityKill(entity_id) alive[entity_id] = false; killed = true end
+function ModTextFileGetContent(path)
+    assert(path == "data/materials.xml", "wrong material definition source")
+    return [[
+<Materials>
+  <CellData name="rock">
+    <Graphics texture_file="data/materials_gfx/rock.png" color="ff112233"></Graphics>
+  </CellData>
+  <CellDataChild name="rock_child" _parent="rock"></CellDataChild>
+</Materials>]]
+end
 
-METAMORPH_CREATIVE_MENU_LIQUID_PREVIEW = nil
-local preview = assert(dofile(root .. "/files/features/items/liquid_preview.lua"))
-local color = assert(preview.sample_color(1, "water"))
+METAMORPH_CREATIVE_MENU_MATERIAL_PREVIEW = nil
+local preview = assert(dofile(root .. "/files/platform/noita/material_preview.lua"))
+local color = assert(preview.sample_liquid_color(1, "water"))
 assert(math.abs(color[1] - 0x11/255) < 0.00001, "red byte decoded incorrectly")
 assert(math.abs(color[2] - 0x22/255) < 0.00001, "green byte decoded incorrectly")
 assert(math.abs(color[3] - 0x33/255) < 0.00001, "blue byte decoded incorrectly")
 assert(killed == true, "preview probe leaked")
-print("item_liquid_preview=PASS probe_cleanup=true color_order=true")
+assert(preview.texture("rock_child") == "data/materials_gfx/rock.png",
+    "child material did not inherit its authored texture")
+local tint = assert(preview.tint("rock_child"), "child material did not inherit its authored tint")
+assert(math.abs(tint[1] - 0x11/255) < 0.00001
+    and math.abs(tint[2] - 0x22/255) < 0.00001
+    and math.abs(tint[3] - 0x33/255) < 0.00001,
+    "authored material tint was decoded incorrectly")
+print("item_liquid_preview=PASS probe_cleanup=true color_order=true texture_inheritance=true")

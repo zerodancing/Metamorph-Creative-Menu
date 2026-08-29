@@ -1,7 +1,7 @@
 <h1 align="center">Metamorph: Creative Menu</h1>
 
 <p align="center">
-  A standalone creative toolkit for Noita — transformations, possession, spells, items, perks, effects, weather and World Rules.
+  A creative toolkit for Noita: spells, wands, items, materials, perks, creatures, effects, teleportation, weather and world rules.
 </p>
 
 <a id="languages"></a>
@@ -23,6 +23,8 @@
 | 한국어 | [가이드 열기](#ko) |
 
 ## Download
+
+Current version: **2.0.0**
 
 | Package | Download |
 |---|---|
@@ -61,25 +63,29 @@ If you end up with `metamorph_creative_menu/metamorph_creative_menu/mod.xml`, th
 
 ### Controls
 
-- **TAB** — open or close the Creative Menu.
-- **TAB while transformed** — return to the human player form.
-- **G** by default — possess a supported creature under the cursor. The key can be changed in MCM settings.
-- Most catalog entries expose different **LMB/RMB** actions; the exact action is shown in the UI.
+- **F4 or TAB**: open or close the Creative Menu.
+- **TAB while transformed**: return to the human player form.
+- **G** by default: possess a supported creature under the cursor.
+- **Middle mouse button**: paint with the selected material.
+- Bindings can be changed in the CONTROLS section or in the mod settings. Available LMB/RMB actions are shown in the interface.
 
 ### What MCM can do
 
-- **Spells & wands** — search spells, replace a selected wand slot, delete a spell or drop it into the world.
-- **Items** — spawn supported items, containers, liquids, wands, books, quest objects and more; MCM can also attempt direct inventory placement.
-- **Perks** — spawn/apply perks and remove one or all tracked stacks while trying to restore only state owned by that perk.
-- **Effects** — apply supported timed/status effects, choose duration where supported and remove editor-owned effects.
-- **Creatures & forms** — spawn creatures or transform into supported creatures, objects and special forms.
-- **Human recovery** — normal TAB return uses the native polymorph lifecycle, with serialized NoitaPatcher recovery available for hard fallback paths.
-- **Death handoff** — supported transformed bodies can die while player authority is returned to the restored human body instead of immediately ending the run.
-- **Possession** — take over a supported existing creature under the cursor rather than simply spawning a duplicate.
-- **PLAYER companion** — spawn a player-like allied companion with copied presentation/inventory behavior and extended wand use when supported.
-- **Search** — large catalogs can be searched by localized names, IDs and descriptions depending on the editor.
-- **Weather** — control time of day, clouds, fog, wind, rain, lightning and presets; RELEASE stops MCM from holding the override.
-- **World Rules** — reversible overrides for creature relations, gold lifetime, spell uses, fog of war, trick-kill systems, healing drops, friendly rats, gore, damage flash, stain shedding, gravity, physics damping, blood volume, kick force, joint strength and day-cycle speed.
+- Get and place spells, and move them between wands, Always Cast slots, the inventory and the world.
+- Edit wand stats, appearance and locks; save wand presets and create copies.
+- Spawn items near the player or at a selected world position, and place supported items directly into the inventory.
+- Create flasks with selected liquids.
+- Select materials and paint them into the world.
+- Spawn, add and remove perks.
+- Spawn creatures near the player or at a selected world position.
+- Transform into creatures, possess creatures in the world and return to human form.
+- Spawn a separate PLAYER entity.
+- Apply and remove game effects.
+- Change weather, time of day, gravity and other world rules.
+- Teleport to game locations.
+- With Entangled Worlds, teleport to other players or bring them to you.
+- Change key bindings and search the spell, item, material, perk and creature catalogs.
+- Move and resize the menu window; its position and size persist between game launches.
 
 <details>
 <summary><strong>Transformations, compatibility and recovery</strong></summary>
@@ -148,25 +154,29 @@ Exact upstream links, bundled paths and third-party license/status notes are in 
 
 ### Управление
 
-- **TAB** — открыть или закрыть Creative Menu.
-- **TAB во время превращения** — вернуться в человеческую форму.
-- **G** по умолчанию — занять тело поддерживаемого существа под курсором. Клавиша меняется в настройках MCM.
-- У большинства элементов каталога **ЛКМ/ПКМ** выполняют разные действия; точная подсказка показывается в интерфейсе.
+- **F4 или TAB**: открыть или закрыть Creative Menu.
+- **TAB во время превращения**: вернуться в человеческую форму.
+- **G** по умолчанию: взять под управление существо под курсором.
+- **Средняя кнопка мыши**: рисовать выбранным материалом.
+- Назначения можно изменить в разделе CONTROLS или в настройках мода. Доступные действия ЛКМ и ПКМ показываются в интерфейсе.
 
 ### Возможности MCM
 
-- **Заклинания и посохи** — поиск заклинаний, замена выбранного слота, удаление или выбрасывание заклинания в мир.
-- **Предметы** — создание предметов, контейнеров, жидкостей, посохов, книг, квестовых объектов и других поддерживаемых сущностей; возможна попытка сразу положить предмет в инвентарь.
-- **Перки** — создание/применение перков и удаление одного или всех отслеживаемых уровней с восстановлением принадлежащего перку состояния.
-- **Эффекты** — применение status/timed effects, выбор длительности и удаление состояния, созданного редактором.
-- **Существа и формы** — создание мобов и превращение в поддерживаемых существ, объекты и специальные формы.
-- **Возврат человека** — обычный TAB использует нативный lifecycle polymorph, а для аварийных сценариев доступно сериализованное восстановление через NoitaPatcher.
-- **Death handoff** — смерть поддерживаемой формы может вернуть player authority восстановленному человеку вместо немедленного Game Over.
-- **Possession** — занятие тела уже существующего поддерживаемого моба под курсором, а не простое создание копии.
-- **Союзник PLAYER** — создание союзника, похожего на игрока, с копированием визуального/инвентарного состояния и расширенным использованием посоха при доступных возможностях runtime.
-- **Поиск** — крупные каталоги ищут по локализованным именам, ID и описаниям в зависимости от вкладки.
-- **Погода** — время суток, облака, туман, ветер, дождь, молнии и пресеты; RELEASE прекращает активное удержание погодных значений.
-- **World Rules** — обратимые правила для отношений существ, времени жизни золота, использования заклинаний, fog of war, trick-kill механик, healing drops, friendly rats, gore, damage flash, stain shedding, гравитации, физического damping, объёма крови, силы пинка, прочности соединений и скорости цикла дня.
+- Получение и размещение заклинаний, а также их перенос между жезлом, постоянными заклинаниями, инвентарём и игровым миром.
+- Изменение характеристик, внешнего вида и блокировок жезлов; сохранение жезлов и создание копий.
+- Создание предметов рядом с игроком или в выбранной точке мира и добавление поддерживаемых предметов в инвентарь.
+- Создание бутылок с выбранными жидкостями.
+- Выбор материалов и рисование ими в игровом мире.
+- Создание, добавление и удаление перков.
+- Создание существ рядом с игроком или в выбранной точке мира.
+- Превращение в существ, управление существами в мире и возврат в человеческую форму.
+- Создание отдельной сущности PLAYER.
+- Применение и удаление игровых эффектов.
+- Изменение погоды, времени суток, гравитации и других правил мира.
+- Телепортация в игровые локации.
+- При использовании Entangled Worlds телепортация к игрокам и перемещение игроков к себе.
+- Изменение назначений клавиш и поиск по каталогам заклинаний, предметов, материалов, перков и существ.
+- Перемещение и изменение размера окна меню с сохранением положения между запусками игры.
 
 <details>
 <summary><strong>Превращения, совместимость и восстановление</strong></summary>

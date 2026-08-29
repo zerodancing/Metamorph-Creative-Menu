@@ -1,0 +1,91 @@
+Metamorph: Creative Menu 2.0.0
+================================
+
+Upgrade compatibility
+---------------------
+
+- Keeps the original `metamorph_creative_menu` mod id and folder name, so 2.0.0 is an
+  in-place update for the previous release.
+- Preserves existing keybinding migration, saved window layout, last selected section
+  and V1 wand-blueprint loading.
+- Still bundles NoitaPatcher and therefore requires Unsafe mods / unrestricted API.
+
+Interface
+---------
+
+- Replaced the duplicated two-row window header with one compact title/control row;
+  previous/next remain assignable actions but no longer appear as header buttons.
+- Added a visible muted-gold drag handle/frame, verified vanilla tab icons with fallbacks,
+  compact responsive defaults and viewport/outset clamping for every resize edge.
+- Prevented menu clicks and drags from also firing or using the held wand, while normal
+  gameplay remains active when the direct menu is only open or hovered.
+- Added pre-click resize-edge highlighting and retained safe press-origin ownership.
+- Added one shared, bounded native viewport path to long tabs and fixed-step wheel
+  ownership for horizontal spell strips.
+- Fixed shared viewport contents starting at the screen's top-left: the wrapper no longer
+  opens a detached layout layer inside Noita's scroll container.
+- Restored title-only tab tooltips without the obsolete dash line and reduced the Extra
+  Life tab icon from its oversized interim scale.
+- Added scrolling to Advanced Weather controls and removed repeated per-tab titles.
+- Added UTF-8-safe wrapping for long unspaced CJK text and bounded translated buttons.
+- Unified catalogue result ranking and result counts across sections.
+- Unified steppers and two-click confirmation for destructive bulk actions.
+- Simplified Spells to CATALOG (wand slots, Always Cast, spell inventory, catalogue) and
+  WAND (stats, appearance/locks, presets), removing LOADOUT, placement-mode buttons and
+  the obsolete CURRENT STATE section. Catalogue LMB now only replaces the selected slot.
+- Spell drag-and-drop now owns its press origin through scroll/reflow and keeps existing
+  entities at the source until a verified destination commit; failed/unknown drops roll
+  back and each release performs at most one operation.
+- Closing, minimizing or suppressing the menu now discards any unconsumed completed drag
+  result, preventing an old item/spell operation from replaying after the menu is reopened.
+- Editable text/numeric fields now keep one stable native GuiTextInput identity across
+  inactive, clicked and off-hover frames while the existing logical focus owner handles
+  blur, context changes and gameplay-input blocking.
+- Wand stats no longer expose CURRENT STATE or technical suffix glyphs; appearance toggles
+  verify fresh components after sync, transient errors are reported once, and saved wand
+  presets show blueprint icons with separate APPLY and GET COPY actions.
+- Item catalogue drag uses the shared drag threshold and commits either to the matching
+  vanilla inventory target or to confirmed world cursor coordinates; catalogue templates
+  are never consumed and failed creation is rolled back.
+- Ordinary mob cards now use the same shared drag threshold: LMB still spawns nearby,
+  while a completed drag outside the menu creates one mob at the confirmed world cursor
+  position. In-menu and invalid-position releases create nothing.
+- Perk TAKE supports 1/10/100 while keeping one canonical transaction per copy; 10/100 and
+  REMOVE ALL run through a bounded update queue with grouped synchronization, cancellation
+  and asynchronous GAMBLE ordering. LMB still creates one physical pickup.
+- If a vanilla perk applies successfully but cannot be recorded as a safe inverse
+  transaction, TAKE now synchronizes and reports that completed copy before stopping.
+- Narrow UI rows across Items, Perks, Effects, Weather, World Rules, Teleportation, Controls
+  and wand appearance/presets use the shared adaptive layout and scroll/focus behavior.
+
+Correctness and safety
+----------------------
+
+- Consolidated both key-capture implementations into one platform adapter.
+- Fixed exact modifier recognition: ordinary keys whose names merely contain `ALT`,
+  such as SDL's `ALTERASE`, are no longer mistaken for Alt.
+- Returning from a native or serialized creature form now explicitly reactivates the
+  human ControlsComponent, including transforms started by a menu click while input was
+  temporarily suppressed.
+- Rejects malformed bindings containing more than one base key.
+- Blocks perk-removal calls when the service reports that no safe inverse exists.
+- Added an explicit LMB/RMB action hint to Effects and confirmation before Remove All.
+- Removed stale translation rows, dead forwarding/test-only exports and unused UI/layout
+  helpers without changing the saved preset format or documented compatibility paths.
+
+Entangled Worlds and performance
+--------------------------------
+
+- Keeps all critical EW compatibility patches verified and failure-visible.
+- Disables polymorph profiling, pose preparation timing, material counters, world-sync
+  metric publication and QA polling in release mode.
+- Preserves bounded material/world queues and the established v4 RPC slot order.
+- Ships offline tests, in-game QA, diagnostics and the deterministic release builder for
+  manual verification while keeping runtime diagnostics dormant in release mode.
+
+Validation
+----------
+
+- The release is built only after the complete syntax, architecture, localization and
+  behavioral mock suite passes. Offline mocks validate contracts but do not substitute for
+  live Noita or two-client EW verification of engine/network behavior.

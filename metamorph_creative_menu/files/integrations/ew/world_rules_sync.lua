@@ -18,11 +18,12 @@ local WORLD_RULES_PROTOCOL = 2
 
 local last_network_send_frame = -100000
 local pending_local_snapshot = nil
-local outbox_sequence = tonumber(GlobalsGetValue(OUTBOX_SEQ, "0")) or 0
+local outbox_sequence = 0
 -- Ignore mailbox entries serialized by a previous Lua VM/save session. New bridge
 -- publications always advance these sequence values after the current module loads.
-local last_remote_sequence = GlobalsGetValue(REMOTE_SEQ, "")
-local last_bridge_error_sequence = GlobalsGetValue(BRIDGE_ERROR_SEQ, "")
+local last_remote_sequence = ""
+local last_bridge_error_sequence = ""
+local mailbox_initialized = false
 local last_network_error = { signature=nil, frame=-100000 }
 
 local function ew_enabled()
@@ -95,6 +96,21 @@ function world_rule_sync.update(frame, callbacks)
     if not ew_enabled() then
         if type(callbacks.set_remote_authoritative) == "function" then callbacks.set_remote_authoritative(false) end
         return
+    end
+
+    if not mailbox_initialized then
+        -- Globals are unavailable while modules load, but are stable by the first
+        -- world update. Snapshot old sequences here so a resumed save is not mistaken
+        -- for a new remote edit.
+        outbox_sequence = tonumber(GlobalsGetValue(OUTBOX_SEQ, "0")) or 0
+        -- A local click can race the first bridge publication in isolated/reloaded
+        -- Lua contexts. In that case consume the remote state for presentation while
+        -- retaining pending_local_snapshot as the user's exact outbound intent.
+        if pending_local_snapshot == nil then
+            last_remote_sequence = GlobalsGetValue(REMOTE_SEQ, "")
+        end
+        last_bridge_error_sequence = GlobalsGetValue(BRIDGE_ERROR_SEQ, "")
+        mailbox_initialized = true
     end
 
     consume_bridge_error()

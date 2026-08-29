@@ -10,10 +10,16 @@ METAMORPH_CREATIVE_MENU_KEYBINDS = nil
 local stubs = {
     ["mods/metamorph_creative_menu/files/platform/noita/input_guard.lua"] = {actions_allowed=function() return true end},
     ["mods/metamorph_creative_menu/files/platform/noita/keycodes.lua"] = {
+        resolve=function(name) return name=='Key_g' and 10 or nil end,
         resolve_binding=function(binding_name, fallback_name)
             if binding_name == "Key_g" then return 10, "Key_g" end
             return 10, fallback_name
         end,
+    },
+    ["mods/metamorph_creative_menu/files/platform/noita/action_bindings.lua"] = {
+        update=function() end,
+        consume=function(id) return id=='possession' and pressed_key==10 end,
+        get=function(id) assert(id=='possession'); return 'Key_g' end,
     },
     ["mods/metamorph_creative_menu/files/platform/noita/player_locator.lua"] = {get=function() return 1 end},
     ["mods/metamorph_creative_menu/files/features/possession/service.lua"] = {

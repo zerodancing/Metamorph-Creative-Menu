@@ -13,6 +13,7 @@ local entity_summary = entity_inspection.summary
 local variable_value = entity_inspection.variable_string
 local world_sync_context = runtime_context.world_sync
 local one_line = logger.one_line
+local perk_root_companions = dofile("mods/metamorph_creative_menu/files/features/perks/root_companions.lua")
 local runtime_errors = logger.runtime_errors()
 local QA_TRIGGER_KEY_NAME = "Key_z"
 
@@ -95,8 +96,8 @@ local function collect_world_and_runtime(report)
             " last=" .. one_line(GlobalsGetValue("mcm_remote_qa_last_v1", "")))
     end
 
-    if report.perk_service ~= nil and type(report.perk_service.root_companion_debug) == "function" then
-        local ok_owned, value = pcall(report.perk_service.root_companion_debug)
+    if type(perk_root_companions.ownership_summary) == "function" then
+        local ok_owned, value = pcall(perk_root_companions.ownership_summary)
         if ok_owned then add(report, "INFO", "perk.root_companion_ownership", tostring(value or "")) end
     end
     if report.perk_service ~= nil and type(report.perk_service.count) == "function" then

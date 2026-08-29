@@ -4,14 +4,15 @@ local globals = {}
 local values = {time=0.12, time_dt=0.01, intro_weather=true, rain=0, rain_target=0, fog=0, fog_target=0, wind=0, wind_speed=0, lightning_count=0}
 local frame = 100
 local is_host = false
+local rain_updates, lightning_updates = 0, 0
 
 local ew_runtime_stub = {
     enabled=function() return true end,
     mode=function() return is_host and "host" or "peer" end,
 }
 local runtime_effects_stub = {
-    emit_rain=function() end,
-    update_lightning=function() end,
+    emit_rain=function() rain_updates=rain_updates+1 end,
+    update_lightning=function() lightning_updates=lightning_updates+1 end,
 }
 
 dofile = function(path)
@@ -72,6 +73,9 @@ globals.mcm_weather_remote_snapshot_v1 = storm_snapshot
 frame = frame + 1
 weather.update()
 assert(weather.is_locked() == true, "remote weather snapshot was not adopted")
+weather.update()
+assert(rain_updates == 1 and lightning_updates == 1,
+    "duplicate same-frame weather call repeated particle/network-side runtime work")
 local state = weather.debug_state()
 assert(state.fog == 0.5 and state.wind_speed == 48, "remote storm snapshot did not converge world fields")
 

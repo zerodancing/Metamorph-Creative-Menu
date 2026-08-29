@@ -14,6 +14,11 @@ local unsafe_reason = classification.unsafe_reason
 local internal_helper_path = classification.internal_helper_path
 local catalog_creature = classification.catalog_creature
 
+local function valid_coordinate(value)
+    value = tonumber(value)
+    return value ~= nil and value == value and value > -1000000000 and value < 1000000000
+end
+
 function creature_service.transform_plan(path)
     path = tostring(path or "")
     if path == "" or not ModDoesFileExist(path) then return nil end
@@ -90,14 +95,20 @@ function creature_service.collect_all_candidates()
 end
 
 function creature_service.spawn_at(entity_path, x, y)
-    if type(entity_path) ~= "string" or entity_path == "" or not ModDoesFileExist(entity_path) then return 0 end
-    return EntityLoad(entity_path, x or 0, y or 0) or 0
+    if type(entity_path) ~= "string" or entity_path == "" or not ModDoesFileExist(entity_path)
+        or not valid_coordinate(x) or not valid_coordinate(y)
+    then
+        return 0, "invalid"
+    end
+    local entity = EntityLoad(entity_path, tonumber(x), tonumber(y)) or 0
+    if entity == 0 then return 0, "load" end
+    return entity, "spawned"
 end
 
 function creature_service.spawn_near_player(player_entity, entity_path, offset_x, offset_y)
-    if player_entity == nil or player_entity == 0 or not EntityGetIsAlive(player_entity) then return 0 end
+    if player_entity == nil or player_entity == 0 or not EntityGetIsAlive(player_entity) then return 0, "invalid" end
     local player_x, player_y = EntityGetTransform(player_entity)
-    if player_x == nil or player_y == nil then return 0 end
+    if player_x == nil or player_y == nil then return 0, "position" end
     return creature_service.spawn_at(entity_path, player_x + (offset_x or 32), player_y + (offset_y or -4))
 end
 

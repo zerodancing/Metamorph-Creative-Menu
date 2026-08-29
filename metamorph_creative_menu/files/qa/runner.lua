@@ -11,6 +11,7 @@ local perk_service = dofile("mods/metamorph_creative_menu/files/features/perks/s
 local effect_service = dofile("mods/metamorph_creative_menu/files/features/effects/service.lua")
 local item_catalog = dofile("mods/metamorph_creative_menu/files/features/items/catalog.lua")
 local item_service = dofile("mods/metamorph_creative_menu/files/features/items/service.lua")
+local ew_world_items = dofile("mods/metamorph_creative_menu/files/integrations/ew/world_items.lua")
 local possession = dofile("mods/metamorph_creative_menu/files/features/possession/service.lua")
 local player_avatar = dofile("mods/metamorph_creative_menu/files/features/companion/player_avatar.lua")
 
@@ -890,7 +891,7 @@ local function update_state()
     end
     if state.phase=="item_verify" then
         local e=state.pending_item; local ent=tonumber(state.pending_item_entity) or 0; local ok=valid(ent)
-        local sync_ok, sync_state, gid = item_service.world_sync_state(ent)
+        local sync_ok, sync_state, gid = ew_world_items.world_sync_state(ent)
         if ok and not sync_ok and f < (state.pending_item_deadline or f) then set_wait(2,"item_verify"); return end
         mark(ok and sync_ok and "PASS" or "FAIL","item."..tostring(e.path),
             "entity="..tostring(ent).." spawn="..tostring(state.pending_reason).." ew_registered="..tostring(sync_ok).." sync_state="..tostring(sync_state).." gid="..tostring(gid or ""))

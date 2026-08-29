@@ -6,6 +6,8 @@ local audit = ui.audit
 local form_manager = dofile("mods/metamorph_creative_menu/files/features/forms/manager.lua")
 local entity_catalog = dofile("mods/metamorph_creative_menu/files/features/creatures/ui_catalog.lua")
 local player_avatar = dofile("mods/metamorph_creative_menu/files/features/companion/player_avatar.lua")
+local bindings = dofile("mods/metamorph_creative_menu/files/platform/noita/action_bindings.lua")
+local drag_drop = dofile("mods/metamorph_creative_menu/files/ui/drag_drop.lua")
 
 local creature_service, catalog, filters, filtered = nil, nil, nil, {}
 local selected_filter = 1
@@ -77,12 +79,9 @@ local function search_values(index, query)
     if query == "" then return values end
     local key = tostring(index) .. "\31" .. query
     if key == search_cache_key and search_cache_value ~= nil then return search_cache_value end
-    local result = {}
-    for _, entry in ipairs(values) do
-        if ui.matches_search(query, entry.display_name, entry.id, entry.path, entry.display_description) then
-            result[#result + 1] = entry
-        end
-    end
+    local result = ui.rank_entries(query, values, function(entry)
+        return {entry.name, entry.display_name, entry.id, entry.path, entry.display_description}
+    end, function(entry) return entry.id or entry.path end)
     search_cache_key, search_cache_value = key, result
     return result
 end
@@ -133,8 +132,14 @@ local function presentation(entry)
     if text ~= "" then text = text .. "\n" end
     text = text .. tostring(entry.path or "")
     if review_mode == "play" then
-        text = text .. "\n" .. ui.tr("$mcm_left_spawn", "LMB: spawn nearby")
-            .. "\n" .. ui.tr("$mcm_right_transform", "RMB: transform")
+        if entry.special == "player" then
+            text = text .. "\n" .. ui.tr("$mcm_player_clone_left", "LMB: create PLAYER clone")
+                .. "\n" .. ui.tr("$mcm_player_clone_right", "RMB: human form (no change if human)")
+        else
+            text = text .. "\n" .. ui.tr("$mcm_left_spawn", "LMB: spawn nearby")
+                .. "\n" .. ui.tr("$mcm_creature_drag_spawn", "DRAG: spawn at cursor")
+                .. "\n" .. ui.tr("$mcm_right_transform", "RMB: transform")
+        end
     else
         local mode_key = "$mcm_mobs_mode_log_retest"
         local mode_fallback = "LOG RETEST"
@@ -156,6 +161,22 @@ local function presentation(entry)
     return { description = text }
 end
 
+local function point_inside(bounds, x, y)
+    return type(bounds) == "table" and tonumber(x) ~= nil and tonumber(y) ~= nil
+        and tonumber(x) >= tonumber(bounds.x or 0) and tonumber(x) <= tonumber(bounds.x or 0) + tonumber(bounds.width or 0)
+        and tonumber(y) >= tonumber(bounds.y or 0) and tonumber(y) <= tonumber(bounds.y or 0) + tonumber(bounds.height or 0)
+end
+
+local function drag_bounds(x, y, width, height)
+    x, y, width, height = tonumber(x), tonumber(y), tonumber(width), tonumber(height)
+    if x == nil or y == nil or width == nil or height == nil or width <= 0 or height <= 0 then return nil end
+    return {x=x, y=y, width=width, height=height}
+end
+
+local function report_spawn_failure(name)
+    GamePrint(ui.tr("$mcm_creature_spawn_failed", "Could not spawn creature") .. ": " .. tostring(name or ""))
+end
+
 local function spawn(player, entry)
     if entry.special == "player" then
         local ok = player_avatar.request_spawn(player, 32, -4)
@@ -163,6 +184,44 @@ local function spawn(player, entry)
     end
     if creature_service == nil or type(creature_service.spawn_near_player) ~= "function" then return false end
     return (creature_service.spawn_near_player(player, entry.path, 32, -4) or 0) ~= 0
+end
+
+local function handle_completed_drag(player)
+    local result = drag_drop.take_result()
+    if result == nil or type(result.payload) ~= "table" then return end
+    local payload = result.payload
+    if payload.kind ~= "catalog_creature" then return end
+
+    if result.click == true then
+        local entity, reason = creature_service.spawn_near_player(player, payload.path, 32, -4)
+        audit("creature.spawn", "path=" .. tostring(payload.path) .. " entity=" .. tostring(entity)
+            .. " reason=" .. tostring(reason))
+        if entity == 0 then report_spawn_failure(payload.display_name) end
+        return
+    end
+
+    if result.target ~= nil then return end
+    local release_x, release_y = tonumber(result.release_x), tonumber(result.release_y)
+    if release_x == nil or release_y == nil then
+        audit("creature.drag.cancel", "path=" .. tostring(payload.path) .. " reason=release_position")
+        return
+    end
+    local menu_bounds = type(ui.panel_bounds) == "function" and ui.panel_bounds() or nil
+    if point_inside(menu_bounds, release_x, release_y) then
+        audit("creature.drag.cancel", "path=" .. tostring(payload.path) .. " reason=in_menu")
+        return
+    end
+
+    local world_x, world_y = tonumber(result.world_x), tonumber(result.world_y)
+    if world_x == nil or world_y == nil then
+        audit("creature.drag.world", "path=" .. tostring(payload.path) .. " entity=0 reason=position")
+        report_spawn_failure(payload.display_name)
+        return
+    end
+    local entity, reason = creature_service.spawn_at(payload.path, world_x, world_y)
+    audit("creature.drag.world", "path=" .. tostring(payload.path) .. " entity=" .. tostring(entity)
+        .. " reason=" .. tostring(reason) .. " x=" .. tostring(world_x) .. " y=" .. tostring(world_y))
+    if entity == 0 then report_spawn_failure(payload.display_name) end
 end
 
 local function transform_creature(player, creature)
@@ -191,7 +250,7 @@ local function transform_creature(player, creature)
     -- Spawn identity and transform identity are intentionally separate for confirmed
     -- crash-prone placement wrappers: LMB keeps the authored biome XML, while player
     -- polymorph may use its same-species base body. requested_target preserves the
-    -- exact menu/G identity for diagnostics and UI.
+    -- exact menu/possession identity for diagnostics and UI.
     if form_manager.exact_effect_path_for_target(target) == nil then
         pcall(form_manager.prepare_exact_effect_paths, {target})
     end
@@ -234,15 +293,14 @@ end
 function creatures_tab.draw(player, panel_width, screen_height)
     if not ensure_catalog() then ui.white_text(0, 2, ui.tr("$mcm_creatures_failed", "Creature list failed to load")); return end
     catalog_scan_complete = creatures_tab.warmup_step(1) == true
+    handle_completed_drag(player)
     GuiLayoutBeginVertical(ui.gui(), 0, 2, true)
-    for start = 1, #filters, 4 do
-        GuiLayoutBeginHorizontal(ui.gui(), 0, 0, true)
-        for i = start, math.min(start + 3, #filters) do
-            local f = filters[i]
-            if ui.button(0, 0, ui.tr(f[1], f[2]), selected_filter == i) then selected_filter = i end
-        end
-        GuiLayoutEnd(ui.gui())
+    local filter_buttons = {}
+    for index, f in ipairs(filters) do
+        filter_buttons[index] = {label=ui.tr(f[1], f[2]),selected=selected_filter == index}
     end
+    local clicked_filter = ui.button_grid(filter_buttons, panel_width - 10)
+    if clicked_filter ~= nil then selected_filter = clicked_filter end
     if DEV_MODE then
         GuiLayoutBeginHorizontal(ui.gui(), 0, 0, true)
         if ui.button(0, 0, ui.tr("$mcm_mobs_mode_play", "PLAY"), review_mode == "play") then review_mode = "play" end
@@ -254,13 +312,13 @@ function creatures_tab.draw(player, panel_width, screen_height)
         review_mode = "play"
     end
     if review_mode == "play" then
-        ui.white_text(0, 0, ui.tr("$mcm_creature_controls", "LMB: SPAWN   RMB: TRANSFORM   TAB: HUMAN"))
+        local help = ui.tr("$mcm_creature_controls_dynamic", "LMB: SPAWN   DRAG: DROP   RMB: TRANSFORM   {BIND}: HUMAN")
+        ui.wrapped_text(0, 0, string.gsub(help, "{BIND}", "[" .. bindings.label("return_human") .. "]"), panel_width - 12)
     else
-        ui.white_text(0, 0, ui.tr("$mcm_mobs_review_help", "REVIEW: click a mob to log its exact path; no transform/spawn occurs"))
+        ui.wrapped_text(0, 0, ui.tr("$mcm_mobs_review_help", "REVIEW: click a mob to log its exact path; no transform/spawn occurs"), panel_width - 12)
     end
     search = ui.search_input(search, math.max(88, panel_width - 54), 64, "creatures")
 
-    local columns = ui.columns(panel_width)
     local results = search_values(selected_filter, search)
     -- ALL is one continuous list; direct/alias icons are cached and deeper XML icon
     -- resolution is deferred until an entry is actually hovered.
@@ -269,16 +327,29 @@ function creatures_tab.draw(player, panel_width, screen_height)
         catalog_status = "  |  " .. ui.tr("$mcm_mobs_scanning", "SCANNING...")
     end
     ui.white_text(0, 0, ui.tr("$mcm_mobs_showing", "SHOWING") .. " " .. tostring(#results) .. " / " .. tostring(#(catalog or {})) .. catalog_status)
-    local h = ui.grid_height(screen_height, 220, 145)
-    GuiBeginScrollContainer(ui.gui(), 12100 + selected_filter * 100, 0, 0, panel_width - 4, h, false, 1, 1)
-    local _, _, hov = GuiGetPreviousWidgetInfo(ui.gui()); ui.mark_hovered(hov)
+    local h = ui.scroll_height(screen_height, 145)
+    local scroll = ui.begin_scroll_viewport("creatures.catalog." .. tostring(selected_filter),
+        12100 + selected_filter * 100, 0, 0, panel_width - 4, h, {layout="free"})
+    local columns = ui.columns(scroll.content_width, ui.ICON_STEP, {reserve_scrollbar=false})
     for index, entry in ipairs(results) do
         local p = presentation(entry)
         local i = index - 1
-        local clicked, right, hovered = ui.tile((i % columns) * ui.ICON_STEP, math.floor(i / columns) * ui.ICON_STEP,
-            ui.EMPTY_SLOT, icon(entry, false), CREATURE_ICON_FALLBACK, entry.display_name, p.description, false,
+        local entry_icon = icon(entry, false)
+        local clicked, right, hovered, tile_x, tile_y, tile_w, tile_h = ui.tile(
+            scroll.padding_left + (i % columns) * ui.ICON_STEP,
+            ui.scroll_y(scroll, math.floor(i / columns) * ui.ICON_STEP),
+            ui.EMPTY_SLOT, entry_icon, CREATURE_ICON_FALLBACK, entry.display_name, p.description, false,
             {target_size=18, max_scale=18, padding=0})
-        if hovered and icon_cache[tostring(entry.path)] == nil then icon(entry, true) end
+        if hovered and icon_cache[tostring(entry.path)] == nil then entry_icon = icon(entry, true) end
+        if review_mode == "play" and entry.special ~= "player" then
+            local bounds = drag_bounds(tile_x, tile_y, tile_w, tile_h)
+            if bounds ~= nil then
+                drag_drop.source("creatures.catalog." .. tostring(entry.path), {
+                    kind="catalog_creature", path=entry.path, display_name=entry.display_name,
+                    background=ui.EMPTY_SLOT, icon=entry_icon,
+                }, bounds, {x=scroll.x, y=scroll.y, width=scroll.width, height=scroll.height})
+            end
+        end
         if review_mode ~= "play" and (clicked or right) then
             review_marks[tostring(entry.path)] = review_mode
             local compatibility_status, compatibility_reason = "unknown", "unavailable"
@@ -292,7 +363,7 @@ function creatures_tab.draw(player, panel_width, screen_height)
             if review_mode == "safe" then label = ui.tr("$mcm_mobs_mode_log_safe", "LOG SAFE") end
             if review_mode == "unsafe" then label = ui.tr("$mcm_mobs_mode_log_unsafe", "LOG UNSAFE") end
             GamePrint(ui.tr("$mcm_mobs_review_logged", "MOBS REVIEW") .. " " .. label .. ": " .. tostring(entry.path))
-        elseif clicked then
+        elseif clicked and entry.special == "player" then
             local ok=spawn(player, entry)
             audit("creature.spawn", "path="..tostring(entry.path).." result="..tostring(ok))
         elseif right then
@@ -300,7 +371,14 @@ function creatures_tab.draw(player, panel_width, screen_height)
             audit("creature.transform", "path="..tostring(entry.path).." result="..tostring(ok).." reason="..tostring(reason))
         end
     end
-    GuiEndScrollContainer(ui.gui())
+    ui.end_scroll_viewport(scroll, math.ceil(#results / columns) * ui.ICON_STEP)
+    if drag_drop.active() then
+        local payload = drag_drop.payload()
+        local mouse_x, mouse_y = drag_drop.mouse_position()
+        if type(payload) == "table" and payload.kind == "catalog_creature" then
+            ui.drag_ghost(payload.background, payload.icon, mouse_x, mouse_y)
+        end
+    end
     GuiLayoutEnd(ui.gui())
 end
 

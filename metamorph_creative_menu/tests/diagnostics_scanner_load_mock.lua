@@ -56,6 +56,7 @@ local module_stubs = {
     ["mods/metamorph_creative_menu/files/features/items/catalog.lua"] = {},
     ["mods/metamorph_creative_menu/files/features/effects/service.lua"] = {catalog=function() return {} end},
     ["mods/metamorph_creative_menu/files/features/perks/service.lua"] = {count=function() return 0 end},
+    ["mods/metamorph_creative_menu/files/features/perks/root_companions.lua"] = {ownership_summary=function() return "" end},
     ["mods/metamorph_creative_menu/files/features/world_rules/service.lua"] = {},
     ["mods/metamorph_creative_menu/files/features/weather/service.lua"] = {
         can_edit=function() return true, "ok" end,

@@ -217,4 +217,156 @@ function inventory_slots.preflight(player, entity)
     return preflight(player, entity)
 end
 
+local function magic_number(name, fallback)
+    if type(MagicNumbersGetValue) ~= "function" then return fallback end
+    local ok, value = pcall(MagicNumbersGetValue, name)
+    value = ok and tonumber(value) or nil
+    return value ~= nil and value or fallback
+end
+
+-- Returns the on-screen rectangle occupied by a vanilla inventory surface. Prefer live
+-- InventoryComponent geometry; the fallback derives the same top-right quick/full grids
+-- from the player's actual dimensions and Noita UI magic numbers.
+function inventory_slots.native_drop_bounds(player, inventory_name, screen_width, screen_height)
+    inventory_name = tostring(inventory_name or "inventory_full")
+    if inventory_name ~= "inventory_full" and inventory_name ~= "inventory_quick" then return nil end
+    if inventory_name == "inventory_full" and type(GameIsInventoryOpen) == "function" then
+        local ok, opened = pcall(GameIsInventoryOpen)
+        if not ok or opened ~= true then return nil end
+    end
+    local inventory = named_inventory(player, inventory_name)
+    if inventory == 0 then return nil end
+    local width, height = inventory_limits(player, inventory)
+    if width == nil then return nil end
+
+    local geometry = EntityGetFirstComponentIncludingDisabled(inventory, "InventoryComponent")
+    if valid(geometry) then
+        local ok_pos, x, y = pcall(ComponentGetValue2, geometry, "ui_position_on_screen")
+        local ok_item, item_w, item_h = pcall(ComponentGetValue2, geometry, "ui_element_size")
+        local ok_container, cells_x, cells_y = pcall(ComponentGetValue2, geometry, "ui_container_size")
+        x, y, item_w, item_h, cells_x, cells_y = tonumber(x), tonumber(y), tonumber(item_w), tonumber(item_h), tonumber(cells_x), tonumber(cells_y)
+        if ok_pos and ok_item and ok_container and x ~= nil and y ~= nil and item_w ~= nil and item_h ~= nil
+            and cells_x ~= nil and cells_y ~= nil and item_w > 0 and item_h > 0 and cells_x > 0 and cells_y > 0
+        then
+            return {x=x, y=y, width=item_w * cells_x, height=item_h * cells_y, source="component"}
+        end
+    end
+
+    screen_width, screen_height = tonumber(screen_width) or 427, tonumber(screen_height) or 242
+    local icon_size = math.max(8, magic_number("INVENTORY_ICON_SIZE", 20))
+    local margin_x = math.max(0, magic_number("UI_BARS_POS_X", 20))
+    local top = math.max(0, magic_number("UI_BARS_POS_Y", 20) - 4)
+    local grid_width = math.min(screen_width, math.max(icon_size, width * icon_size))
+    -- inventory_quick has two visible rows (wands and ordinary held items) sharing the
+    -- same numeric slot coordinates. Cover both rows so a catalog item can be dropped on
+    -- the vanilla quick inventory without inventing a second coordinate system.
+    local visible_rows = inventory_name == "inventory_quick" and 2 or height
+    local grid_height = math.min(screen_height - top, math.max(icon_size, visible_rows * icon_size + 8))
+    local left = math.max(0, screen_width - grid_width - margin_x)
+    return {x=left, y=top, width=grid_width, height=grid_height, source="native_grid"}
+end
+
+function inventory_slots.snapshot(player, inventory_name)
+    inventory_name = tostring(inventory_name or "")
+    local inventory = named_inventory(player, inventory_name)
+    if inventory == 0 then return nil, "inventory_missing" end
+    local width, height, kind = inventory_limits(player, inventory)
+    if width == nil then return nil, "inventory_shape" end
+    local result = {
+        inventory=inventory, name=inventory_name, kind=kind, width=width, height=height,
+        entries={}, by_slot={},
+    }
+    for _, child in ipairs(EntityGetAllChildren(inventory) or {}) do
+        local x, y, item = item_slot(child)
+        if x ~= nil and valid(item) then
+            local record = {
+                entity=child, item_component=item, x=x, y=y,
+                is_action=is_action(child), is_wand=is_wand(child),
+            }
+            result.entries[#result.entries + 1] = record
+            local collides = inventory_name ~= "inventory_quick" or record.is_wand == true
+            local key = policy.slot_key(x, y)
+            if result.by_slot[key] == nil or collides then result.by_slot[key] = record end
+        end
+    end
+    table.sort(result.entries, function(a,b)
+        if a.y ~= b.y then return a.y < b.y end
+        if a.x ~= b.x then return a.x < b.x end
+        return tonumber(a.entity) < tonumber(b.entity)
+    end)
+    return result, "ok"
+end
+
+local function restore_parent(entity, old_parent, old_x, old_y)
+    if EntityGetParent(entity) ~= nil and EntityGetParent(entity) ~= 0 then pcall(EntityRemoveFromParent, entity) end
+    if old_parent ~= nil and old_parent ~= 0 then
+        pcall(EntityAddChild, old_parent, entity)
+        local item = EntityGetFirstComponentIncludingDisabled(entity, "ItemComponent")
+        if valid(item) and old_x ~= nil then pcall(ComponentSetValue2, item, "inventory_slot", old_x, old_y or 0) end
+        if EntityGetName(old_parent) == "inventory_quick" or EntityGetName(old_parent) == "inventory_full" then enable_inventory(entity) end
+    else
+        enable_world(entity)
+    end
+end
+
+function inventory_slots.place_exact(player, entity, inventory_name, x, y)
+    if player == nil or player == 0 or entity == nil or entity == 0 or not EntityGetIsAlive(entity) then
+        return false, "invalid"
+    end
+    inventory_name = tostring(inventory_name or "")
+    if policy.destination(is_action(entity)) ~= inventory_name then return false, "wrong_inventory" end
+    local snapshot, reason = inventory_slots.snapshot(player, inventory_name)
+    if snapshot == nil then return false, reason end
+    x, y = math.floor(tonumber(x) or -1), math.floor(tonumber(y) or -1)
+    if x < 0 or y < 0 or x >= snapshot.width or y >= snapshot.height then return false, "slot_out_of_range" end
+    local occupied = snapshot.by_slot[policy.slot_key(x, y)]
+    if occupied ~= nil and occupied.entity ~= entity then return false, "occupied", occupied end
+
+    local item = EntityGetFirstComponentIncludingDisabled(entity, "ItemComponent")
+    if not valid(item) then return false, "not_item" end
+    local old_parent = EntityGetParent(entity) or 0
+    local old_x, old_y = item_slot(entity)
+    if old_parent ~= snapshot.inventory then
+        if old_parent ~= 0 then pcall(EntityRemoveFromParent, entity) end
+        local added = pcall(EntityAddChild, snapshot.inventory, entity)
+        if not added or EntityGetParent(entity) ~= snapshot.inventory then
+            restore_parent(entity, old_parent, old_x, old_y)
+            return false, "attach_failed"
+        end
+    end
+    local wrote = pcall(ComponentSetValue2, item, "inventory_slot", x, y)
+    local read_ok, actual_x, actual_y = pcall(ComponentGetValue2, item, "inventory_slot")
+    if not wrote or not read_ok or tonumber(actual_x) ~= x or (tonumber(actual_y) or 0) ~= y then
+        restore_parent(entity, old_parent, old_x, old_y)
+        return false, "slot_write_failed"
+    end
+    enable_inventory(entity)
+    local inv2 = EntityGetFirstComponentIncludingDisabled(player, "Inventory2Component")
+    if valid(inv2) then pcall(ComponentSetValue2, inv2, "mForceRefresh", true) end
+    return true, "ok"
+end
+
+function inventory_slots.swap_exact(player, left_entity, right_entity)
+    if left_entity == nil or right_entity == nil or left_entity == right_entity then return false, "invalid" end
+    if not EntityGetIsAlive(left_entity) or not EntityGetIsAlive(right_entity) then return false, "invalid" end
+    local left_parent, right_parent = EntityGetParent(left_entity), EntityGetParent(right_entity)
+    if left_parent == nil or left_parent == 0 or left_parent ~= right_parent then return false, "different_inventory" end
+    local name = EntityGetName(left_parent)
+    if name ~= "inventory_quick" and name ~= "inventory_full" then return false, "not_inventory" end
+    if EntityGetRootEntity(left_parent) ~= player then return false, "foreign_inventory" end
+    local lx, ly, li = item_slot(left_entity)
+    local rx, ry, ri = item_slot(right_entity)
+    if not valid(li) or not valid(ri) or lx == nil or rx == nil then return false, "slot_missing" end
+    local left_ok = pcall(ComponentSetValue2, li, "inventory_slot", rx, ry)
+    local right_ok = left_ok and pcall(ComponentSetValue2, ri, "inventory_slot", lx, ly)
+    if not right_ok then
+        pcall(ComponentSetValue2, li, "inventory_slot", lx, ly)
+        pcall(ComponentSetValue2, ri, "inventory_slot", rx, ry)
+        return false, "swap_failed"
+    end
+    local inv2 = EntityGetFirstComponentIncludingDisabled(player, "Inventory2Component")
+    if valid(inv2) then pcall(ComponentSetValue2, inv2, "mForceRefresh", true) end
+    return true, "ok"
+end
+
 return inventory_slots

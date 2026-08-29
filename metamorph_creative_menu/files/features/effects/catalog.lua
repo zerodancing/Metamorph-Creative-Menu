@@ -237,6 +237,8 @@ local function load_status_entries()
                 status_index = index,
                 path = type(path) == "string" and path or "",
                 icon = type(icon) == "string" and icon or (meta.icon or ""),
+                name_key = name or meta.name,
+                description_key = description or meta.description,
                 display_name = translated(name or meta.name),
                 display_description = translated(description or meta.description),
                 material = STATUS_MATERIAL_BY_ID[status.id],
@@ -255,6 +257,8 @@ local function load_status_entries()
                 if current.icon == "" and candidate.icon ~= "" then current.icon = candidate.icon end
                 if current.display_name == "" and candidate.display_name ~= "" then current.display_name = candidate.display_name end
                 if current.display_description == "" and candidate.display_description ~= "" then current.display_description = candidate.display_description end
+                current.name_key = current.name_key or candidate.name_key
+                current.description_key = current.description_key or candidate.description_key
                 current.material = current.material or candidate.material
                 current.game_effect = current.game_effect or candidate.game_effect
                 current.custom_effect_id = current.custom_effect_id or candidate.custom_effect_id
@@ -320,6 +324,8 @@ local function richer(existing, candidate)
     if keep.display_name == "" then keep.display_name = other.display_name or "" end
     if keep.display_description == "" then keep.display_description = other.display_description or "" end
     if keep.path == "" then keep.path = other.path or "" end
+    keep.name_key = keep.name_key or other.name_key
+    keep.description_key = keep.description_key or other.description_key
     keep.game_effect = keep.game_effect or other.game_effect
     keep.custom_effect_id = keep.custom_effect_id or other.custom_effect_id
     return keep
@@ -389,6 +395,8 @@ function catalog_api.entries()
                     id = (custom_effect_id ~= "" and custom_effect_id) or (effect_name ~= "" and effect_name) or pretty_name(path),
                     path = path,
                     icon = meta.icon or "",
+                    name_key = meta.name,
+                    description_key = meta.description,
                     display_name = translated(meta.name),
                     display_description = translated(meta.description),
                     game_effect = meta.effect,

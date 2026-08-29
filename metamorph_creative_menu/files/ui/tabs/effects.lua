@@ -52,55 +52,65 @@ end
 function effects_tab.draw(player, panel_width, screen_height)
     if not ensure_catalog() then ui.white_text(0, 2, ui.tr("$mcm_effects_failed", "Effect list failed to load")); return end
     GuiLayoutBeginVertical(ui.gui(), 0, 2, true)
-    GuiLayoutBeginHorizontal(ui.gui(), 0, 0, true)
-    for _, f in ipairs({ {"all","$mcm_effect_filter_all","ALL"}, {"status","$mcm_effect_filter_status","STATUS"}, {"game_effect","$mcm_effect_filter_timed","EFFECTS"} }) do
-        if ui.button(0,0,ui.tr(f[2],f[3]),filter==f[1]) then filter=f[1] end
-    end
-    GuiLayoutEnd(ui.gui())
-    GuiLayoutBeginHorizontal(ui.gui(), 0, 0, true)
-    ui.white_text(0, 1, ui.tr("$mcm_effect_duration", "DURATION"))
-    if ui.button(0,0,"  -  ") then duration_index=math.max(1,duration_index-1) end
+    local filter_records = { {"all","$mcm_effect_filter_all","ALL"}, {"status","$mcm_effect_filter_status","STATUS"}, {"game_effect","$mcm_effect_filter_timed","EFFECTS"} }
+    local filter_buttons = {}
+    for index, f in ipairs(filter_records) do filter_buttons[index] = {label=ui.tr(f[2],f[3]),selected=filter==f[1]} end
+    local clicked_filter = ui.button_grid(filter_buttons, panel_width - 10)
+    if clicked_filter ~= nil then filter = filter_records[clicked_filter][1] end
     local d = DURATIONS[duration_index]
-    ui.white_text(0,1,ui.tr(d.key,d.fallback))
-    if ui.button(0,0,"  +  ") then duration_index=math.min(#DURATIONS,duration_index+1) end
-    if ui.button(0,0,ui.tr("$mcm_effect_remove_all","REMOVE ALL")) then
+    local duration_delta = ui.stepper(ui.tr("$mcm_effect_duration", "DURATION"), ui.tr(d.key, d.fallback), {
+        decrease_enabled=duration_index > 1, increase_enabled=duration_index < #DURATIONS,
+        max_width=math.max(32, panel_width - 10),
+    })
+    duration_index = math.max(1, math.min(#DURATIONS, duration_index + duration_delta))
+    d = DURATIONS[duration_index]
+    local remove_all_label = ui.tr("$mcm_effect_remove_all", "REMOVE ALL")
+    if ui.confirm_button("effects.remove_all", remove_all_label,
+        ui.tr("$mcm_confirm", "CONFIRM") .. ": " .. remove_all_label, nil, math.max(32,panel_width-10))
+    then
         local removed=effect_service.remove_all(player)
         audit("effect.remove_all", "removed="..tostring(removed))
     end
-    GuiLayoutEnd(ui.gui())
-    search = ui.search_input(search, math.max(88, panel_width - 54), 64, "effects")
+    search = ui.search_input(search, math.max(68, panel_width - 28), 64, "effects")
+    ui.wrapped_text(0, 0, ui.tr("$mcm_effect_controls", "LMB: APPLY   RMB: REMOVE"), math.max(24,panel_width-10))
 
-    local columns=ui.columns(panel_width)
-    local h=ui.grid_height(screen_height,205,145)
-    GuiBeginScrollContainer(ui.gui(), 11100, 0,0,panel_width-4,h,false,1,1)
-    local _,_,hov=GuiGetPreviousWidgetInfo(ui.gui()); ui.mark_hovered(hov)
+    local filtered = {}
+    for _, entry in ipairs(catalog) do
+        if filter == "all" or entry.kind == filter then filtered[#filtered + 1] = entry end
+    end
+    local results = ui.rank_entries(search, filtered, function(entry)
+        return {entry.name_key, entry.description_key, entry.display_name, entry.id, entry.path, entry.display_description}
+    end, function(entry) return entry.id or entry.path end)
+    ui.search_status(search, #results)
+
+    local h=ui.scroll_height(screen_height,168)
+    local scroll=ui.begin_scroll_viewport("effects.catalog",11100,0,0,panel_width-4,h,{layout="free"})
+    local columns=ui.columns(scroll.content_width,ui.ICON_STEP,{reserve_scrollbar=false})
     local visible=0
     local active_snapshot = effect_service.active_snapshot(player)
-    for _,entry in ipairs(catalog) do
-        if (filter=="all" or entry.kind==filter) and ui.matches_search(search, entry.display_name, entry.id, entry.path, entry.display_description) then
-            local active=effect_service.is_active(player,entry,active_snapshot)
-            local description=tostring(entry.display_description or "")
-            local detail=tostring(entry.id or entry.path or "")
-            if detail~="" then description=description .. (description~="" and "\n" or "") .. detail end
-            if entry.kind=="status" then
-                description=description.."\n"..ui.tr("$mcm_effect_status_native_decay","Applied at 100%; Noita controls natural decay")
-            else
-                description=description.."\n"..ui.tr("$mcm_effect_selected_duration","Selected duration")..": "..ui.tr(d.key,d.fallback)
-            end
-            local i=visible; visible=visible+1
-            local clicked,right=ui.tile((i%columns)*ui.ICON_STEP,math.floor(i/columns)*ui.ICON_STEP,
-                ui.EMPTY_SLOT,icon(entry),ui.EMPTY_SLOT,entry.display_name or detail,description,active,{target_size=18,max_scale=3.0,fill=1.15})
-            if clicked then
-                local frames=entry.kind=="status" and nil or d.frames
-                local ok,reason=effect_service.add(player,entry,frames)
-                audit("effect.add", "id="..tostring(entry.id or entry.path).." result="..tostring(ok).." reason="..tostring(reason))
-            elseif right then
-                local removed=effect_service.remove(player,entry)
-                audit("effect.remove", "id="..tostring(entry.id or entry.path).." removed="..tostring(removed))
-            end
+    for _,entry in ipairs(results) do
+        local active=effect_service.is_active(player,entry,active_snapshot)
+        local description=tostring(entry.display_description or "")
+        local detail=tostring(entry.id or entry.path or "")
+        if detail~="" then description=description .. (description~="" and "\n" or "") .. detail end
+        if entry.kind=="status" then
+            description=description.."\n"..ui.tr("$mcm_effect_status_native_decay","Applied at 100%; Noita controls natural decay")
+        else
+            description=description.."\n"..ui.tr("$mcm_effect_selected_duration","Selected duration")..": "..ui.tr(d.key,d.fallback)
+        end
+        local i=visible; visible=visible+1
+        local clicked,right=ui.tile(scroll.padding_left+(i%columns)*ui.ICON_STEP,ui.scroll_y(scroll,math.floor(i/columns)*ui.ICON_STEP),
+            ui.EMPTY_SLOT,icon(entry),ui.EMPTY_SLOT,entry.display_name or detail,description,active,{target_size=18,max_scale=3.0,fill=1.15})
+        if clicked then
+            local frames=entry.kind=="status" and nil or d.frames
+            local ok,reason=effect_service.add(player,entry,frames)
+            audit("effect.add", "id="..tostring(entry.id or entry.path).." result="..tostring(ok).." reason="..tostring(reason))
+        elseif right then
+            local removed=effect_service.remove(player,entry)
+            audit("effect.remove", "id="..tostring(entry.id or entry.path).." removed="..tostring(removed))
         end
     end
-    GuiEndScrollContainer(ui.gui())
+    ui.end_scroll_viewport(scroll,math.ceil(visible/columns)*ui.ICON_STEP)
     GuiLayoutEnd(ui.gui())
 end
 

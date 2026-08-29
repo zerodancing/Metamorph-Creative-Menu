@@ -9,18 +9,21 @@ local function run(mode)
  local stub={}
  stub["mods/metamorph_creative_menu/files/platform/noita/localization.lua"]={register=function() end}
  stub["mods/metamorph_creative_menu/files/platform/noita/input_guard.lua"]={update=function() end,blocked=function() return false end}
+ stub["mods/metamorph_creative_menu/files/platform/noita/action_bindings.lua"]={update=function() end,consume=function() return false end}
  stub["mods/metamorph_creative_menu/files/diagnostics/service.lua"]={update=function() calls.diagnostics=calls.diagnostics+1 end}
  stub["mods/metamorph_creative_menu/files/qa/controller.lua"]={update=function() calls.qa=calls.qa+1 end}
  stub["mods/metamorph_creative_menu/files/features/forms/manager.lua"]={current_player=function() return 1 end,update=function() end,draw_form_health=function() end,post_update=function() end,handle_tab_return=function() return false end,prepare_exact_effect_paths_from_catalog=function() return 0 end}
  stub["mods/metamorph_creative_menu/files/features/weather/service.lua"]={update=function() end}
  stub["mods/metamorph_creative_menu/files/features/world_rules/service.lua"]={update=function() end,post_update=function() end}
- stub["mods/metamorph_creative_menu/files/ui/menu_controller.lua"]={draw=function() end,post_update=function() end}
+ stub["mods/metamorph_creative_menu/files/ui/menu_controller.lua"]={draw=function() end,post_update=function() end,is_open=function() return false end,active_tab=function() return "spells" end,is_hovered=function() return false end}
  stub["mods/metamorph_creative_menu/files/features/possession/keybinds.lua"]={update=function() end}
  stub["mods/metamorph_creative_menu/files/integrations/ew/resilience.lua"]={pre_init=function() end,post_init=function() return 0,0,0 end}
  stub["mods/metamorph_creative_menu/files/integrations/ew/perk_sync.lua"]={update=function() end}
  stub["mods/metamorph_creative_menu/files/features/perks/service.lua"]={update=function() end}
  stub["mods/metamorph_creative_menu/files/features/effects/service.lua"]={update=function() end}
  stub["mods/metamorph_creative_menu/files/features/companion/player_avatar.lua"]={update=function() end}
+ stub["mods/metamorph_creative_menu/files/features/materials/painter.lua"]={update=function() end}
+ stub["mods/metamorph_creative_menu/files/features/player_tools/service.lua"]={visible_players=function() return {} end,teleport_to=function() end}
  local old_dofile,old_once=dofile,dofile_once
  dofile_once=function() end
  dofile=function(path)
@@ -29,7 +32,7 @@ local function run(mode)
   if stub[path] then return stub[path] end
   error("unexpected init dependency: "..tostring(path))
  end
- ModLuaFileAppend=function() end; ModIsEnabled=function() return false end; ModDoesFileExist=function() return false end
+ ModLuaFileAppend=function() end; ModIsEnabled=function() return false end; ModDoesFileExist=function() return false end; GameIsInventoryOpen=function() return false end
  print=function() end
  METAMORPH_CREATIVE_MENU_DEV_MODE=nil
  assert(loadfile(root.."/init.lua"))()

@@ -104,7 +104,7 @@ assert(ComponentHasTag(component,"baseline_component") and not ComponentHasTag(c
 journal.revert_delta(d2)
 assert(meta[component].run_velocity==100,"stacked speed baseline not restored")
 assert(math.abs(objects[component].damage_multipliers.explosion-1.0)<1e-9,"stacked object baseline not restored")
-assert(journal.debug_active_properties()==0,"property ownership leaked")
+assert(journal.active_property_count()==0,"property ownership leaked")
 
 -- Scalar rollback must keep ownership when the setter silently fails readback, then
 -- succeed on retry instead of forgetting a mutation that still exists in the player.
@@ -118,9 +118,9 @@ block_gravity_restore=true
 local failed,failed_reason=journal.revert_delta(d3)
 assert(failed==false and string.find(tostring(failed_reason),"property_restore",1,true),"silent scalar restore failure reported success")
 assert(values[component].pixel_gravity==50,"fixture unexpectedly restored blocked scalar")
-assert(journal.debug_active_properties()==1,"failed scalar restore discarded ownership")
+assert(journal.active_property_count()==1,"failed scalar restore discarded ownership")
 block_gravity_restore=false
 local retried,retry_reason=journal.revert_delta(d3)
 assert(retried==true,retry_reason)
-assert(values[component].pixel_gravity==350 and journal.debug_active_properties()==0,"scalar retry did not restore baseline and release ownership")
+assert(values[component].pixel_gravity==350 and journal.active_property_count()==0,"scalar retry did not restore baseline and release ownership")
 print("perk_mutation_journal=PASS meta=true object=true overlap=true created_root=true component=true reparent=true tags=true scalar_retry=true")
