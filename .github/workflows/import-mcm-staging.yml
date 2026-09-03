@@ -20,7 +20,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Decode and extract payload
+      - name: Verify and apply compact payload
         shell: python
         run: |
           import hashlib
@@ -28,33 +28,26 @@ jobs:
           import tarfile
           from pathlib import Path, PurePosixPath
 
-          payload_dir = Path('.mcm_upload')
-          chunks = sorted(payload_dir.glob('chunk_*.txt'))
-          if len(chunks) != 28:
-              raise SystemExit(f'Expected 28 chunks, found {len(chunks)}')
-
-          text = ''.join(path.read_text(encoding='utf-8') for path in chunks)
-          if len(text) != 274552:
-              raise SystemExit(f'Encoded character count mismatch: {len(text)}')
-          if len(text) % 2:
-              raise SystemExit('Encoded payload has an odd character count')
-
-          decoded = bytearray()
-          for index in range(0, len(text), 2):
-              hi = ord(text[index]) - 0x10000
-              lo = ord(text[index + 1]) - 0x10000
-              if not (0 <= hi <= 0xFFFFF and 0 <= lo <= 0xFFFFF):
-                  raise SystemExit(f'Invalid encoded character at pair {index // 2}')
-              decoded.extend(((hi << 20) | lo).to_bytes(5, 'big'))
-
-          data = bytes(decoded[:686376])
+          archive = Path('.mcm_upload/payload.tar.xz')
+          data = archive.read_bytes()
+          if len(data) != 387280:
+              raise SystemExit(f'Payload size mismatch: {len(data)}')
           digest = hashlib.sha256(data).hexdigest()
-          expected = 'f58feb299c14f592482c40e617910bb66c68f0fa50672c729a038f97dbc6187f'
+          expected = '47a8e0c29919f5781244d70b84074be5a99b358a9e5bc5266a0d7c564421d641'
           if digest != expected:
               raise SystemExit(f'Payload SHA-256 mismatch: {digest}')
 
-          archive = Path('/tmp/mcm_payload.tar.xz')
-          archive.write_bytes(data)
+          replace_paths = [
+              Path('metamorph_creative_menu/tests'),
+              Path('metamorph_creative_menu/files/features/forms'),
+              Path('metamorph_creative_menu/files/features/death_recovery'),
+              Path('metamorph_creative_menu/native_src'),
+          ]
+          for target in replace_paths:
+              if target.is_dir():
+                  shutil.rmtree(target)
+              elif target.exists():
+                  target.unlink()
 
           with tarfile.open(archive, 'r:xz') as tf:
               members = tf.getmembers()
@@ -67,10 +60,6 @@ jobs:
                       roots.add(path.parts[0])
               if roots != {'metamorph_creative_menu'}:
                   raise SystemExit(f'Unexpected archive root: {sorted(roots)}')
-
-              target = Path('metamorph_creative_menu')
-              if target.exists():
-                  shutil.rmtree(target)
               tf.extractall('.')
 
           required = [
@@ -78,6 +67,7 @@ jobs:
               Path('metamorph_creative_menu/mod_id.txt'),
               Path('metamorph_creative_menu/init.lua'),
               Path('metamorph_creative_menu/NoitaPatcher/noitapatcher.dll'),
+              Path('metamorph_creative_menu/mcm_native_gameover.dll'),
           ]
           missing = [str(path) for path in required if not path.is_file()]
           if missing:
@@ -89,6 +79,7 @@ jobs:
           git add -A metamorph_creative_menu
           root_tree="$(git write-tree)"
           mod_tree="$(git ls-tree "$root_tree" metamorph_creative_menu | awk '{print $3}')"
+          echo "mod tree: $mod_tree"
           test "$mod_tree" = "8d856676dd91030b1fd51f69e841d17014ef8b61"
 
       - name: Commit imported mod
