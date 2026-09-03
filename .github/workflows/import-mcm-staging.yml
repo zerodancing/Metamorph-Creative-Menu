@@ -1,0 +1,100 @@
+name: Import staged MCM payload
+
+on:
+  push:
+    branches:
+      - mcm-upload-staging
+    paths:
+      - '.mcm_upload/READY'
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out staging branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify and apply compact payload
+        shell: python
+        run: |
+          import base64
+          import hashlib
+          import shutil
+          import tarfile
+          from pathlib import Path, PurePosixPath
+
+          payload_dir = Path('.mcm_upload')
+          chunks = sorted(payload_dir.glob('chunk_*.txt'))
+          if len(chunks) != 40:
+              raise SystemExit(f'Expected 40 chunks, found {len(chunks)}')
+          encoded = ''.join(path.read_text(encoding='ascii') for path in chunks)
+          data = base64.b64decode(encoded, validate=True)
+          if len(data) != 393532:
+              raise SystemExit(f'Payload size mismatch: {len(data)}')
+          digest = hashlib.sha256(data).hexdigest()
+          expected = '77f1c9901ed37f3eb8fde64b949ffb75473bcd84fae7c39ebd7678b9fee4945a'
+          if digest != expected:
+              raise SystemExit(f'Payload SHA-256 mismatch: {digest}')
+          archive = Path('/tmp/mcm_delta.tar.xz')
+          archive.write_bytes(data)
+
+          replace_paths = [
+              Path('metamorph_creative_menu/tests'),
+              Path('metamorph_creative_menu/files/features/forms'),
+              Path('metamorph_creative_menu/files/features/death_recovery'),
+              Path('metamorph_creative_menu/native_src'),
+          ]
+          for target in replace_paths:
+              if target.is_dir():
+                  shutil.rmtree(target)
+              elif target.exists():
+                  target.unlink()
+
+          with tarfile.open(archive, 'r:xz') as tf:
+              members = tf.getmembers()
+              roots = set()
+              for member in members:
+                  path = PurePosixPath(member.name)
+                  if path.is_absolute() or '..' in path.parts:
+                      raise SystemExit(f'Unsafe archive path: {member.name}')
+                  if path.parts:
+                      roots.add(path.parts[0])
+              if roots != {'metamorph_creative_menu'}:
+                  raise SystemExit(f'Unexpected archive root: {sorted(roots)}')
+              tf.extractall('.')
+
+          required = [
+              Path('metamorph_creative_menu/mod.xml'),
+              Path('metamorph_creative_menu/mod_id.txt'),
+              Path('metamorph_creative_menu/init.lua'),
+              Path('metamorph_creative_menu/NoitaPatcher/noitapatcher.dll'),
+              Path('metamorph_creative_menu/mcm_native_gameover.dll'),
+          ]
+          missing = [str(path) for path in required if not path.is_file()]
+          if missing:
+              raise SystemExit('Missing required files: ' + ', '.join(missing))
+
+      - name: Verify exact mod tree
+        shell: bash
+        run: |
+          git add -A metamorph_creative_menu
+          root_tree="$(git write-tree)"
+          mod_tree="$(git ls-tree "$root_tree" metamorph_creative_menu | awk '{print $3}')"
+          echo "mod tree: $mod_tree"
+          test "$mod_tree" = "768f71c49d39f9e79b3718e444ad41d9d05ce37d"
+
+      - name: Commit imported mod
+        shell: bash
+        run: |
+          rm -rf .mcm_upload
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Stage exact Metamorph Creative Menu 3.0.0 archive"
+          git push
