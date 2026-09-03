@@ -35,10 +35,10 @@ jobs:
               raise SystemExit(f'Expected 40 chunks, found {len(chunks)}')
           encoded = ''.join(path.read_text(encoding='ascii') for path in chunks)
           data = base64.b64decode(encoded, validate=True)
-          if len(data) != 387280:
+          if len(data) != 393532:
               raise SystemExit(f'Payload size mismatch: {len(data)}')
           digest = hashlib.sha256(data).hexdigest()
-          expected = '47a8e0c29919f5781244d70b84074be5a99b358a9e5bc5266a0d7c564421d641'
+          expected = '77f1c9901ed37f3eb8fde64b949ffb75473bcd84fae7c39ebd7678b9fee4945a'
           if digest != expected:
               raise SystemExit(f'Payload SHA-256 mismatch: {digest}')
           archive = Path('/tmp/mcm_delta.tar.xz')
@@ -87,7 +87,7 @@ jobs:
           root_tree="$(git write-tree)"
           mod_tree="$(git ls-tree "$root_tree" metamorph_creative_menu | awk '{print $3}')"
           echo "mod tree: $mod_tree"
-          test "$mod_tree" = "8d856676dd91030b1fd51f69e841d17014ef8b61"
+          test "$mod_tree" = "768f71c49d39f9e79b3718e444ad41d9d05ce37d"
 
       - name: Commit imported mod
         shell: bash
@@ -96,5 +96,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Stage exact Metamorph Creative Menu archive"
+          git commit -m "Stage exact Metamorph Creative Menu 3.0.0 archive"
           git push
