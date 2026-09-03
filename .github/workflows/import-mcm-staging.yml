@@ -30,8 +30,8 @@ jobs:
 
           payload_dir = Path('.mcm_upload')
           chunks = sorted(payload_dir.glob('chunk_*.bin'))
-          if len(chunks) != 10:
-              raise SystemExit(f'Expected 10 chunks, found {len(chunks)}')
+          if len(chunks) != 40:
+              raise SystemExit(f'Expected 40 chunks, found {len(chunks)}')
           data = b''.join(path.read_bytes() for path in chunks)
           if len(data) != 387280:
               raise SystemExit(f'Payload size mismatch: {len(data)}')
