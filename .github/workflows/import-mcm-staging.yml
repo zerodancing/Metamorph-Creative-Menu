@@ -28,14 +28,19 @@ jobs:
           import tarfile
           from pathlib import Path, PurePosixPath
 
-          archive = Path('.mcm_upload/payload.tar.xz')
-          data = archive.read_bytes()
+          payload_dir = Path('.mcm_upload')
+          chunks = sorted(payload_dir.glob('chunk_*.bin'))
+          if len(chunks) != 10:
+              raise SystemExit(f'Expected 10 chunks, found {len(chunks)}')
+          data = b''.join(path.read_bytes() for path in chunks)
           if len(data) != 387280:
               raise SystemExit(f'Payload size mismatch: {len(data)}')
           digest = hashlib.sha256(data).hexdigest()
           expected = '47a8e0c29919f5781244d70b84074be5a99b358a9e5bc5266a0d7c564421d641'
           if digest != expected:
               raise SystemExit(f'Payload SHA-256 mismatch: {digest}')
+          archive = Path('/tmp/mcm_delta.tar.xz')
+          archive.write_bytes(data)
 
           replace_paths = [
               Path('metamorph_creative_menu/tests'),
