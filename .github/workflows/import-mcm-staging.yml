@@ -23,16 +23,18 @@ jobs:
       - name: Verify and apply compact payload
         shell: python
         run: |
+          import base64
           import hashlib
           import shutil
           import tarfile
           from pathlib import Path, PurePosixPath
 
           payload_dir = Path('.mcm_upload')
-          chunks = sorted(payload_dir.glob('chunk_*.bin'))
+          chunks = sorted(payload_dir.glob('chunk_*.txt'))
           if len(chunks) != 40:
               raise SystemExit(f'Expected 40 chunks, found {len(chunks)}')
-          data = b''.join(path.read_bytes() for path in chunks)
+          encoded = ''.join(path.read_text(encoding='ascii') for path in chunks)
+          data = base64.b64decode(encoded, validate=True)
           if len(data) != 387280:
               raise SystemExit(f'Payload size mismatch: {len(data)}')
           digest = hashlib.sha256(data).hexdigest()
