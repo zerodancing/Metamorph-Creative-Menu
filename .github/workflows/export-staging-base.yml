@@ -1,0 +1,31 @@
+name: Export staging baseline
+
+on:
+  push:
+    branches: [mcm-v3-import]
+    paths:
+      - '.github/workflows/export-staging-base.yml'
+      - '.mcm-import/EXPORT_BASE'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pack exact current mod tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -cJf mcm-github-baseline.tar.xz metamorph_creative_menu
+          sha256sum mcm-github-baseline.tar.xz > mcm-github-baseline.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcm-github-baseline
+          path: |
+            mcm-github-baseline.tar.xz
+            mcm-github-baseline.sha256
+          if-no-files-found: error
+          retention-days: 1
