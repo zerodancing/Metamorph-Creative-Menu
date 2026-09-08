@@ -4,7 +4,7 @@ on:
   push:
     branches: [mcm-v3-import]
     paths:
-      - '.mcm-import/mcm_v3.part.*'
+      - '.mcm-import/**'
       - '.github/workflows/import-binary-v3.yml'
 
 permissions:
@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   import:
+    if: ${{ hashFiles('.mcm-import/READY') != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,8 +27,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .mcm-import/mcm_v3.part.* > /tmp/mcm-v3.tar.xz
-          echo 'a4879dfc06b71c46e146fd19ff82425fe7be6601e2aee54f984e417def48e48a  /tmp/mcm-v3.tar.xz' | sha256sum -c -
+          cat .mcm-import/mcm_v3.part.*.b64 | base64 -d > /tmp/mcm-v3.tar.xz
+          EXPECTED="$(tr -d '\r\n ' < .mcm-import/READY)"
+          ACTUAL="$(sha256sum /tmp/mcm-v3.tar.xz | awk '{print $1}')"
+          test "$ACTUAL" = "$EXPECTED"
+          test "$ACTUAL" = 'a4879dfc06b71c46e146fd19ff82425fe7be6601e2aee54f984e417def48e48a'
           tar -tJf /tmp/mcm-v3.tar.xz >/dev/null
           rm -rf metamorph_creative_menu
           tar -xJf /tmp/mcm-v3.tar.xz
