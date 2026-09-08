@@ -34,12 +34,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
-          from pathlib import Path
-          import base64
-          data = ''.join(p.read_text(encoding='ascii') for p in sorted(Path('.mcm-zpatch2').glob('c*.b85')))
-          Path('/tmp/mcm.delta.zst').write_bytes(base64.b85decode(data.encode('ascii')))
-          PY
+          test "$(find .mcm-zpatch2 -maxdepth 1 -name 'd*.b64' -type f | wc -l)" -eq 16
+          cat .mcm-zpatch2/d*.b64 | base64 -d > /tmp/mcm.delta.zst
           echo '065e7420fe70fb4eddcd86905504f6e2898aef9f8226753efc5e53489325606f  /tmp/mcm.delta.zst' | sha256sum -c -
           command -v zstd >/dev/null
           zstd -d --patch-from=/tmp/mcm-old.tar /tmp/mcm.delta.zst -o /tmp/mcm-new.tar
