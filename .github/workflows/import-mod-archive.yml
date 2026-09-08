@@ -3,6 +3,7 @@ name: Import full MCM archive
 on:
   push:
     paths:
+      - 'Metamorph-Creative-Menu-v*.zip'
       - 'Metamorph_Creative_Menu_standalone_noitapatcher*.zip'
 
 permissions:
@@ -21,15 +22,28 @@ jobs:
         shell: python
         run: |
           import glob
-          import os
           import shutil
           import zipfile
           from pathlib import Path, PurePosixPath
 
-          archives = sorted(glob.glob('Metamorph_Creative_Menu_standalone_noitapatcher*.zip'))
+          patterns = [
+              'Metamorph-Creative-Menu-v*.zip',
+              'Metamorph_Creative_Menu_standalone_noitapatcher*.zip',
+          ]
+          archives = sorted({Path(path) for pattern in patterns for path in glob.glob(pattern)})
           if not archives:
-              raise SystemExit('Standalone archive was not found')
-          archive = archives[-1]
+              raise SystemExit(
+                  'MCM release archive was not found. Expected a file such as '
+                  'Metamorph-Creative-Menu-v3.zip'
+              )
+          if len(archives) != 1:
+              names = ', '.join(path.name for path in archives)
+              raise SystemExit(
+                  'Expected exactly one MCM release archive in the repository root, found: ' + names
+              )
+
+          archive = archives[0]
+          print(f'Importing {archive.name}')
 
           with zipfile.ZipFile(archive) as zf:
               members = zf.infolist()
@@ -37,7 +51,12 @@ jobs:
                   path = PurePosixPath(member.filename)
                   if path.is_absolute() or '..' in path.parts:
                       raise SystemExit(f'Unsafe archive path: {member.filename}')
-              roots = {PurePosixPath(m.filename).parts[0] for m in members if PurePosixPath(m.filename).parts}
+
+              roots = {
+                  PurePosixPath(member.filename).parts[0]
+                  for member in members
+                  if PurePosixPath(member.filename).parts
+              }
               if roots != {'metamorph_creative_menu'}:
                   raise SystemExit(f'Unexpected archive root: {sorted(roots)}')
 
@@ -47,6 +66,7 @@ jobs:
               zf.extractall('.')
 
           required = [
+              Path('metamorph_creative_menu/VERSION.txt'),
               Path('metamorph_creative_menu/mod.xml'),
               Path('metamorph_creative_menu/mod_id.txt'),
               Path('metamorph_creative_menu/init.lua'),
@@ -56,8 +76,12 @@ jobs:
           if missing:
               raise SystemExit('Missing required files: ' + ', '.join(missing))
 
-          for item in archives:
-              os.remove(item)
+          version = Path('metamorph_creative_menu/VERSION.txt').read_text(encoding='utf-8').strip()
+          if not version:
+              raise SystemExit('VERSION.txt is empty')
+          print(f'Imported MCM version {version}')
+
+          archive.unlink()
 
       - name: Commit imported mod
         shell: bash
