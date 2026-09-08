@@ -7,6 +7,7 @@ local function run(mode)
  local loaded={}
  local calls={diagnostics=0,qa=0}
  local stub={}
+ stub["mods/metamorph_creative_menu/files/core/global_text.lua"]={encode_diagnostic=function(value) return tostring(value or "") end}
  stub["mods/metamorph_creative_menu/files/platform/noita/localization.lua"]={register=function() end}
  stub["mods/metamorph_creative_menu/files/platform/noita/input_guard.lua"]={update=function() end,blocked=function() return false end}
  stub["mods/metamorph_creative_menu/files/platform/noita/action_bindings.lua"]={update=function() end,consume=function() return false end}
@@ -18,11 +19,16 @@ local function run(mode)
  stub["mods/metamorph_creative_menu/files/ui/menu_controller.lua"]={draw=function() end,post_update=function() end,is_open=function() return false end,active_tab=function() return "spells" end,is_hovered=function() return false end}
  stub["mods/metamorph_creative_menu/files/features/possession/keybinds.lua"]={update=function() end}
  stub["mods/metamorph_creative_menu/files/integrations/ew/resilience.lua"]={pre_init=function() end,post_init=function() return 0,0,0 end}
+ stub["mods/metamorph_creative_menu/files/integrations/ew/world_entities.lua"]={update=function() end}
  stub["mods/metamorph_creative_menu/files/integrations/ew/perk_sync.lua"]={update=function() end}
  stub["mods/metamorph_creative_menu/files/features/perks/service.lua"]={update=function() end}
  stub["mods/metamorph_creative_menu/files/features/effects/service.lua"]={update=function() end}
  stub["mods/metamorph_creative_menu/files/features/companion/player_avatar.lua"]={update=function() end}
  stub["mods/metamorph_creative_menu/files/features/materials/painter.lua"]={update=function() end}
+ stub["mods/metamorph_creative_menu/files/platform/noita/assets.lua"]={prewarm=function() return 0,0 end}
+ stub["mods/metamorph_creative_menu/files/features/items/ui_catalog.lua"]={prewarm_icons=function() return 0,0 end}
+ stub["mods/metamorph_creative_menu/files/features/spells/slot_settler.lua"]={update=function() end}
+ stub["mods/metamorph_creative_menu/files/features/death_recovery/service.lua"]={install=function() return true end,update=function() end,pause_update=function() end}
  stub["mods/metamorph_creative_menu/files/features/player_tools/service.lua"]={visible_players=function() return {} end,teleport_to=function() end}
  local old_dofile,old_once=dofile,dofile_once
  dofile_once=function() end
@@ -32,10 +38,23 @@ local function run(mode)
   if stub[path] then return stub[path] end
   error("unexpected init dependency: "..tostring(path))
  end
- ModLuaFileAppend=function() end; ModIsEnabled=function() return false end; ModDoesFileExist=function() return false end; GameIsInventoryOpen=function() return false end
+ ModLuaFileAppend=function(target,append)
+  if target=="mods/quant.ew/files/system/entity_sync_helper/death_notify.lua" then
+   assert(append=="mods/metamorph_creative_menu/files/integrations/ew/boss_death_notify.lua")
+   calls.boss_death_append=(calls.boss_death_append or 0)+1
+  end
+ end
+ ModIsEnabled=function() return false end; ModDoesFileExist=function() return false end; GameIsInventoryOpen=function() return false end
  print=function() end
  METAMORPH_CREATIVE_MENU_DEV_MODE=nil
  assert(loadfile(root.."/init.lua"))()
+ OnModPreInit()
+ assert(calls.boss_death_append==nil,"singleplayer installed an EW death observer")
+ ModIsEnabled=function(id) return id=="quant.ew" end
+ ModDoesFileExist=function() return true end
+ OnModPreInit()
+ assert(calls.boss_death_append==1,"EW death observer was not appended during initialization")
+ ModIsEnabled=function() return false end
  OnWorldPreUpdate()
  dofile,dofile_once=old_dofile,old_once
  return loaded,calls,METAMORPH_CREATIVE_MENU_DEV_MODE

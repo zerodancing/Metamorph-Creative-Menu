@@ -373,17 +373,13 @@ function spells_tab.draw(player, panel_width, screen_height)
             end
             return clicked, right, hovered, x, y, width, height
         end, {
-            gui=ui.gui(), screen_width=screen_width, screen_height=screen_height,
+            gui=ui.gui(), screen_width=screen_width, screen_height=screen_height, next_id=ui.next_id,
         })
         if strip.clicked ~= nil then selected_slot = strip.clicked end
         if strip.right_clicked ~= nil and slots[strip.right_clicked] ~= nil then
             selected_slot = strip.right_clicked
             local ok, reason = spell_service.remove(player, wand, slots[selected_slot], entries, true)
             record_result("spell.drop", ok, reason)
-        end
-        if cap > strip.visible_count then
-            ui.white_text(0, 0, tostring(strip.first + 1) .. "-" .. tostring(strip.last + 1) .. " / " .. tostring(cap)
-                .. "   " .. ui.tr("$mcm_wand_strip_hint", "wheel to scroll"))
         end
     end
 

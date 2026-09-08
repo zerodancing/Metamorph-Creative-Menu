@@ -9,8 +9,7 @@ local list={
  {name='Fallback icon',blueprint={meta={image_file='missing.png'},sprite_file='missing.xml'}},
 }
 local next_id=0
-local scroll_width=nil
-local scroll_options='unset'
+local scroll_calls=0
 local truncated={}
 
 local ui={}
@@ -37,11 +36,8 @@ function ui.button_grid(items)
 end
 function ui.clear_error_notice() end
 function ui.report_error_once() end
-function ui.begin_scroll_viewport(_,_,_,_,width,_,options)
- scroll_width=width; scroll_options=options
- return {content_width=math.max(48,width-12)}
-end
-function ui.end_scroll_viewport() end
+function ui.begin_scroll_viewport() scroll_calls=scroll_calls+1; error('wand presets must not create nested scroll') end
+function ui.end_scroll_viewport() error('wand presets must not close nested scroll') end
 
 local presets={}
 function presets.save(name,wand)
@@ -81,6 +77,6 @@ for _,label in ipairs(buttons) do
  if label=='GET COPY' then copy_count=copy_count+1 end
 end
 assert(apply_count==4 and copy_count==4,'apply/copy actions were not rendered for every preset')
-assert(scroll_width==142 and scroll_options==nil,'preset list did not use shared scroll viewport with default fixed step')
-for _,entry in ipairs(truncated) do assert(entry.width<=110,'preset name was allowed to occupy action area') end
-print('wand_presets_ui=PASS same_frame=true icon_priority=true apply_copy=true narrow_card=true shared_scroll=true')
+assert(scroll_calls==0,'preset list created a nested scroll viewport inside WAND workspace')
+for _,entry in ipairs(truncated) do assert(entry.width<=122,'preset name was allowed to occupy action area') end
+print('wand_presets_ui=PASS same_frame=true icon_priority=true apply_copy=true narrow_card=true outer_scroll_only=true')

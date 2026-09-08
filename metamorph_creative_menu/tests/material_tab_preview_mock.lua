@@ -38,7 +38,7 @@ local painter = {
     set_material=function() return true end,
     material_color=function() error("authored texture unexpectedly used a colour fallback") end,
 }
-local liquid_color = {0.1,0.2,0.3,0.96}
+local liquid_color = {0.1,0.2,0.3,1}
 local texture_tint = {0.4,0.5,0.6,1}
 local material_preview = {
     new_liquid_warmup=function() return {} end,
@@ -109,9 +109,13 @@ GuiGetPreviousWidgetInfo=function() return 0,0,false end
 local tab = assert(native_dofile(root .. "/files/ui/tabs/materials.lua"))
 tab.draw(1,260,500)
 assert(#tiles == 1, "liquid preview tile was not drawn")
-assert(tiles[1].icon == "data/ui_gfx/items/potion.png", "liquid did not use the item flask icon")
-assert(tiles[1].options.bottle_fill_color == liquid_color,
-    "liquid did not use the shared item-style bottle fill")
+assert(tiles[1].icon == "data/ui_gfx/items/potion.png", "liquid did not use the vanilla inventory flask")
+assert(tiles[1].options.icon_tint == liquid_color,
+    "vanilla flask did not use the engine-sampled potion tint")
+assert(tiles[1].options.liquid_mask == nil and tiles[1].options.liquid_offset_x == nil,
+    "physical-world flask mask leaked into inventory presentation")
+assert(tiles[1].options.bottle_fill_color == nil,
+    "liquid retained the old rectangular bottle patch")
 assert(tiles[1].options.swatch_color == nil, "liquid leaked the old generic swatch preview")
 
 tab.draw(1,260,500)
@@ -121,4 +125,4 @@ assert(tiles[2].options.icon_tint == texture_tint, "solid did not use its author
 assert(tiles[2].options.swatch_color == nil, "authored texture was replaced by a random colour")
 assert(liquid_warmups >= 1, "shared liquid preview cache was not warmed")
 
-print("material_tab_preview=PASS shared_liquid_display=true authored_texture=true")
+print("material_tab_preview=PASS vanilla_inventory_bottle=true engine_tint=true shared_liquid_display=true authored_texture=true")

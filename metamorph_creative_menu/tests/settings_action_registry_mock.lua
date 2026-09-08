@@ -28,14 +28,25 @@ for _,category in ipairs(mod_settings) do
     assert(category.foldable==true and type(category.settings)=='table','settings category is not foldable')
     for _,setting in ipairs(category.settings) do flattened[#flattened+1]=setting end
 end
-assert(#flattened==#registry.actions(),'Noita settings and in-game action registry diverged')
+local binding_settings={}
+local by_id={}
+for _,setting in ipairs(flattened) do
+    by_id[setting.id]=setting
+    if string.sub(tostring(setting.id),1,8)=='binding_' then binding_settings[#binding_settings+1]=setting end
+end
+assert(#binding_settings==#registry.actions(),'Noita keybinding settings and in-game action registry diverged')
 local seen={}
-for index,setting in ipairs(flattened) do
+for index,setting in ipairs(binding_settings) do
     local action=registry.actions()[index]
     assert(setting.id=='binding_'..action.id and setting.value_default==action.default,
         'settings ordering/default differs from action registry at '..tostring(index))
     assert(not seen[setting.id],'duplicate generated setting id: '..setting.id)
     seen[setting.id]=true
 end
-assert(mod_settings_version==5,'keybinding settings schema version was not bumped')
-print('settings_action_registry=PASS generated=true actions='..tostring(#flattened)..' grouped=true defaults=true unique=true')
+local policy=assert(by_id.inventory_open_policy,'inventory opening policy setting missing')
+assert(policy.value_default=='always_open' and #policy.values==3
+    and policy.values[1][1]=='always_open' and policy.values[2][1]=='always_closed' and policy.values[3][1]=='remember',
+    'inventory opening policy defaults/options changed')
+assert(by_id.inventory_handle_enabled==nil,'removed inventory handle setting is still exposed')
+assert(mod_settings_version==6,'settings schema version was not bumped for inventory policy')
+print('settings_action_registry=PASS generated=true actions='..tostring(#binding_settings)..' grouped=true defaults=true unique=true inventory_policy=true handle_removed=true')

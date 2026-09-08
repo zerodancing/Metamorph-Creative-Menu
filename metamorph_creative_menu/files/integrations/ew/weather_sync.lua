@@ -1,5 +1,6 @@
 local sync = {}
 local ew_runtime = dofile("mods/metamorph_creative_menu/files/integrations/ew/runtime.lua")
+local time_dt_owner = dofile("mods/metamorph_creative_menu/files/features/world_rules/time_dt.lua")
 
 local OUTBOX_SEQUENCE_KEY = "mcm_weather_outbox_seq_v1"
 local OUTBOX_VERSION_KEY = "mcm_weather_outbox_version_v1"
@@ -38,8 +39,7 @@ local function encode_state(state, world_component)
     local time_delta = nil
     local component = world_component()
     if component ~= nil then
-        local read_succeeded, value = pcall(ComponentGetValue2, component, "time_dt")
-        if read_succeeded then time_delta = tonumber(value) end
+        time_delta = time_dt_owner.legacy_sync_value(component)
     end
     parts[#parts + 1] = encode_number(time_delta)
     return table.concat(parts, "|")
@@ -95,8 +95,9 @@ function sync.publish(state, world_component, force)
     GlobalsSetValue(OUTBOX_SEQUENCE_KEY, tostring(outbox_sequence))
 end
 
-function sync.consume(state, world_component, clear_state)
+function sync.consume(state, world_component, clear_state, shared_time_owner)
     if not sync.enabled() then return false end
+    local time_owner = type(shared_time_owner) == "table" and shared_time_owner or time_dt_owner
     local sequence = GlobalsGetValue(REMOTE_SEQUENCE_KEY, "")
     if sequence == "" or sequence == last_remote_sequence then return false end
     last_remote_sequence = sequence
@@ -106,17 +107,16 @@ function sync.consume(state, world_component, clear_state)
     if remote_state == nil then return false end
     local component = world_component()
     if not remote_state.active then
+        if time_owner.is_weather_frozen() then time_owner.set_weather_frozen(false) end
         clear_state()
-        if component ~= nil and remote_state.time_dt ~= nil then
-            pcall(ComponentSetValue2, component, "time_dt", remote_state.time_dt)
+        if component ~= nil and remote_state.time_dt ~= nil and not time_owner.has_day_override() then
+            time_owner.accept_legacy_sync_value(remote_state.time_dt, component)
         end
         return true
     end
 
-    if state.active ~= true and state.original_time_dt == nil and component ~= nil then
-        local read_ok, current_time_dt = pcall(ComponentGetValue2, component, "time_dt")
-        if read_ok then state.original_time_dt = tonumber(current_time_dt) end
-    end
+    local previous_lightning = tonumber(state.lightning) or 0
+    local previous_active = state.active == true and previous_lightning > 0
     state.active = true
     -- User rights are symmetric. The host is only the technical periodic rebroadcast
     -- point required by EW so late joiners receive the latest complete snapshot.
@@ -125,10 +125,20 @@ function sync.consume(state, world_component, clear_state)
     state.values = remote_state.values
     state.rainfall = remote_state.rainfall
     state.lightning = remote_state.lightning
-    state.next_lightning_frame = 0
-    state.lightning_clear_frame = 0
-    if component ~= nil and remote_state.time_dt ~= nil and state.time == nil then
-        pcall(ComponentSetValue2, component, "time_dt", remote_state.time_dt)
+    local next_lightning = tonumber(remote_state.lightning) or 0
+    -- Periodic EW rebroadcasts carry a new sequence even when weather is unchanged.
+    -- Preserve the local scheduler for equivalent lightning state so sync cadence cannot
+    -- become the strike cadence. A real enable/rate change intentionally reschedules.
+    if next_lightning <= 0 or not previous_active or math.abs(previous_lightning - next_lightning) > 0.000001 then
+        state.next_lightning_frame = 0
+    end
+    if state.time ~= nil then
+        time_owner.set_weather_frozen(true)
+    else
+        if time_owner.is_weather_frozen() then time_owner.set_weather_frozen(false) end
+        if component ~= nil and remote_state.time_dt ~= nil and not time_owner.has_day_override() then
+            time_owner.accept_legacy_sync_value(remote_state.time_dt, component)
+        end
     end
     return true
 end

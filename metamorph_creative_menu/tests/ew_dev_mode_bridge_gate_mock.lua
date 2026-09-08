@@ -20,6 +20,18 @@ local function run(mode)
   updates.death_intercept=(updates.death_intercept or 0)+1
   return true,"installed"
  end}
+ modules["mods/metamorph_creative_menu/files/integrations/ew/boss_global_demote.lua"]={install=function()
+  updates.boss_global_demote=(updates.boss_global_demote or 0)+1
+  return true,"installed"
+ end}
+ modules["mods/metamorph_creative_menu/files/integrations/ew/kolmi_lifecycle.lua"]={install=function()
+  updates.kolmi_lifecycle=(updates.kolmi_lifecycle or 0)+1
+  return true
+ end}
+ modules["mods/metamorph_creative_menu/files/integrations/ew/boss_lifecycle.lua"]={install=function()
+  updates.boss_lifecycle=(updates.boss_lifecycle or 0)+1
+  return true
+ end}
  modules["mods/metamorph_creative_menu/files/integrations/ew/perk_runtime_guard.lua"]={install=function() return true,"ok" end}
  modules["mods/metamorph_creative_menu/files/integrations/ew/bridge/world_rules.lua"]=bridge("world_rules")
  modules["mods/metamorph_creative_menu/files/integrations/ew/bridge/qa.lua"]=bridge("qa_full")
@@ -33,6 +45,7 @@ local function run(mode)
  modules["mods/metamorph_creative_menu/files/integrations/ew/bridge/materials.lua"]=material_bridge
  modules["mods/metamorph_creative_menu/files/integrations/ew/bridge/teleport.lua"]=bridge("teleport")
  modules["mods/metamorph_creative_menu/files/integrations/ew/bridge/items.lua"]={init=function() end,update=function() updates.items=(updates.items or 0)+1 end}
+ modules["mods/metamorph_creative_menu/files/integrations/ew/bridge/creative_perks.lua"]={init=function() end,update=function() updates.creative_perks=(updates.creative_perks or 0)+1 end}
  modules["mods/metamorph_creative_menu/files/integrations/ew/bridge/forms.lua"]={register_pose=function() registrations[#registrations+1]="forms_pose" end,register_reserved=function() registrations[#registrations+1]="forms_reserved" end,update=function() updates.forms=(updates.forms or 0)+1 end,metrics=function() return 0,0 end,set_profiling_enabled=function(value) updates.form_profiling_enabled=value end}
  local old_dofile,old_once=dofile,dofile_once
  dofile_once=function(path)
@@ -64,7 +77,10 @@ assert(release_updates.material_metrics_enabled==false and release_updates.form_
 assert(release_updates.materials == 1, "material bridge was not updated in release mode")
 assert(release_updates.teleport == 1, "teleport bridge was not updated in release mode")
 assert(release_updates.death_intercept == 1, "runtime form-death intercept was not installed by EW bootstrap")
-assert(release_reported[1]=="world_rules.update" and release_updates.items==1 and release_updates.forms==1,
+assert(release_updates.boss_global_demote == 1, "boss global demotion wrapper was not installed by EW bootstrap")
+assert(release_updates.kolmi_lifecycle == 1, "Kolmi lifecycle guard was not installed in release mode")
+assert(release_updates.boss_lifecycle == 1, "generic boss lifecycle guard was not installed in release mode")
+assert(release_reported[1]=="world_rules.update" and release_updates.items==1 and release_updates.creative_perks==1 and release_updates.materials==1 and release_updates.teleport==1 and release_updates.forms==1,
  "one failing EW bridge stopped later network updates")
 local dev_loaded,dev_reg,_,dev_updates=run(1)
 assert(dev_loaded["mods/metamorph_creative_menu/files/integrations/ew/bridge/qa.lua"]==1,"developer EW bootstrap did not load full QA bridge")

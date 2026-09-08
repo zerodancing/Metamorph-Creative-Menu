@@ -37,7 +37,11 @@ local function clamp_definition(definition, value)
     value = finite_number(value)
     if value == nil then return nil end
     value = math.max(definition.min, math.min(definition.max, value))
-    if definition.integer then value = math.floor(value + (value >= 0 and 0.5 or -0.5)) end
+    if definition.integer then
+        -- floor(x - 0.5) is biased for negative values (-1 becomes -2). Round
+        -- symmetrically so already-integral negative wand stats stay unchanged.
+        value = value >= 0 and math.floor(value + 0.5) or math.ceil(value - 0.5)
+    end
     return value
 end
 

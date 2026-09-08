@@ -10,12 +10,12 @@ import zipfile
 from pathlib import Path
 
 
-VERSION = "2.0.0"
+VERSION = "3.0.0"
 ROOT_NAME = "metamorph_creative_menu"
 EXCLUDED_DIRECTORIES = {
     "dist",
 }
-EXCLUDED_DIRECTORY_NAMES = {"__pycache__", ".pytest_cache"}
+EXCLUDED_DIRECTORY_NAMES = {"__pycache__", ".pytest_cache", ".git"}
 EXCLUDED_FILENAMES = {".DS_Store", "Thumbs.db"}
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 REQUIRED_FILES = {
@@ -104,7 +104,7 @@ def build(root: Path, output: Path) -> tuple[int, int]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", nargs="?", type=Path,
-                        help="output ZIP (default: dist/metamorph_creative_menu_v2.0.0.zip)")
+                        help="output ZIP (default: dist/metamorph_creative_menu_v3.0.0.zip)")
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     output = (args.output or root / "dist" / f"{ROOT_NAME}_v{VERSION}.zip").resolve()

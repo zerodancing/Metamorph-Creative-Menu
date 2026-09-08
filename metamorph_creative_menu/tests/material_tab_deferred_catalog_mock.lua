@@ -33,7 +33,9 @@ local material_preview={
     warm_liquid_colors=function() return true end,
     texture=function() return nil end,
     tint=function() return nil end,
-    liquid_icon=function() return 'data/ui_gfx/items/potion.png' end,
+    liquid_icon=function() return 'data/items_gfx/potion.png' end,
+    liquid_mask=function() return 'data/items_gfx/flask_liquid.png' end,
+    liquid_offset=function() return -1,0 end,
     liquid_color=function() return nil end,
 }
 local ui={
@@ -75,3 +77,22 @@ assert(step_calls==0,'MATERIALS tab performs catalog work on its opening frame')
 tab.draw(1,220,720)
 assert(step_calls==1,'MATERIALS catalog did not resume incrementally after deferred frame')
 print('material_tab_deferred_catalog=PASS open_frame_work=0 incremental_after=true')
+
+-- Search from the default LIQUIDS category must still find static paint materials.
+local requested,selected,selected_solid,rendered=nil,nil,nil,{}
+local query="water_static"
+local static={id="water_static",display_name="Static water",category="STATIC",categories={STATIC=true}}
+catalog.is_ready=function() return true end
+catalog.step=function(category,_,budget) requested=category;assert(budget<=24);return true end
+catalog.entries_for=function(category) return category=="ALL" and {static} or {} end
+ui.search_input=function() return query end
+ui.rank_entries=function(_,values) return values end
+ui.tile=function(_,_,_,_,_,name) rendered[#rendered+1]=name;return true end
+painter.material_color=function() return {1,1,1,1} end
+painter.set_material=function(id,options) selected=id;selected_solid=options.solid;return true end
+for i=1,3 do tab.draw(1,220,720) end
+assert(requested=="ALL" and #rendered>0,"search still restricted to LIQUIDS")
+assert(selected=="water_static" and selected_solid,"static water search result cannot be selected for painting")
+query=""; for i=1,3 do tab.draw(1,220,720) end
+assert(requested=="LIQUIDS","clearing search did not restore chosen category")
+print('material_search_all=PASS default_liquids=true water_static_paintable=true category_restored=true')

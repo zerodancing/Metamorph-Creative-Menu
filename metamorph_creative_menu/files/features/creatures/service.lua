@@ -4,6 +4,8 @@ local compatibility = dofile("mods/metamorph_creative_menu/files/features/creatu
 local transform_routing = dofile("mods/metamorph_creative_menu/files/features/creatures/transform_routing.lua")
 local creature_diagnostics = dofile("mods/metamorph_creative_menu/files/features/creatures/diagnostics.lua")
 local catalog_builder = dofile("mods/metamorph_creative_menu/files/features/creatures/catalog_builder.lua")
+local ew_world_entities = dofile("mods/metamorph_creative_menu/files/integrations/ew/world_entities.lua")
+local spawn_compat = dofile("mods/metamorph_creative_menu/files/features/creatures/spawn_compat.lua")
 local existing_creature_service = METAMORPH_CREATIVE_MENU_CREATURE_SERVICE or METAMORPH_CREATIVE_MENU_CREATURE_API
 if type(existing_creature_service) == "table" then return existing_creature_service end
 
@@ -100,8 +102,43 @@ function creature_service.spawn_at(entity_path, x, y)
     then
         return 0, "invalid"
     end
+    local spawn_context = nil
+    if type(spawn_compat) == "table" and type(spawn_compat.before_spawn) == "function" then
+        local ok_before, context = pcall(spawn_compat.before_spawn, entity_path, tonumber(x), tonumber(y))
+        if ok_before and type(context) == "table" then
+            spawn_context = context
+            if context.kind == "reuse" and tonumber(context.entity) ~= nil and tonumber(context.entity) ~= 0 then
+                -- A remote peer already owns the authored final-boss root at this exact
+                -- encounter. Never manufacture a second Kolmisilma on top of it.
+                return tonumber(context.entity), "existing_kolmi"
+            end
+        elseif not ok_before and type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+            pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "creature.spawn_preflight", tostring(context))
+        end
+    end
+
     local entity = EntityLoad(entity_path, tonumber(x), tonumber(y)) or 0
     if entity == 0 then return 0, "load" end
+    -- A few authored encounter roots are not valid combatants when loaded in isolation.
+    -- Apply only path-specific creative-spawn setup before EW sees the entity, so native
+    -- DES captures the already-valid gameplay state and can preserve it across authority.
+    if type(spawn_compat) == "table" and type(spawn_compat.after_spawn) == "function" then
+        local ok_compat, compat_ok, compat_reason = pcall(spawn_compat.after_spawn, entity_path, entity, tonumber(x), tonumber(y), spawn_context)
+        if not ok_compat or compat_ok ~= true then
+            if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+                pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "creature.spawn_compat",
+                    ok_compat and tostring(compat_reason or "compat_failed") or tostring(compat_ok))
+            end
+        end
+    end
+    -- Let current EW native DES own the entire lifecycle. Ordinary enemies are discovered
+    -- automatically; unusual creature-like entities receive only EW's documented ew_synced
+    -- opt-in tag. MCM never allocates a second GID or installs a competing death callback.
+    local call_ok, tracked, track_reason = pcall(ew_world_entities.track, entity, {creative_creature=true})
+    if (not call_ok or tracked ~= true) and type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "creature.ew_track",
+            call_ok and tostring(track_reason or "track_failed") or tostring(tracked))
+    end
     return entity, "spawned"
 end
 

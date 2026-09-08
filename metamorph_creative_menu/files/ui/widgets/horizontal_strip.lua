@@ -2,9 +2,17 @@ if type(METAMORPH_CREATIVE_MENU_HORIZONTAL_STRIP) == "table" then return METAMOR
 
 local horizontal_strip = {}
 local pointer = dofile("mods/metamorph_creative_menu/files/platform/noita/pointer.lua")
-local scroll_model = dofile("mods/metamorph_creative_menu/files/ui/widgets/scroll_model.lua")
 
 local states = {}
+local fallback_widget_id = 610000
+local ARROW_LEFT = "mods/metamorph_creative_menu/files/ui/assets/page_left.png"
+local ARROW_RIGHT = "mods/metamorph_creative_menu/files/ui/assets/page_right.png"
+
+local function next_id(options)
+    if type(options.next_id) == "function" then return options.next_id() end
+    fallback_widget_id = fallback_widget_id + 1
+    return fallback_widget_id
+end
 
 local function state_for(key)
     key = tostring(key or "strip")
@@ -20,16 +28,17 @@ function horizontal_strip.reset(key)
     if key == nil then states = {} else states[tostring(key)] = nil end
 end
 
--- A slot strip is intentionally not a GuiBeginScrollContainer: Noita only exposes a
--- vertical scrollbar there. We render a bounded window and change its first logical item
--- only from the shared wheel input. LMB remains unambiguously reserved for slot selection
--- and spell drag-and-drop, so the strip cannot steal a card press.
+-- Pagination stays in the same row as the slots. No native scroll container, wheel
+-- ownership or extra navigation row is involved.
 function horizontal_strip.draw(key, count, viewport_width, step, draw_item, options)
     options = type(options) == "table" and options or {}
     count = math.max(0, math.floor(tonumber(count) or 0))
     step = math.max(1, tonumber(step) or 20)
     viewport_width = math.max(step, tonumber(viewport_width) or step)
-    local visible_count = math.max(1, math.floor(viewport_width / step))
+    local unpaged_visible_count = math.max(1, math.floor(viewport_width / step))
+    local paged = count > unpaged_visible_count
+    local arrow_reserve = paged and 22 or 0
+    local visible_count = math.max(1, math.floor(math.max(step, viewport_width - arrow_reserve) / step))
     local maximum_offset = math.max(0, count - visible_count)
     local state = state_for(key)
     state.offset = math.max(0, math.min(math.floor(tonumber(state.offset) or 0), maximum_offset))
@@ -40,6 +49,18 @@ function horizontal_strip.draw(key, count, viewport_width, step, draw_item, opti
     local last = math.min(count - 1, first + visible_count - 1)
 
     GuiLayoutBeginHorizontal(options.gui, 0, 0, true, 0, 0)
+    if paged then
+        -- A single tall, thick image-arrow is easier to see than text chevrons while
+        -- reserving less horizontal room for navigation.
+        GuiColorSetForNextWidget(options.gui, 1, 1, 1, 1)
+        GuiZSetForNextWidget(options.gui, -112)
+        local previous = select(1, GuiImageButton(options.gui, next_id(options), 0, 0, "", ARROW_LEFT))
+        if previous then
+            state.offset = math.max(0, state.offset - visible_count)
+            first = state.offset
+            last = math.min(count - 1, first + visible_count - 1)
+        end
+    end
     for index = first, last do
         local clicked, right, _, x, y, width, height = draw_item(index)
         x, y, width, height = tonumber(x), tonumber(y), tonumber(width), tonumber(height)
@@ -52,20 +73,18 @@ function horizontal_strip.draw(key, count, viewport_width, step, draw_item, opti
         if clicked == true then clicked_index = index end
         if right == true then right_index = index end
     end
+    if paged then
+        GuiColorSetForNextWidget(options.gui, 1, 1, 1, 1)
+        GuiZSetForNextWidget(options.gui, -112)
+        local following = select(1, GuiImageButton(options.gui, next_id(options), 0, 0, "", ARROW_RIGHT))
+        if following then state.offset = math.min(maximum_offset, state.offset + visible_count) end
+    end
     GuiLayoutEnd(options.gui)
 
     local hovered = false
     local mouse_x, mouse_y = pointer.gui_position(options.screen_width, options.screen_height)
     if first_x ~= nil then
         hovered = pointer.inside(first_x, first_y, last_x - first_x, last_y - first_y, mouse_x, mouse_y)
-    end
-
-    if hovered then
-        local wheel = scroll_model.consume_wheel("horizontal:" .. tostring(key), true)
-        if wheel ~= 0 then
-            state.offset = select(1, scroll_model.horizontal_offset(state.offset, count, visible_count, wheel,
-                options.wheel_step or scroll_model.HORIZONTAL_STEP))
-        end
     end
 
     return {

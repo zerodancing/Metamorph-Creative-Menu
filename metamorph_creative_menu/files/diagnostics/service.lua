@@ -5,6 +5,14 @@ local logger = dofile("mods/metamorph_creative_menu/files/diagnostics/logger.lua
 local runtime_recorder = dofile("mods/metamorph_creative_menu/files/diagnostics/runtime_recorder.lua")
 local scanner = dofile("mods/metamorph_creative_menu/files/diagnostics/scanner.lua")
 
+local function mcm_text(key, fallback)
+    if type(GameTextGetTranslatedOrNot) == "function" then
+        local ok, value = pcall(GameTextGetTranslatedOrNot, key)
+        if ok and type(value) == "string" and value ~= "" and value ~= key then return value end
+    end
+    return fallback
+end
+
 local PERF_SAMPLE_TARGET = 180
 local run_counter = 0
 local active_report = nil
@@ -29,7 +37,7 @@ METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE = logger.capture_error
 
 local function start_scan()
     if active_report ~= nil then
-        GamePrint("Metamorph: Creative Menu diagnostics already running")
+        GamePrint(mcm_text("$mcm_diag_already_running", "Metamorph: Creative Menu diagnostics are already running"))
         return false
     end
 
@@ -61,7 +69,7 @@ local function start_scan()
     end
 
     scanner.initialize(active_report)
-    GamePrintImportant("Metamorph: Creative Menu diagnostics", "STARTED (Z). Non-destructive scan + frame sampling...")
+    GamePrintImportant(mcm_text("$mcm_diag_title", "Metamorph: Creative Menu diagnostics"), mcm_text("$mcm_diag_started", "Started (Z). Non-destructive scan and frame sampling are running."))
     return true
 end
 

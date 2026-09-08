@@ -8,6 +8,10 @@ local function mark_network_form_source(entity, target)
     if entity == nil or entity == 0 or not EntityGetIsAlive(entity) or type(target) ~= "string" or target == "" then return false end
     local tag_ok = pcall(EntityAddTag, entity, NETWORK_FORM_TAG)
     if not tag_ok then return false end
+    -- EW native DES already excludes polymorphed_player, but add its explicit exclusion
+    -- tag at the earliest MCM-owned point too. This closes load-order races where a very
+    -- large boss form is created between two mods' OnWorldPreUpdate callbacks.
+    pcall(EntityAddTag, entity, "ew_no_enemy_sync")
     local storage = EntityGetFirstComponentIncludingDisabled(entity, "VariableStorageComponent", NETWORK_FORM_TAG)
     if storage == nil or storage == 0 then
         local ok, created = pcall(EntityAddComponent2, entity, "VariableStorageComponent", {
@@ -32,6 +36,8 @@ local player_authority = dofile("mods/metamorph_creative_menu/files/features/for
 local transform_flash = dofile("mods/metamorph_creative_menu/files/features/forms/transform_flash.lua")
 local corpse_service = dofile("mods/metamorph_creative_menu/files/features/forms/corpse_service.lua")
 local human_restore = dofile("mods/metamorph_creative_menu/files/features/forms/human_restore.lua")
+local external_polymorph = dofile("mods/metamorph_creative_menu/files/features/forms/external_polymorph.lua")
+local transition_queue = dofile("mods/metamorph_creative_menu/files/features/forms/transition_queue.lua")
 local form_death_channel = dofile("mods/metamorph_creative_menu/files/integrations/ew/form_death_channel.lua")
 
 local session = nil
@@ -130,53 +136,59 @@ local function polymorph_component_target(components)
     return nil
 end
 
--- A crash/recovery save serializes the polymorphed player entity, including Noita's
--- original-player blob, but ordinary Lua module state is lost. Rebuild just enough of
--- the session to make return/death handoff transactional again. The explicit marker
--- keeps vanilla or another mod's polymorph outside our ownership.
-local function recover_saved_form_session()
+-- Lua session state is not part of Noita's polymorph serialization. Rehydrate an MCM
+-- form after save/load, and also adopt a local polymorph created by vanilla, a spell,
+-- a stain or another mod. Native GameEffectComponent.mSerializedData remains the single
+-- source of truth for the original human, so adoption does not depend on knowing what
+-- caused the transformation.
+local function recover_or_adopt_form_session()
     if session ~= nil then return true end
     local current = current_player()
     if current == 0 then return false end
-    if not EntityHasTag(current, "polymorphed_player")
-        or not EntityHasTag(current, NETWORK_FORM_TAG)
-    then
+
+    local owned_marker = EntityHasTag(current, "polymorphed_player")
+        and EntityHasTag(current, NETWORK_FORM_TAG)
+    local description = external_polymorph.describe(current)
+    if description == nil then
         orphan_probe_entity = current
         orphan_probe_complete = true
         return false
     end
 
-    local components = human_restore.polymorph_effect_components(current)
-    if #components == 0 then return false end
-    local target = network_form_source(current) or polymorph_component_target(components) or ""
-    local backup = human_restore.serialized_backup_from_effects(components)
+    local components = description.components or {}
+    local target = owned_marker
+        and (network_form_source(current) or polymorph_component_target(components) or description.target)
+        or description.target
+    if type(target) ~= "string" or target == "" then target = description.target end
     local x, y = EntityGetTransform(current)
     session = {
         id = next_session_id(),
         kind = "polymorph",
         phase = "active",
         form_entity = current,
-        network_marked_entity = current,
-        network_marked_target = target,
+        network_marked_entity = owned_marker and current or 0,
+        network_marked_target = owned_marker and target or nil,
         target = target,
         requested_target = target,
-        compatibility_mode = "save_recovery",
+        compatibility_mode = owned_marker and "save_recovery" or "external_polymorph",
         role = "creature",
-        form_strategy = "native_polymorph",
+        form_strategy = owned_marker and "native_polymorph" or "external_native_polymorph",
         profile = profile_api.get(target),
-        original_backup = backup,
-        allow_death_handoff = type(backup) == "string" and backup ~= "",
+        original_backup = description.original_backup,
+        allow_death_handoff = description.allow_death_handoff == true,
         effect_entity = 0,
         started = GameGetFrameNum(),
         last_x = tonumber(x) or 0,
         last_y = tonumber(y) or 0,
-        recovered_from_save = true,
+        recovered_from_save = owned_marker,
+        adopted_external = not owned_marker,
     }
     orphan_probe_complete = true
     orphan_probe_entity = current
     form_manager.ensure_runtime_hooks({ bootstrap_if_installed = true })
-    diagnostic_event("FORM RECOVERED", string.format("entity=%s target=%s backup=%s",
-        tostring(current), tostring(target), tostring(session.allow_death_handoff)))
+    diagnostic_event(owned_marker and "FORM RECOVERED" or "FORM ADOPTED",
+        string.format("entity=%s target=%s backup=%s", tostring(current), tostring(target),
+            tostring(session.allow_death_handoff)))
     return true
 end
 
@@ -318,14 +330,18 @@ function form_manager.handle_form_death(old_form, reason, responsible, damage, p
     end
 
     activate_restored_player(restored, 12)
+    -- reset() restores any Lua/AIAttack state MCM temporarily owned. Do that before the
+    -- old body is detached, then let corpse_service perform the final tree-wide freeze.
+    -- Reversing this order can resurrect boss scripts or a laser on the one EW/DES handoff
+    -- frame where the corpse is intentionally kept alive.
+    session = nil
+    pending_return_frame = nil
+    protected_runtime_call("form_runtime.reset", form_runtime.reset)
     local corpse_detached = detach_dead_form_as_corpse(old_form, source_path, reason, responsible)
     local death_finished_ms = real_time_ms()
     diagnostic_event("FORM HANDOFF", string.format("old=%s restored=%s corpse_detached=%s elapsed_ms=%s",
         tostring(old_form), tostring(restored), tostring(corpse_detached),
         death_started_ms ~= nil and death_finished_ms ~= nil and string.format("%.2f", death_finished_ms-death_started_ms) or "nil"))
-    session = nil
-    pending_return_frame = nil
-    protected_runtime_call("form_runtime.reset", form_runtime.reset)
     return true
 end
 
@@ -340,21 +356,32 @@ function form_manager.ensure_runtime_hooks(options)
     return runtime_hooks_installed
 end
 
-function form_manager.transform_creature(player, entity_path, frames, _legacy_force_unverified, options)
+local function ensure_transform_effect(entity_path)
+    if type(entity_path) ~= "string" or entity_path == "" or not ModDoesFileExist(entity_path) then
+        return nil, "target"
+    end
+    local effect_file = exact_effects.effect_path(entity_path)
+    if type(effect_file) ~= "string" or effect_file == "" then
+        exact_effects.invalidate_failed_target(entity_path)
+        if exact_effects.prepare({entity_path}) > 0 then effect_file = exact_effects.effect_path(entity_path) end
+    end
+    if type(effect_file) ~= "string" or effect_file == "" then return nil, "effect_not_cached" end
+    return effect_file
+end
+
+local function start_transform_creature(player, entity_path, frames, options, prepared_effect_file)
     if session ~= nil then return false, "form_busy" end
     if player == nil or player == 0 or not EntityGetIsAlive(player) then
         return false, "player"
     end
     if EntityHasTag(player, "polymorphed_player") then return false, "not_human" end
-    if type(entity_path) ~= "string" or entity_path == "" or not ModDoesFileExist(entity_path) then
-        return false, "target"
-    end
-    local effect_file = exact_effects.effect_path(entity_path)
+
+    local effect_file = prepared_effect_file
     if type(effect_file) ~= "string" or effect_file == "" then
-        exact_effects.invalidate_failed_target(entity_path) -- retry late VFS/mod resources without exposing cache internals
-        if exact_effects.prepare({entity_path}) > 0 then effect_file = exact_effects.effect_path(entity_path) end
+        local reason
+        effect_file, reason = ensure_transform_effect(entity_path)
+        if effect_file == nil then return false, reason end
     end
-    if type(effect_file) ~= "string" or effect_file == "" then return false, "effect_not_cached" end
 
     options = type(options) == "table" and options or {}
     local requested_target = type(options.requested_target) == "string" and options.requested_target ~= "" and options.requested_target or entity_path
@@ -372,21 +399,12 @@ function form_manager.transform_creature(player, entity_path, frames, _legacy_fo
     end
     local start_x, start_y = EntityGetTransform(player)
 
-    -- Suppress only the presentation flash caused by swapping from human HP to a
-    -- low-HP creature. The creature's real hp/max_hp are never changed. Applying
-    -- this before native polymorph is important: post-transform suppression is one
-    -- frame too late for the transition flash.
     suppress_transform_flash(18)
-    -- The exact source is attached to the resulting polymorphed entity by
-    -- mark_network_form_source(); do not maintain a second write-only Globals copy.
     local ok, effect_entity = pcall(LoadGameEffectEntityTo, player, effect_file)
     if not ok or effect_entity == nil or effect_entity == 0 then
         return false, "effect"
     end
 
-    -- Some builds swap the polymorph body synchronously enough for the first render
-    -- to see its low HP before our next OnWorldPreUpdate. Prime the new damage UI now
-    -- when possible; form runtime repeats this once when the form becomes active.
     local immediate = current_player()
     local immediate_network_marked = 0
     if immediate ~= 0 and immediate ~= player and EntityHasTag(immediate, "polymorphed_player") then
@@ -420,8 +438,6 @@ function form_manager.transform_creature(player, entity_path, frames, _legacy_fo
         form_strategy = tostring(options.form_strategy or "native_polymorph"),
         profile = profile_api.get(options.profile_target or requested_target),
         original_backup = original_backup,
-        -- Death handoff is available only when a serialized human backup can be
-        -- restored synchronously before the dying form reaches the Game Over path.
         allow_death_handoff = original_backup ~= nil,
         effect_entity = effect_entity,
         started = GameGetFrameNum(),
@@ -434,24 +450,54 @@ function form_manager.transform_creature(player, entity_path, frames, _legacy_fo
     return true
 end
 
-function form_manager.return_to_human()
-    local current = current_player()
-    if current == 0 then
-        return false, "player"
-    end
-
+local function expire_current_polymorph(current)
     local components = human_restore.polymorph_effect_components(current)
-    if #components == 0 then
-        session = nil
-        pending_return_frame = nil
-        return false, "not_polymorphed"
-    end
-
+    if #components == 0 then return false, "not_polymorphed" end
     for _, component in ipairs(components) do
         pcall(ComponentSetValue2, component, "frames", 1)
     end
     pending_return_frame = GameGetFrameNum()
     return true, "expire"
+end
+
+function form_manager.transform_creature(player, entity_path, frames, _legacy_force_unverified, options)
+    if player == nil or player == 0 or not EntityGetIsAlive(player) then return false, "player" end
+
+    local effect_file, validation_reason = ensure_transform_effect(entity_path)
+    if effect_file == nil then return false, validation_reason end
+
+    local is_form = session ~= nil or EntityHasTag(player, "polymorphed_player")
+    if is_form then
+        if session == nil then recover_or_adopt_form_session() end
+        transition_queue.schedule(entity_path, frames, options, GameGetFrameNum())
+        local ok, reason = expire_current_polymorph(player)
+        if not ok then
+            transition_queue.clear()
+            return false, reason
+        end
+        diagnostic_event("FORM SWITCH QUEUED", string.format("from=%s to=%s frame=%s",
+            tostring(session ~= nil and (session.requested_target or session.target) or "external"),
+            tostring(entity_path), tostring(GameGetFrameNum())))
+        return true, "queued_after_human"
+    end
+
+    -- A direct selection while already human is newer intent than any stale queued
+    -- mob->human->mob request. Never let an older target survive behind this transform.
+    transition_queue.clear()
+    return start_transform_creature(player, entity_path, frames, options, effect_file)
+end
+
+function form_manager.return_to_human()
+    transition_queue.clear()
+    local current = current_player()
+    if current == 0 then return false, "player" end
+
+    local ok, reason = expire_current_polymorph(current)
+    if not ok then
+        session = nil
+        pending_return_frame = nil
+    end
+    return ok, reason
 end
 
 function form_manager.handle_tab_return(input_blocked, binding_pressed)
@@ -477,6 +523,7 @@ function form_manager.handle_tab_return(input_blocked, binding_pressed)
     if #components == 0 then
         return false
     end
+    transition_queue.clear()
     for _, component in ipairs(components) do
         pcall(ComponentSetValue2, component, "frames", 1)
     end
@@ -485,11 +532,44 @@ function form_manager.handle_tab_return(input_blocked, binding_pressed)
     return true
 end
 
+local function advance_queued_transform(frame)
+    if not transition_queue.has_pending() or session ~= nil then return false end
+    local current = current_player()
+    if not human_entity_ready(current) then return false end
+
+    local pending = transition_queue.peek()
+    if pending == nil then return false end
+    if pending.human_frame == nil then
+        transition_queue.mark_human(frame)
+        diagnostic_event("FORM SWITCH HUMAN FRAME", string.format("entity=%s target=%s frame=%s",
+            tostring(current), tostring(pending.entity_path), tostring(frame)))
+        return false
+    end
+    if not transition_queue.ready(frame) then return false end
+
+    local request = transition_queue.take(frame)
+    if request == nil then return false end
+    local ok, reason = start_transform_creature(current, request.entity_path, request.frames, request.options)
+    if not ok then
+        diagnostic_event("FORM SWITCH FAILED", string.format("target=%s reason=%s frame=%s",
+            tostring(request.entity_path), tostring(reason), tostring(frame)))
+        return false
+    end
+    diagnostic_event("FORM SWITCH START", string.format("target=%s human_frame=%s frame=%s",
+        tostring(request.entity_path), tostring(request.human_frame), tostring(frame)))
+    return true
+end
+
 function form_manager.update()
     local frame = GameGetFrameNum()
     restore_transform_flash_suppression(false)
 
+    if transition_queue.expire(frame) then
+        diagnostic_event("FORM SWITCH EXPIRED", string.format("frame=%s", tostring(frame)))
+    end
     corpse_service.update()
+
+    if advance_queued_transform(frame) then return true end
 
     if session == nil then
         local probe_player = current_player()
@@ -497,13 +577,13 @@ function form_manager.update()
         -- startup. Re-probe on that authority change even if the initial human was
         -- already classified as idle.
         if probe_player ~= 0 and probe_player ~= orphan_probe_entity then orphan_probe_complete = false end
-        if not orphan_probe_complete then recover_saved_form_session() end
+        if not orphan_probe_complete then recover_or_adopt_form_session() end
     end
 
     -- Human idle is the overwhelmingly common state. There is no polymorph effect to
     -- inspect and no death hook is needed until an explicit transform starts; keeping
     -- this path O(1) avoids four GameGetGameEffect probes and player scans every frame.
-    if session == nil and pending_return_frame == nil then return false end
+    if session == nil and pending_return_frame == nil and not transition_queue.has_pending() then return false end
 
     form_manager.ensure_runtime_hooks()
     local current = current_player()
@@ -559,6 +639,9 @@ function form_manager.update()
             session = nil
             pending_return_frame = nil
             protected_runtime_call("form_runtime.reset", form_runtime.reset)
+            if transition_queue.has_pending() and human_entity_ready(current) then
+                transition_queue.mark_human(frame)
+            end
             return false
         end
     end
@@ -570,6 +653,9 @@ function form_manager.update()
                 tostring(current), tostring(controls_restored)))
         end
         pending_return_frame = nil
+        if transition_queue.has_pending() and human_entity_ready(current) then
+            transition_queue.mark_human(frame)
+        end
         return false
     end
 
@@ -604,13 +690,16 @@ end
 function form_manager.has_active_form()
     if session ~= nil then return true end
     local current = current_player()
-    return current ~= 0
-        and EntityHasTag(current, "polymorphed_player")
-        and EntityHasTag(current, NETWORK_FORM_TAG)
+    if current == 0 or not EntityHasTag(current, "polymorphed_player") then return false end
+    return external_polymorph.is_active(current)
 end
 
 function form_manager.session_phase()
     return session ~= nil and tostring(session.phase or "") or "human"
+end
+
+function form_manager.has_pending_transform()
+    return transition_queue.has_pending()
 end
 
 function form_manager.session_target()

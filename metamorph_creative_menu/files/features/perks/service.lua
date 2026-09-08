@@ -502,21 +502,44 @@ local function cleanup_pickup_entity(entity_id)
     pcall(EntityKill, entity_id)
 end
 
+local function spawn_world_perk(perk, x, y)
+    if type(perk) ~= "table" or type(perk.id) ~= "string" or tonumber(x) == nil or tonumber(y) == nil then
+        return false, "invalid", 0
+    end
+    if type(perk_spawn) ~= "function" then return false, "unavailable", 0 end
+    local pickup_entity_id = perk_spawn(tonumber(x), tonumber(y), perk.id) or 0
+    if pickup_entity_id == 0 then return false, "spawn_failed", 0 end
+
+    local notified, notify_reason = ew_world_items.notify_world_item(pickup_entity_id)
+    if notified ~= true then
+        if EntityGetIsAlive(pickup_entity_id) then pcall(EntityKill, pickup_entity_id) end
+        return false, "world_sync_failed:" .. tostring(notify_reason), 0
+    end
+    -- A stock EW peer can consume a perk without ever executing MCM code. Register the
+    -- authoritative pickup so our EW extra-module can correlate the peer's stock
+    -- ew_current_perks increment and retire this owner-side DES entity.
+    local registered, register_reason = true, "legacy_world_items"
+    if type(ew_world_items.register_creative_perk) == "function" then
+        registered, register_reason = ew_world_items.register_creative_perk(pickup_entity_id, perk.id)
+    end
+    if registered ~= true then
+        if EntityGetIsAlive(pickup_entity_id) then pcall(EntityKill, pickup_entity_id) end
+        return false, "network_consume_watch_failed:" .. tostring(register_reason), 0
+    end
+    return true, "spawned", pickup_entity_id
+end
+
+function perk_service.spawn_at(perk, x, y)
+    return spawn_world_perk(perk, x, y)
+end
+
 function perk_service.spawn(player_entity_id, perk)
     if not valid(player_entity_id) or type(perk) ~= "table" or type(perk.id) ~= "string" then
-        return false, "invalid"
+        return false, "invalid", 0
     end
     local player_x, player_y = EntityGetTransform(player_entity_id)
-    if player_x == nil or type(perk_spawn) ~= "function" then return false, "unavailable" end
-    local pickup_entity_id = perk_spawn(player_x + 12, player_y - 8, perk.id) or 0
-    if pickup_entity_id ~= 0 then
-        -- perk.xml is intentionally excluded from EW's generic item-spawn hook. Creative
-        -- world spawns therefore need the same explicit vanilla/EW handoff used by items.
-        -- The adapter is a no-op in singleplayer and uses EW's native ew_thrown path when
-        -- networking is active, so the receiving peer does not need MCM installed.
-        ew_world_items.notify_world_item(pickup_entity_id)
-    end
-    return pickup_entity_id ~= 0, pickup_entity_id ~= 0 and "spawned" or "spawn_failed", pickup_entity_id
+    if player_x == nil or player_y == nil then return false, "unavailable", 0 end
+    return spawn_world_perk(perk, player_x + 12, player_y - 8)
 end
 
 -- Canonical immediate pickup path shared by UI, QA and compatibility callers.

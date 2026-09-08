@@ -8,7 +8,6 @@ local history = dofile("mods/metamorph_creative_menu/files/features/wands/histor
 local expanded = false
 local name = ""
 local confirm_delete = nil
-local LIST_GUI_ID = 17820
 local DEFAULT_WAND_ICON = "data/items_gfx/handgun.xml"
 
 local function set_status(ok, reason)
@@ -42,12 +41,20 @@ local function draw_preset_card(index, preset, player, wand, content_width)
 
     local apply_label = ui.tr("$mcm_wand_preset_apply", "APPLY")
     local copy_label = ui.tr("$mcm_wand_preset_copy", "GET COPY")
-    local delete_label = confirm_delete == index and ui.tr("$mcm_confirm", "CONFIRM") or "X"
-    local clicked = ui.button_grid({
+    local delete_label = ui.tr("$mcm_delete", "DELETE")
+    local confirm_label = ui.tr("$mcm_confirm", "CONFIRM")
+    local cancel_label = ui.tr("$mcm_cancel", "CANCEL")
+    local buttons = {
         {label=apply_label,tooltip_title=apply_label,tooltip_description=ui.tr("$mcm_wand_preset_apply_hint", "Apply to the held wand")},
         {label=copy_label,tooltip_title=copy_label,tooltip_description=ui.tr("$mcm_wand_preset_copy_hint", "Create a separate saved wand")},
-        {label=delete_label},
-    }, math.max(32, content_width - 16))
+    }
+    if confirm_delete == index then
+        buttons[#buttons + 1] = {label=confirm_label}
+        buttons[#buttons + 1] = {label=cancel_label}
+    else
+        buttons[#buttons + 1] = {label=delete_label}
+    end
+    local clicked = ui.button_grid(buttons, math.max(32, content_width - 16))
     if clicked == 1 then
         local ok, reason = history.perform(player, wand, "load preset", function()
             return presets.load(index, player, wand)
@@ -63,6 +70,8 @@ local function draw_preset_card(index, preset, player, wand, content_width)
         else
             confirm_delete = index
         end
+    elseif clicked == 4 and confirm_delete == index then
+        confirm_delete = nil
     end
     GuiLayoutAddVerticalSpacing(ui.gui(), 2)
 end
@@ -86,12 +95,12 @@ function wand_presets.draw(player, wand, panel_width)
     if #list == 0 then
         ui.white_text(0, 0, ui.tr("$mcm_wand_no_presets", "No saved wands"))
     else
-        local height = math.min(96, math.max(28, #list * 31 + 4))
-        local scroll = ui.begin_scroll_viewport("wand.presets", LIST_GUI_ID, 0, 0, panel_width - 8, height)
+        -- The whole WAND workspace is already a bounded scroll viewport. A second scroll
+        -- container here made wheel/drag ownership ambiguous and felt like a list inside a
+        -- list. Let the single outer workspace scroll all preset cards naturally.
         for index, preset in ipairs(list) do
-            draw_preset_card(index, preset, player, wand, scroll.content_width)
+            draw_preset_card(index, preset, player, wand, math.max(48, panel_width - 8))
         end
-        ui.end_scroll_viewport(scroll)
     end
 end
 

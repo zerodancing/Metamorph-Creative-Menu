@@ -2,7 +2,6 @@ if type(METAMORPH_CREATIVE_MENU_SPELL_INVENTORY_UI) == "table" then return METAM
 
 local spell_inventory_ui = {}
 local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
-local horizontal_strip = dofile("mods/metamorph_creative_menu/files/ui/widgets/horizontal_strip.lua")
 local drag_drop = dofile("mods/metamorph_creative_menu/files/ui/drag_drop.lua")
 local inventory_service = dofile("mods/metamorph_creative_menu/files/features/spells/inventory_service.lua")
 
@@ -17,7 +16,17 @@ function spell_inventory_ui.draw(player, panel_width, screen_width, screen_heigh
     if layout == nil then return nil, reason end
     ui.white_text(0, 0, ui.tr("$mcm_spell_inventory", "SPELL INVENTORY"))
 
-    local strip = horizontal_strip.draw("spells.inventory_slots", layout.capacity, panel_width - 10, ui.ICON_STEP, function(index)
+    -- The vanilla spell inventory is small (16 cells in the stock player) and should stay
+    -- visible as one logical surface. Pagination made a narrow MCM panel show only a subset
+    -- even though there was plenty of vertical room. Render every cell and wrap only the
+    -- presentation rows; target_index still maps to Noita's original inventory coordinates.
+    -- These are the native 18 px inventory cells, not catalog entries. Do not charge the
+    -- catalog's 20 px pitch plus an artificial 10 px reserve: at the minimum MCM width
+    -- that caused an early 8+8 wrap with visibly unused room. Pack by the actual slot
+    -- footprint and wrap only when the next native cell genuinely cannot fit.
+    local slot_pitch = 18
+    local columns = math.max(1, math.floor(math.max(slot_pitch, (tonumber(panel_width) or slot_pitch) - 2) / slot_pitch))
+    local function draw_slot(index)
         local entry = layout.by_index[index]
         local action = entry and options.action_by_id and options.action_by_id[entry.action_id] or nil
         local name, description
@@ -55,14 +64,19 @@ function spell_inventory_ui.draw(player, panel_width, screen_width, screen_heigh
         end
         if right and entry ~= nil and type(options.on_right_click) == "function" then options.on_right_click(entry, layout) end
         return clicked, false, hovered, x, y, width, height
-    end, {
-        gui=ui.gui(), screen_width=screen_width, screen_height=screen_height,
-    })
-
-    if layout.capacity > strip.visible_count then
-        ui.white_text(0, 0, tostring(strip.first + 1) .. "-" .. tostring(strip.last + 1) .. " / " .. tostring(layout.capacity)
-            .. "   " .. ui.tr("$mcm_wand_strip_hint", "wheel to scroll"))
     end
+
+    local cursor = 0
+    while cursor < layout.capacity do
+        GuiLayoutBeginHorizontal(ui.gui(), 0, 0, true, 0, 0)
+        for _ = 1, columns do
+            if cursor >= layout.capacity then break end
+            draw_slot(cursor)
+            cursor = cursor + 1
+        end
+        GuiLayoutEnd(ui.gui())
+    end
+
     return layout, "ok"
 end
 

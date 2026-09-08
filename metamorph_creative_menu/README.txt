@@ -1,4 +1,4 @@
-Metamorph: Creative Menu 2.0.0 — behavior and maintenance guide
+Metamorph: Creative Menu 3.0.0 — behavior and maintenance guide
 ================================================================
 
 Purpose
@@ -328,8 +328,11 @@ EW support is partial and experimental, but EW is an optional adapter rather tha
 dependency. Stock EW transports are preferred where they can express the operation, so
 world items, dropped spell cards and real perk pickup entities do not require MCM on the
 receiving peer. MCM-specific RPC features still need compatible MCM code on the peer(s)
-that consume them. Source-patched EW integration is checked by markers and verified patch
-results, not merely by a version string.
+that consume them. For compatibility paths that cannot be expressed through EW's public
+extra-module API alone, MCM intentionally applies narrow, marker-verified runtime source
+patches with `ModTextFileSetContent`. Each patch is anchored to known EW source and fails
+closed when the expected source shape is not present; transport still uses EW's stock
+`extra_modules.lua`, ewext and CrossCall mechanisms.
 
 Current feature boundaries:
 

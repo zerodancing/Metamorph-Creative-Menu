@@ -143,6 +143,25 @@ function possession_service.update()
     target_position(pending) -- keep last known position while the original mob is alive
     local player = form_manager.current_player()
 
+    if pending.phase == "retiring" then
+        local local_target = tonumber(pending.retire_local_target) or 0
+        if not valid(local_target) then
+            pending = nil
+            return
+        end
+        local acknowledged = type(ew_retirement.acknowledged) == "function"
+            and ew_retirement.acknowledged(pending.retire_sequence) == true
+        if acknowledged then
+            retirement.retire_without_death_side_effects(local_target)
+            pending = nil
+            return
+        end
+        -- The EW bridge normally acknowledges on the same network frame. Keep the
+        -- original alive rather than destroying its GID early if an unusual load order
+        -- delays the bridge; the outer 240-frame timeout remains the hard safety bound.
+        return
+    end
+
     if pending.phase == "returning" then
         if form_manager.is_human_ready(player) then
             if not place_human_at_target(player, pending) then clear_failed("target_position"); return end
@@ -171,10 +190,32 @@ function possession_service.update()
             and form_manager.session_actual_target() or form_manager.session_target()
         if valid(player) and EntityHasTag(player, "polymorphed_player") and actual_target_path == pending.actual_path then
             if valid(pending.target) and pending.target ~= player then
-                if ew_retirement.is_owned_locally(pending.target) then
+                local retire_target = pending.target
+                if type(ew_retirement.network_entity) == "function" then
+                    local resolved = ew_retirement.network_entity(pending.target)
+                    if resolved ~= nil and resolved ~= 0 then retire_target = resolved end
+                end
+                local network_kind = type(ew_retirement.network_kind) == "function"
+                    and select(1, ew_retirement.network_kind(retire_target)) or "local"
+                if network_kind == "des" and type(ew_retirement.queue_remote) == "function" then
+                    local queued, _, _, request_sequence = ew_retirement.queue_remote(
+                        retire_target, pending.path, pending.last_x, pending.last_y, player)
+                    if queued == true and request_sequence ~= nil then
+                        -- Do not destroy the original yet. EW's DES retirement needs the
+                        -- live entity/GID; the next update removes the local multipart tree
+                        -- only after the EW-context bridge acknowledges the request.
+                        pending.phase = "retiring"
+                        pending.retire_sequence = request_sequence
+                        pending.retire_local_target = pending.target
+                        return
+                    end
+                end
+                -- Host-authoritative enemies are removed locally and disappear from stock
+                -- enemy_sync on its next snapshot. A pure ew_replicated client proxy has
+                -- no DES authority to retire here, so do not send it through the wrong
+                -- ew_death_notify channel.
+                if network_kind ~= "enemy_replica" then
                     retirement.retire_without_death_side_effects(pending.target)
-                else
-                    ew_retirement.queue_remote(pending.path, pending.last_x, pending.last_y)
                 end
             end
             pending = nil

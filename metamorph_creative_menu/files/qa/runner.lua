@@ -113,6 +113,14 @@ local function restore_human_and_baseline()
     if state and state.world_baseline then restore_world_controls(state.world_baseline) else pcall(weather.release); pcall(world_rules.reset) end
 end
 
+local function mcm_text(key, fallback)
+    if type(GameTextGetTranslatedOrNot) == "function" then
+        local ok, value = pcall(GameTextGetTranslatedOrNot, key)
+        if ok and type(value) == "string" and value ~= "" and value ~= key then return value end
+    end
+    return fallback
+end
+
 local function finish(reason)
     if not state then return end
     restore_human_and_baseline()
@@ -122,7 +130,11 @@ local function finish(reason)
     log("AUTOTEST SUMMARY", string.format("run=%s outcome=%s reason=%s pass=%d warn=%d fail=%d dirty=%s spell=%s forms=%d/%d(catalog=%d) items=%d/%d(catalog=%d) item_runtime=%d/%d perks=%d/%d effects=%d/%d peers=%d->%d",
         tostring(state.id),outcome,final_reason,state.pass,state.warn,state.fail,tostring(state.dirty),tostring(state.spell_result or "not_run"),state.form_done,#state.forms,state.forms_catalog or #state.forms,state.item_done,#state.items,state.items_catalog or #state.items,state.item_runtime_done or 0,#(state.item_runtime_cases or {}),state.perk_done,#state.perks,state.effect_done,#state.effects,state.peer_baseline or 0,remote_peer_count()))
     log("=== EWCM AUTOTEST END", "run="..tostring(state.id).." outcome="..outcome.." result="..final_reason)
-    GamePrintImportant("Metamorph: Creative Menu QA", outcome..": pass="..state.pass.." warn="..state.warn.." fail="..state.fail)
+    GamePrintImportant(mcm_text("$mcm_qa_title", "Metamorph: Creative Menu QA"),
+        mcm_text("$mcm_qa_summary", "Result") .. ": " .. outcome .. "  "
+            .. mcm_text("$mcm_qa_pass", "pass") .. "=" .. state.pass .. " "
+            .. mcm_text("$mcm_qa_warn", "warn") .. "=" .. state.warn .. " "
+            .. mcm_text("$mcm_qa_fail", "fail") .. "=" .. state.fail)
     METAMORPH_CREATIVE_MENU_QA_ACTIVE = false
     GlobalsSetValue("mcm_qa_active_v1", "0"); GlobalsSetValue("mcm_qa_phase_v1", "done"); GlobalsSetValue("mcm_qa_step_v1", tostring(reason or "complete"))
     state=nil
@@ -376,8 +388,8 @@ local begin_spell_roundtrip = spell_roundtrip.begin
 local cleanup_spell_roundtrip = spell_roundtrip.cleanup
 
 local function start()
-    if state then GamePrint("Metamorph: Creative Menu QA already running"); return false end
-    local p=player(); if p==0 then GamePrint("Metamorph: Creative Menu QA: no player"); return false end
+    if state then GamePrint(mcm_text("$mcm_qa_already_running", "Metamorph: Creative Menu QA is already running")); return false end
+    local p=player(); if p==0 then GamePrint(mcm_text("$mcm_qa_no_player", "Metamorph: Creative Menu QA: no player")); return false end
     run_counter=run_counter+1
     -- The independent diagnostic scan must start even when scenario preflight later fails.
     -- This guarantees that Z always produces actionable evidence instead of a silent abort.
@@ -391,7 +403,7 @@ local function start()
     end
     if not preflight_ok then
         log("AUTOTEST PREFLIGHT FAIL", "issues="..table.concat(preflight_fatal, ";"))
-        GamePrintImportant("Metamorph: Creative Menu QA", "ABORTED: scenario preflight failed; diagnostic scan is still running")
+        GamePrintImportant(mcm_text("$mcm_qa_title", "Metamorph: Creative Menu QA"), mcm_text("$mcm_qa_preflight_failed", "Scenario preflight failed; diagnostic scan is still running"))
         return false
     end
     local forms = networked and select_named_entries(forms_all, NETWORK_FORM_CASES, function(v) return tostring(v or "") end) or forms_all
@@ -399,7 +411,7 @@ local function start()
     local item_runtime_cases = networked and {} or select_named_entries(items_all, SINGLEPLAYER_ITEM_RUNTIME_CASES, function(v) return tostring(type(v)=="table" and v.path or v or "") end)
     if not networked and #item_runtime_cases ~= #SINGLEPLAYER_ITEM_RUNTIME_CASES then
         log("AUTOTEST PREFLIGHT FAIL", "issues=runtime_item_cases="..tostring(#item_runtime_cases).."/"..tostring(#SINGLEPLAYER_ITEM_RUNTIME_CASES))
-        GamePrintImportant("Metamorph: Creative Menu QA", "ABORTED: representative item set incomplete; diagnostic scan is still running")
+        GamePrintImportant(mcm_text("$mcm_qa_title", "Metamorph: Creative Menu QA"), mcm_text("$mcm_qa_items_incomplete", "Representative item set is incomplete; diagnostic scan is still running"))
         return false
     end
     state={id=tostring(os and os.time and os.time() or frame()).."-"..tostring(run_counter),phase="baseline",pass=0,warn=0,fail=0,dirty=false,
@@ -411,7 +423,7 @@ local function start()
     GlobalsSetValue("mcm_qa_active_v1", "1"); GlobalsSetValue("mcm_qa_run_v1", tostring(state.id)); GlobalsSetValue("mcm_qa_peer_baseline_v1", tostring(peers))
     log("=== EWCM AUTOTEST BEGIN",string.format("run=%s frame=%d perks=%d effects=%d forms_test=%d forms_catalog=%d mobs_total=%d items_test=%d items_catalog=%d ew=%s peers=%d network_safe=%s",state.id,frame(),#perks,#effects,#forms,#forms_all,ui_mob_count,#items,#items_all,tostring(ModIsEnabled("quant.ew")),peers,tostring(networked)))
     log("TEST CONFIG","destructive=true rollback=phase_checkpoint fail_fast_dirty=true item_mode="..(networked and "network_representative" or "singleplayer_static_catalog+visible_representative").." crash_resume_marker=true multiplayer_representative="..tostring(networked))
-    GamePrintImportant("Metamorph: Creative Menu QA","STARTED. Z runs full scenario test; diagnostics are running in parallel.")
+    GamePrintImportant(mcm_text("$mcm_qa_title", "Metamorph: Creative Menu QA"), mcm_text("$mcm_qa_started", "Started. Z runs the full scenario test; diagnostics run in parallel."))
     return true
 end
 

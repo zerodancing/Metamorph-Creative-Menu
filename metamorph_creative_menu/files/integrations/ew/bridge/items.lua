@@ -17,17 +17,23 @@ function items_bridge.update()
         local suffix = ":" .. tostring(next_seq)
         local entity = tonumber(GlobalsGetValue(OUTBOX_ENTITY .. suffix, "0")) or 0
         local result = "invalid"
+        local submitted = entity == 0 or not EntityGetIsAlive(entity)
         if entity ~= 0 and EntityGetIsAlive(entity) then
             if type(CrossCall) == "function" then
                 local ok, err = pcall(CrossCall, "ew_thrown", entity)
-                result = ok and "submitted" or ("error:" .. common.clean(err))
-                if not ok then common.report_error("world_item", "seq=" .. tostring(next_seq) .. ";" .. common.clean(err)) end
+                if ok then
+                    result, submitted = "submitted", true
+                else
+                    result = "error:" .. common.clean(err)
+                    common.report_error("world_item", "seq=" .. tostring(next_seq) .. ";" .. common.clean(err))
+                end
             else
                 result = "crosscall_unavailable"
                 common.report_error("world_item", "seq=" .. tostring(next_seq) .. ";CrossCall unavailable")
             end
         end
         GlobalsSetValue(OUTBOX_RESULT, tostring(next_seq) .. ":" .. result)
+        if not submitted then break end
         GlobalsSetValue(OUTBOX_ENTITY .. suffix, "")
         processed, budget = next_seq, budget - 1
     end

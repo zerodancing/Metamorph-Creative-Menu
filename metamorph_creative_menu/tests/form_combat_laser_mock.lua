@@ -50,6 +50,7 @@ function EntityGetTransform(entity) return 0, 0, math.pi * 0.75, 1, 1 end
 function DEBUG_GetMouseWorld() return 100, 0 end
 function GameGetFrameNum() return 50 end
 function ComponentSetValue2(component, field, value)
+function ComponentGetIsEnabled() return true end
     writes[field] = value
     component_values[component] = component_values[component] or {}
     component_values[component][field] = value

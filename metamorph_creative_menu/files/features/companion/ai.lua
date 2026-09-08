@@ -44,9 +44,22 @@ ComponentSetValue2(controls, "enabled", false)
 
 local ew_enabled = false
 pcall(function() ew_enabled = ModIsEnabled("quant.ew") == true end)
-if ew_enabled and not GameHasFlagRun("ew_flag_this_is_host") then
-    -- Synced copies are visual/physical replicas. Only EW's authoritative host is
-    -- allowed to make AI decisions or cast a second copy of a projectile.
+local function ew_locally_owned()
+    -- EW DES writes ew_gid_lid.value_bool=true on the peer that owns simulation.
+    -- Host/client role is not authority: a client-created clone can legitimately own
+    -- its entity and must run AI, while remote replicas must stay passive.
+    for _, value in ipairs(EntityGetComponentIncludingDisabled(entity, "VariableStorageComponent") or {}) do
+        local ok_name, name = pcall(ComponentGetValue2, value, "name")
+        if ok_name and name == "ew_gid_lid" then
+            local ok_owned, owned = pcall(ComponentGetValue2, value, "value_bool")
+            return ok_owned and owned == true
+        end
+    end
+    -- Before DES attaches its gid storage, a locally spawned entity is the only safe
+    -- one to simulate. Explicit EW replicas never receive local AI authority.
+    return not EntityHasTag(entity, "ew_replicated")
+end
+if ew_enabled and not ew_locally_owned() then
     for _, field in ipairs({
         "mButtonDownLeft", "mButtonDownRight", "mButtonDownUp", "mButtonDownDown",
         "mButtonDownFly", "mButtonDownFire", "mButtonDownFire2",
@@ -107,8 +120,15 @@ local x, y = EntityGetTransform(entity)
 if x == nil then return end
 
 -- Target scans are staggered by entity id to keep several companions inexpensive.
+-- An idle target=0 used to satisfy `not is_hostile(target)` every frame and bypass the
+-- staggering entirely. Clear an invalid target immediately, but only search on schedule.
 local frame = GameGetFrameNum()
-if not is_hostile(target) or frame % 10 == entity % 10 then
+local target_valid = is_hostile(target)
+if not target_valid and target ~= 0 then
+    target = 0
+    if target_store ~= nil then ComponentSetValue2(target_store, "value_int", 0) end
+end
+if frame % 10 == entity % 10 then
     target = 0
     local best = 640 * 640
     for _, candidate in ipairs(EntityGetInRadiusWithTag(x, y, 640, "mortal") or {}) do

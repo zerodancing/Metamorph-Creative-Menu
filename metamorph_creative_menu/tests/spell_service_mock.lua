@@ -2,6 +2,8 @@ local root=assert(arg[1])
 local native_dofile=dofile
 local sync_calls=0
 local notified_world_items={}
+local regen_calls=0
+local fail_slot_write=nil
 dofile=function(path)
  if path=='mods/metamorph_creative_menu/files/integrations/ew/runtime.lua' then
   return {force_inventory_sync=function() sync_calls=sync_calls+1 end}
@@ -44,6 +46,11 @@ ComponentGetValue2=function(component,field)
 end
 ComponentSetValue2=function(component,field,a,b)
  fields[component]=fields[component] or {}
+ if field=='inventory_slot' and fail_slot_write
+  and fail_slot_write.component==component and fail_slot_write.x==a then
+  fail_slot_write=nil
+  error('injected wand slot write failure')
+ end
  if b~=nil then fields[component][field]={a,b} else fields[component][field]=a end
 end
 ComponentObjectGetValue2=function(component,object_name,field) return gun_config[component] and gun_config[component][field] end
@@ -58,8 +65,8 @@ EntityAddChild=function(new_parent,entity) EntityRemoveFromParent(entity); paren
 EntitySetComponentsWithTagEnabled=function() end
 EntityGetTransform=function(entity) local t=transforms[entity] or {0,0}; return t[1],t[2] end
 EntitySetTransform=function(entity,x,y) transforms[entity]={x,y} end
-GameRegenItemActionsInContainer=function() fields[21].mana=0; fields[21].mana_max=1; fields[21].mana_charge_speed=1 end
-GameRegenItemActionsInPlayer=function() end
+GameRegenItemActionsInContainer=function() regen_calls=regen_calls+1; fields[21].mana=0; fields[21].mana_max=1; fields[21].mana_charge_speed=1 end
+GameRegenItemActionsInPlayer=function() regen_calls=regen_calls+1 end
 local next_entity=5
 CreateItemActionEntity=function(action_id)
  local entity=next_entity; next_entity=next_entity+1
@@ -85,7 +92,17 @@ local replaced=service.replace(1,2,1,'C',by_slot[1],entries); assert(replaced)
 assert(not alive[4],'replaced spell survived')
 assert(fields[41].inventory_slot[1]==0,'replaced card was mutated before retirement')
 assert(fields[21].mana==50 and fields[21].mana_max==100 and fields[21].mana_charge_speed==10,'wand mana state not preserved')
+assert(regen_calls==0,'ordinary spell edit called gameplay action regeneration APIs')
 assert(sync_calls==1,'spell edit did not request EW inventory sync')
+
+local move_slots,_,_,move_entries=service.contents(2)
+local move_source,move_target=move_slots[0],move_slots[1]
+fail_slot_write={component=move_source.item_component,x=1}
+assert(service.move(1,2,move_source,1,move_target,move_entries)==false,
+ 'injected wand swap failure reported success')
+assert(fields[move_source.item_component].inventory_slot[1]==move_source.actual_slot
+ and fields[move_target.item_component].inventory_slot[1]==move_target.actual_slot,
+ 'failed wand swap stranded a card at its temporary coordinate')
 
 -- INSERT preserves the selected card and shifts the suffix into the nearest free slot.
 -- A failed attach must leave the old spell intact and must not publish inventory sync.
@@ -150,4 +167,4 @@ assert(#notified_world_items==notify_before,'failed detach published a world ite
 assert(sync_calls==failed_drop_sync,'failed detach published inventory sync')
 EntityRemoveFromParent=real_remove
 
-print('spell_service=PASS duplicate_slots=true mana_preserved=true transactional_replace=true transactional_drop=true directional_throw=true world_handoff=true sync=true')
+print('spell_service=PASS duplicate_slots=true no_action_regen=true swap_rollback=true mana_preserved=true transactional_replace=true transactional_drop=true directional_throw=true world_handoff=true sync=true')

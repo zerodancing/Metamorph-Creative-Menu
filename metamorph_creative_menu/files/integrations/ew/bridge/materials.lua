@@ -97,7 +97,13 @@ local function clean_error(err)
 end
 
 local function report_error(scope, err)
-    GlobalsSetValue("mcm_material_sync_last_error_v1", tostring(scope) .. ":" .. clean_error(err))
+    local diagnostic = tostring(scope) .. ":" .. tostring(err)
+    if common ~= nil and type(common.encode_diagnostic) == "function" then
+        diagnostic = common.encode_diagnostic(diagnostic)
+    else
+        diagnostic = clean_error(diagnostic)
+    end
+    GlobalsSetValue("mcm_material_sync_last_error_v1", diagnostic)
     if common ~= nil and type(common.report_error) == "function" then
         common.report_error(scope, err)
     end

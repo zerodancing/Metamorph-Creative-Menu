@@ -1,6 +1,14 @@
 if type(METAMORPH_CREATIVE_MENU_DIAGNOSTIC_SCANNER) == "table" then return METAMORPH_CREATIVE_MENU_DIAGNOSTIC_SCANNER end
 
 local scanner = {}
+
+local function mcm_text(key, fallback)
+    if type(GameTextGetTranslatedOrNot) == "function" then
+        local ok, value = pcall(GameTextGetTranslatedOrNot, key)
+        if ok and type(value) == "string" and value ~= "" and value ~= key then return value end
+    end
+    return fallback
+end
 local logger = dofile("mods/metamorph_creative_menu/files/diagnostics/logger.lua")
 local entity_inspection = dofile("mods/metamorph_creative_menu/files/diagnostics/entity_inspection.lua")
 
@@ -244,10 +252,10 @@ local function finish(report)
     local ok, err = append_file(text)
     if not ok then
         print("[Metamorph: Creative Menu] diagnostics could not write report: " .. tostring(err))
-        GamePrintImportant("Metamorph: Creative Menu diagnostics", "WRITE FAILED: " .. tostring(err))
+        GamePrintImportant(mcm_text("$mcm_diag_title", "Metamorph: Creative Menu diagnostics"), mcm_text("$mcm_diag_write_failed", "Could not write diagnostic report") .. ": " .. tostring(err))
     else
         print("[Metamorph: Creative Menu] diagnostics finished: " .. summary .. " -> " .. logger.path())
-        GamePrintImportant("Metamorph: Creative Menu diagnostics", "DONE: " .. summary)
+        GamePrintImportant(mcm_text("$mcm_diag_title", "Metamorph: Creative Menu diagnostics"), mcm_text("$mcm_diag_done", "Done") .. ": " .. summary)
     end
 end
 

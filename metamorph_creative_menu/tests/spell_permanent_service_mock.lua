@@ -113,6 +113,10 @@ local normal=slots[0]
 assert(permanent_service.promote(1,2,normal)==true,'promote failed')
 assert(fields[31].permanently_attached==true and fields[31].inventory_slot[1]==-1,'promote did not mark card permanent')
 assert(objects[12].deck_capacity==4,'promote did not preserve effective capacity')
+local raw_after_first_promote=objects[12].deck_capacity
+local duplicate_ok=permanent_service.promote(1,2,normal)
+assert(duplicate_ok==false and objects[12].deck_capacity==raw_after_first_promote,
+    'duplicate promotion of the same card grew raw capacity twice')
 slots,highest,permanent,entries,permanent_entries=spell_service.contents(2)
 assert(permanent==2 and spell_service.capacity(2,highest,permanent)==2,'promotion changed ordinary capacity')
 
@@ -176,4 +180,4 @@ assert(fields[regular_p.item_component].permanently_attached==false and fields[r
 assert(objects[12].deck_capacity==raw_fault,'failed promote changed raw capacity')
 
 assert(sync_calls>=6,'Always Cast operations did not refresh inventory/EW state')
-print('spell_permanent_service=PASS enumerate=true capacity_invariant=true promote_demote=true role_swap=true exact_entity=true rollback=true')
+print('spell_permanent_service=PASS enumerate=true capacity_invariant=true promote_demote=true duplicate_idempotent=true role_swap=true exact_entity=true rollback=true')

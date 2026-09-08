@@ -16,26 +16,101 @@ local CHARACTER_SCAN_RADIUS = 1024
 
 local physics_state = {
     bodies = {},
+    -- Bodies that left even the safe restore query may still be alive and return later.
+    -- Keep only pure Lua baseline data here; never query a dormant BodyID until Noita
+    -- returns that ID from a fresh spatial query again.
+    released_bodies = {},
+    released_order = {},
     characters = {},
     local_gravity_native = {},
     player_recovery_cache = {},
 }
+local RELEASED_BODY_LIMIT = 1024
 
 local function values_equal(a, b)
     if type(a) == "number" or type(b) == "number" then return rule_math.same(a, b) end
     return a == b
 end
 
-local function body_record(id, frame)
+local function forget_released_body(id)
+    physics_state.released_bodies[id] = nil
+    for index = #physics_state.released_order, 1, -1 do
+        if physics_state.released_order[index] == id then
+            table.remove(physics_state.released_order, index)
+            break
+        end
+    end
+end
+
+local function remember_released_body(id, record, frame)
+    if record == nil or (record.last_gravity == nil and record.last_linear == nil) then return end
+    forget_released_body(id)
+    physics_state.released_bodies[id] = {
+        gravity=record.gravity, linear=record.linear, angular=record.angular,
+        last_gravity=record.last_gravity, last_linear=record.last_linear,
+        last_angular=record.last_angular, released_frame=frame,
+    }
+    local order = physics_state.released_order
+    order[#order + 1] = id
+    while #order > RELEASED_BODY_LIMIT do
+        local oldest = table.remove(order, 1)
+        physics_state.released_bodies[oldest] = nil
+    end
+end
+
+local function body_record(id, frame, gravity_factor, damping_factor)
     local record = physics_state.bodies[id]
     if record ~= nil then
         record.last_seen = frame
         return record
     end
+    -- The ID came from this frame's query, so native getters are safe again.
     local ok_g, gravity = pcall(PhysicsBodyIDGetGravityScale, id)
     local ok_d, linear, angular = pcall(PhysicsBodyIDGetDamping, id)
     if not ok_g or gravity == nil or not ok_d or linear == nil then return nil end
-    record = { gravity=gravity, linear=linear, angular=angular or linear, last_seen=frame }
+    angular = angular or linear
+
+    local released = physics_state.released_bodies[id]
+    local baseline_g, baseline_l, baseline_a = gravity, linear, angular
+    local retained_last_g, retained_last_l, retained_last_a = nil, nil, nil
+    if released ~= nil then
+        -- Reuse the old baseline only if the body still carries exactly our last write.
+        -- If another owner changed it while away (or Noita reused the ID), current values
+        -- become the new native baseline instead of corrupting the new body.
+        if released.last_gravity ~= nil and values_equal(gravity, released.last_gravity) then
+            baseline_g = released.gravity
+            if gravity_factor == nil then
+                local wrote = pcall(PhysicsBodyIDSetGravityScale, id, baseline_g)
+                local read_ok, after = pcall(PhysicsBodyIDGetGravityScale, id)
+                if wrote and read_ok and values_equal(after, baseline_g) then
+                    gravity = after
+                else
+                    retained_last_g = gravity
+                end
+            end
+        end
+        if released.last_linear ~= nil and values_equal(linear, released.last_linear)
+            and values_equal(angular, released.last_angular or released.last_linear)
+        then
+            baseline_l, baseline_a = released.linear, released.angular
+            if damping_factor == nil then
+                local wrote = pcall(PhysicsBodyIDSetDamping, id, baseline_l, baseline_a)
+                local read_ok, after_l, after_a = pcall(PhysicsBodyIDGetDamping, id)
+                after_a = after_a or after_l
+                if wrote and read_ok and values_equal(after_l, baseline_l) and values_equal(after_a, baseline_a) then
+                    linear, angular = after_l, after_a
+                else
+                    retained_last_l, retained_last_a = linear, angular
+                end
+            end
+        end
+        forget_released_body(id)
+    end
+
+    record = {
+        gravity=baseline_g, linear=baseline_l, angular=baseline_a, last_seen=frame,
+        last_gravity=retained_last_g, last_linear=retained_last_l, last_angular=retained_last_a,
+    }
     physics_state.bodies[id] = record
     return record
 end
@@ -476,7 +551,7 @@ function physics_adapter.scan(player, gravity_factor, damping_factor, frame)
     local live_bodies = {}
     for _, body_id in ipairs(scanned_bodies) do
         live_bodies[body_id] = true
-        local record = body_record(body_id, frame)
+        local record = body_record(body_id, frame, gravity_factor, damping_factor)
         if record ~= nil then
             if gravity_factor ~= nil then set_body_gravity(body_id, record, gravity_factor) end
             if damping_factor ~= nil then set_body_damping(body_id, record, damping_factor) end
@@ -492,7 +567,9 @@ function physics_adapter.scan(player, gravity_factor, damping_factor, frame)
                 if restored or reason == "gone" then physics_state.bodies[body_id] = nil end
             else
                 -- Calling any PhysicsBodyID getter on an expired ID emits a native Lua
-                -- error even behind pcall. Never feed a stale ID back into Noita.
+                -- error even behind pcall. Preserve only our Lua baseline/last-write
+                -- values so a live body can safely recover them if it is queried again.
+                remember_released_body(body_id, record, frame)
                 relinquish_body(record)
                 physics_state.bodies[body_id] = nil
             end
@@ -516,6 +593,7 @@ function physics_adapter.restore_rule(kind)
         local record = physics_state.bodies[body_id]
         local restored, reason
         if not confirmed_bodies[body_id] then
+            remember_released_body(body_id, record, type(GameGetFrameNum) == "function" and GameGetFrameNum() or 0)
             relinquish_body(record)
             physics_state.bodies[body_id] = nil
             restored, reason = true, "gone"
@@ -550,6 +628,7 @@ function physics_adapter.reset_all()
         if confirmed_bodies[body_id] then
             restored, reason = restore_body(body_id, record)
         else
+            remember_released_body(body_id, record, type(GameGetFrameNum) == "function" and GameGetFrameNum() or 0)
             relinquish_body(record)
             restored, reason = true, "gone"
         end

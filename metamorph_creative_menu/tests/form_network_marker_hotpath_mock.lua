@@ -3,6 +3,7 @@ local native_dofile=dofile
 local current_player=1
 local frame=100
 local add_tag_calls=0
+local ew_exclusion_calls=0
 local add_storage_calls=0
 local metadata_writes=0
 local runtime_updates=0
@@ -35,7 +36,7 @@ function EntityHasTag(id,tag) return (id==2 or id==3) and tag=='polymorphed_play
 function EntityGetTransform() return 10,20 end
 function GameGetFrameNum() return frame end
 function LoadGameEffectEntityTo() current_player=2; return 99 end
-function EntityAddTag(id,tag) if tag=='metamorph_creative_menu_network_form' then add_tag_calls=add_tag_calls+1 end end
+function EntityAddTag(id,tag) if tag=='metamorph_creative_menu_network_form' then add_tag_calls=add_tag_calls+1 elseif tag=='ew_no_enemy_sync' then ew_exclusion_calls=ew_exclusion_calls+1 end end
 function EntityAddComponent2(id,typ,data)
  if typ=='VariableStorageComponent' then
   add_storage_calls=add_storage_calls+1
@@ -57,7 +58,7 @@ function print() end
 
 local manager=assert(native_dofile(root..'/files/features/forms/manager.lua'))
 assert(manager.transform_creature(1,'data/entities/animals/test.xml',nil,false,{})==true,'transform failed')
-assert(add_tag_calls==1 and add_storage_calls==1 and metadata_writes==2,'initial network marker was not written exactly once')
+assert(add_tag_calls==1 and ew_exclusion_calls==1 and add_storage_calls==1 and metadata_writes==2,'initial network marker/DES exclusion was not written exactly once')
 frame=101; manager.update()
 frame=102; manager.update()
 assert(runtime_updates==2,'form runtime was not updated')

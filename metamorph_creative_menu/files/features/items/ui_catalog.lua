@@ -77,6 +77,7 @@ local function add_entry(target, seen_paths, item, translate, translate_with_fal
         entry.display_name = string.match(entry.path, "([^/]+)%.xml$") or entry.path
     end
     entry.display_description = translate(entry.description)
+    entry.kind = entry.kind or "item"
     target[#target + 1] = entry
 end
 
@@ -103,6 +104,46 @@ local function add_external_entries(target, seen_paths, translate, translate_wit
             end
         end
     end
+end
+
+function item_catalog.prewarm_icons(asset_service)
+    if type(asset_service) ~= "table" or type(asset_service.prewarm) ~= "function" then return 0, 0 end
+    local identity = function(value) return tostring(value or "") end
+    local identity_fallback = function(_, fallback) return tostring(fallback or "") end
+    local entries, seen_paths = {}, {}
+
+    local catalog_loaded, base_entries = pcall(dofile, ITEM_CATALOG_PATH)
+    if catalog_loaded and type(base_entries) == "table" then
+        for _, item in ipairs(base_entries) do add_entry(entries, seen_paths, item, identity, identity_fallback) end
+    end
+    local outliers_loaded, outliers = pcall(dofile, VANILLA_OUTLIERS_PATH)
+    if outliers_loaded and type(outliers) == "table" then
+        for _, item in ipairs(outliers) do add_entry(entries, seen_paths, item, identity, identity_fallback) end
+    end
+    -- External manifests are intentionally excluded from init-time prewarming. Their
+    -- files may not exist yet, and executing another mod's registry during our lifecycle
+    -- phase can freeze a transient fallback in the presentation cache. Runtime collect()
+    -- still discovers every active mod and resolves its icons lazily after initialization.
+
+    local icon_paths, seen_icons = {}, {}
+    local entity_paths = {}
+    for _, item in ipairs(entries) do
+        local icon = tostring(item.icon or "")
+        if icon ~= "" and not seen_icons[icon] then
+            seen_icons[icon] = true
+            icon_paths[#icon_paths + 1] = icon
+        elseif icon == "" then
+            entity_paths[#entity_paths + 1] = item.path
+        end
+    end
+
+    local prepared, failed = asset_service.prewarm(icon_paths)
+    if type(asset_service.prewarm_entity) == "function" then
+        for _, entity_path in ipairs(entity_paths) do
+            if asset_service.prewarm_entity(entity_path, "item") then prepared = prepared + 1 else failed = failed + 1 end
+        end
+    end
+    return prepared, failed
 end
 
 function item_catalog.collect(translate, translate_with_fallback)
@@ -144,17 +185,29 @@ function item_catalog.entries_for(filter_index, translate, translate_with_fallba
     for _, item in ipairs(entries) do
         if filter[3] == nil or item.category == filter[3] then matches[#matches + 1] = item end
     end
+    -- ALL is a real union of the item and liquid catalogues. Liquids used to live only in
+    -- their dedicated filter, which made ALL incomplete and also meant a global item search
+    -- could never find a filled flask by material name.
+    if filter_index == 1 then
+        for _, liquid in ipairs(item_catalog.liquids(translate)) do matches[#matches + 1] = liquid end
+        table.sort(matches, function(left, right)
+            local left_name = string.lower(tostring(left.display_name or left.id or left.path or ""))
+            local right_name = string.lower(tostring(right.display_name or right.id or right.path or ""))
+            if left_name ~= right_name then return left_name < right_name end
+            return tostring(left.id or left.path or "") < tostring(right.id or right.path or "")
+        end)
+    end
     cached_filter_entries[filter_index] = matches
     return matches
 end
 
-local function material_display_name(material_name, translate)
+local function material_presentation(material_name, translate)
     local id_loaded, material_id = pcall(CellFactory_GetType, material_name)
-    if not id_loaded or material_id == nil or material_id < 0 then return material_name end
+    if not id_loaded or material_id == nil or material_id < 0 then return material_name, "" end
     local ui_name_loaded, ui_name_key = pcall(CellFactory_GetUIName, material_id)
-    if not ui_name_loaded or type(ui_name_key) ~= "string" or ui_name_key == "" then return material_name end
+    if not ui_name_loaded or type(ui_name_key) ~= "string" or ui_name_key == "" then return material_name, "" end
     local translated_name = translate(ui_name_key)
-    return (translated_name == "" or translated_name == ui_name_key) and material_name or translated_name
+    return (translated_name == "" or translated_name == ui_name_key) and material_name or translated_name, ui_name_key
 end
 
 function item_catalog.liquids(translate)
@@ -170,10 +223,13 @@ function item_catalog.liquids(translate)
     for _, liquid_name in ipairs(liquid_names) do
         if type(liquid_name) == "string" and liquid_name ~= "" and liquid_name ~= "unknown" and not seen_names[liquid_name] then
             seen_names[liquid_name] = true
+            local display_name, ui_name_key = material_presentation(liquid_name, translate)
             entries[#entries + 1] = {
                 id = liquid_name,
-                display_name = material_display_name(liquid_name, translate),
+                display_name = display_name,
+                ui_name_key = ui_name_key,
                 icon = POTION_ICON,
+                kind = "liquid",
             }
         end
     end

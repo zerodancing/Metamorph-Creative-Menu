@@ -103,6 +103,15 @@ local EFFECT_PATHS = {
     "data/entities/misc/effect_weakness.xml",
     "data/entities/misc/effect_worm_attractor.xml",
     "data/entities/misc/effect_worm_detractor.xml",
+    -- Additional user-facing vanilla effects that are not represented by status_list.lua.
+    -- One-shot apply wrappers, polymorph/respawn lifecycle entities and UI-only helpers
+    -- are intentionally excluded from the editor.
+    "data/entities/misc/effect_damage_plus_small.xml",
+    "data/entities/misc/effect_hearty.xml",
+    "data/entities/misc/effect_homing_shooter.xml",
+    "data/entities/misc/effect_twitchy.xml",
+    "data/entities/misc/effect_weaken.xml",
+    "data/entities/misc/effect_wither.xml",
 }
 
 local RESERVED_EFFECTS = {
@@ -198,8 +207,15 @@ local function read_effect_metadata(path, visited, depth)
     if game_tag ~= nil then
         meta.effect = attr(game_tag, "effect") or meta.effect
         meta.custom_effect_id = attr(game_tag, "custom_effect_id") or meta.custom_effect_id
+        local frames = tonumber(attr(game_tag, "frames"))
+        if frames ~= nil then meta.authored_frames = frames end
         local disabled = attr(game_tag, "disable_movement")
         if disabled ~= nil then meta.disable_movement = disabled == "1" or disabled == "true" end
+    end
+    local lifetime_tag = string.match(content, "<LifetimeComponent[^>]*>")
+    if lifetime_tag ~= nil then
+        local lifetime = tonumber(attr(lifetime_tag, "lifetime"))
+        if lifetime ~= nil then meta.authored_lifetime = lifetime end
     end
     metadata_cache[path] = meta
     visited[path] = nil
@@ -220,9 +236,11 @@ local function load_status_entries()
     local ok = pcall(dofile_once, "data/scripts/status_effects/status_list.lua")
     if not ok or type(status_effects) ~= "table" then return status_entries end
 
-    -- status_list.lua contains presentation variants and, depending on the game build,
-    -- repeated semantic status ids. Build one canonical entry per id and merge richer
-    -- presentation data into it instead of exposing duplicates as blank-looking cells.
+    -- The menu exposes one semantic status tile.  When vanilla defines several concrete
+    -- XML implementations for the same status id (TRIP is the canonical example), keep
+    -- those implementations as variants of that tile instead of flooding the catalogue
+    -- with near-identical entries.  This preserves the clean v2 presentation while still
+    -- making every authored strength reachable.
     local by_id = {}
     for index, status in ipairs(status_effects) do
         if type(status) == "table" and type(status.id) == "string" and status.id ~= "" then
@@ -230,12 +248,13 @@ local function load_status_entries()
             local icon = status_value(status, { "ui_icon", "icon", "icon_sprite_file" })
             local name = status_value(status, { "ui_name", "name" })
             local description = status_value(status, { "ui_description", "description" })
-            local meta = type(path) == "string" and ModDoesFileExist(path) and read_effect_metadata(path, {}, 0) or {}
-            local candidate = {
+            local normalized_path = type(path) == "string" and path or ""
+            local meta = normalized_path ~= "" and ModDoesFileExist(normalized_path) and read_effect_metadata(normalized_path, {}, 0) or {}
+            local variant = {
                 kind = "status",
                 id = status.id,
                 status_index = index,
-                path = type(path) == "string" and path or "",
+                path = normalized_path,
                 icon = type(icon) == "string" and icon or (meta.icon or ""),
                 name_key = name or meta.name,
                 description_key = description or meta.description,
@@ -244,33 +263,102 @@ local function load_status_entries()
                 material = STATUS_MATERIAL_BY_ID[status.id],
                 game_effect = meta.effect,
                 custom_effect_id = meta.custom_effect_id,
+                authored_frames = meta.authored_frames,
+                authored_lifetime = meta.authored_lifetime,
+                disable_movement = meta.disable_movement == true,
+                min_threshold_normalized = tonumber(status.min_threshold_normalized),
             }
             local current = by_id[status.id]
             if current == nil then
-                by_id[status.id] = candidate
-                status_entries[#status_entries + 1] = candidate
+                current = {}
+                for key, value in pairs(variant) do current[key] = value end
+                current.variants = {}
+                current._variant_paths = {}
+                by_id[status.id] = current
+                status_entries[#status_entries + 1] = current
             else
-                -- Keep the first status_index: StatusEffectDataComponent vectors are
-                -- indexed in vanilla list order. Only fill missing presentation/entity
-                -- metadata from later duplicate declarations.
-                if current.path == "" and candidate.path ~= "" then current.path = candidate.path end
-                if current.icon == "" and candidate.icon ~= "" then current.icon = candidate.icon end
-                if current.display_name == "" and candidate.display_name ~= "" then current.display_name = candidate.display_name end
-                if current.display_description == "" and candidate.display_description ~= "" then current.display_description = candidate.display_description end
-                current.name_key = current.name_key or candidate.name_key
-                current.description_key = current.description_key or candidate.description_key
-                current.material = current.material or candidate.material
-                current.game_effect = current.game_effect or candidate.game_effect
-                current.custom_effect_id = current.custom_effect_id or candidate.custom_effect_id
+                if current.icon == "" and variant.icon ~= "" then current.icon = variant.icon end
+                if current.display_name == "" and variant.display_name ~= "" then current.display_name = variant.display_name end
+                if current.display_description == "" and variant.display_description ~= "" then current.display_description = variant.display_description end
+                current.name_key = current.name_key or variant.name_key
+                current.description_key = current.description_key or variant.description_key
+                current.material = current.material or variant.material
+                current.game_effect = current.game_effect or variant.game_effect
+                current.custom_effect_id = current.custom_effect_id or variant.custom_effect_id
             end
+
+            -- A repeated threshold pointing at the same XML is only a presentation alias,
+            -- not a separate strength. Pathless material statuses also stay single-state.
+            if normalized_path ~= "" and current._variant_paths[normalized_path] ~= true then
+                current._variant_paths[normalized_path] = true
+                current.variants[#current.variants + 1] = variant
+            end
+        end
+    end
+
+    for _, entry in ipairs(status_entries) do
+        entry._variant_paths = nil
+        if type(entry.variants) == "table" and #entry.variants <= 1 then
+            entry.variants = nil
         end
     end
     return status_entries
 end
 
+local perk_effect_ids = nil
+
+local function load_perk_effect_ids()
+    if perk_effect_ids ~= nil then return perk_effect_ids end
+    perk_effect_ids = {}
+    local ok = pcall(dofile_once, "data/scripts/perks/perk_list.lua")
+    if not ok or type(perk_list) ~= "table" then return perk_effect_ids end
+    for _, perk in ipairs(perk_list) do
+        if type(perk) == "table" then
+            for _, field in ipairs({"game_effect", "game_effect2"}) do
+                local effect = string.upper(tostring(perk[field] or ""))
+                if effect ~= "" then perk_effect_ids[effect] = true end
+            end
+        end
+    end
+    return perk_effect_ids
+end
+
+-- A tiny curated set of useful temporary vanilla GameEffects has no status-list entry.
+-- Keep those explicit instead of borrowing a perk's name/icon: the EFFECTS tab must not
+-- silently turn passive perks into timed status effects just because both use GameEffect.
+local SPECIAL_PRESENTATION = {
+    ELECTROCUTION = {
+        name_key="$mcm_effect_electrocution",
+        description_key="$mcm_effect_electrocution_desc",
+        icon="data/ui_gfx/gun_actions/electrocution_field.png",
+    },
+}
+
+local function user_presentation(meta)
+    local effect = tostring(meta and meta.effect or "")
+    local custom = tostring(meta and meta.custom_effect_id or "")
+    return SPECIAL_PRESENTATION[(custom ~= "" and custom ~= "CUSTOM") and custom or effect]
+end
+
+local function perk_backed(meta)
+    if type(meta) ~= "table" then return false end
+    local perks = load_perk_effect_ids()
+    local effect = string.upper(tostring(meta.effect or ""))
+    local custom = string.upper(tostring(meta.custom_effect_id or ""))
+    return (effect ~= "" and perks[effect] == true)
+        or (custom ~= "" and custom ~= "CUSTOM" and perks[custom] == true)
+end
+
+local function translated_user_name(value)
+    if type(value) ~= "string" or value == "" then return "" end
+    local result = translated(value)
+    if result == "" or result == value and string.sub(value,1,1) == "$" then return "" end
+    return result
+end
+
 local function normalize_display(entry)
     if entry.display_name == nil or entry.display_name == "" or string.sub(entry.display_name, 1, 1) == "$" then
-        entry.display_name = entry.id or pretty_name(entry.path)
+        entry.display_name = ""
     end
     if entry.display_description == nil or entry.display_description == entry.display_name then
         entry.display_description = ""
@@ -289,22 +377,17 @@ end
 
 local function semantic_identity(entry)
     if type(entry) ~= "table" then return "" end
-    -- Material statuses are distinct even when their presentation entity shares a
-    -- generic effect. For entity-backed effects, custom/effect ids are the semantic
-    -- identity; path is only a fallback.
-    if type(entry.material) == "string" and entry.material ~= "" then
-        return "status:" .. tostring(entry.id or entry.material)
+    -- Status ids are user-facing concepts. Never collapse two different status families
+    -- merely because vanilla happens to implement them with the same GameEffect id/path
+    -- (ALCOHOLIC vs INGESTION_DRUNK is the important case). Variants inside one status id
+    -- are already grouped by load_status_entries().
+    if entry.kind == "status" and tostring(entry.id or "") ~= "" then
+        return "status:" .. string.upper(tostring(entry.id))
     end
     local custom = tostring(entry.custom_effect_id or "")
     if custom ~= "" and custom ~= "CUSTOM" then return "custom:" .. string.upper(custom) end
     local effect = tostring(entry.game_effect or "")
     if effect ~= "" and effect ~= "CUSTOM" then return "effect:" .. string.upper(effect) end
-    -- status_list often omits effect_entity even when the status id is exactly the
-    -- GameEffect enum used by data/entities/misc/effect_*.xml. Canonicalize that pair
-    -- so BERSERK status + effect_berserk entity is one tile whose metadata is merged.
-    if entry.kind == "status" and tostring(entry.id or "") ~= "" then
-        return "effect:" .. string.upper(tostring(entry.id))
-    end
     local path = tostring(entry.path or "")
     if path ~= "" then return "path:" .. path end
     return "id:" .. tostring(entry.id or "")
@@ -328,12 +411,27 @@ local function richer(existing, candidate)
     keep.description_key = keep.description_key or other.description_key
     keep.game_effect = keep.game_effect or other.game_effect
     keep.custom_effect_id = keep.custom_effect_id or other.custom_effect_id
+    keep.authored_frames = keep.authored_frames or other.authored_frames
+    keep.authored_lifetime = keep.authored_lifetime or other.authored_lifetime
+    keep.disable_movement = keep.disable_movement == true or other.disable_movement == true
+    if type(keep.variants) ~= "table" and type(other.variants) == "table" then keep.variants = other.variants end
     return keep
 end
 
 function catalog_api.entries()
     if catalog ~= nil then return catalog end
     local ordered, by_identity, by_path, by_presentation, seen_path = {}, {}, {}, {}, {}
+    local status_effect_ids = {}
+    local function remember_status_effect_ids(entry)
+        if type(entry) ~= "table" then return end
+        for _, candidate in ipairs(type(entry.variants) == "table" and entry.variants or {entry}) do
+            local effect = string.upper(tostring(candidate.game_effect or ""))
+            local custom = string.upper(tostring(candidate.custom_effect_id or ""))
+            if effect ~= "" and effect ~= "CUSTOM" then status_effect_ids[effect] = true end
+            if custom ~= "" and custom ~= "CUSTOM" then status_effect_ids[custom] = true end
+        end
+    end
+    for _, status_entry in ipairs(load_status_entries()) do remember_status_effect_ids(status_entry) end
 
     local function include(entry)
         local effect_id = string.upper(tostring(entry and (entry.game_effect or entry.id) or ""))
@@ -343,9 +441,11 @@ function catalog_api.entries()
         -- their semantic ids before any catalogue merge.
         if RESERVED_EFFECTS[effect_id] or RESERVED_EFFECTS[custom_id] then return end
         entry = normalize_display(entry)
-        -- Internal status-vector aliases and service effects have no presentation of
-        -- their own. They are not usable menu entries and previously produced a large
-        -- block of neutral placeholder tiles.
+        -- The EFFECTS tab is user-facing, not an XML browser. Never turn an internal
+        -- engine id into a fallback English tile. A valid entry needs a localized title
+        -- and a real icon; technical effects can still be reached by other mod code.
+        if type(entry.display_name) ~= "string" or entry.display_name == "" then return end
+        if type(entry.icon) ~= "string" or entry.icon == "" or not ModDoesFileExist(entry.icon) then return end
         if not effect_policy.visible(entry, ModDoesFileExist) then return end
         local identity = semantic_identity(entry)
         if identity == "" then return end
@@ -361,17 +461,21 @@ function catalog_api.entries()
         -- that intentionally point at the exact same effect entity. An effect menu
         -- should expose that implementation once, not one localized tile plus a second
         -- English/blank alias for the same XML.
-        if existing == nil and path_key ~= nil then existing = by_path[path_key] end
+        -- Exact presentation aliases (same XML + icon + localized title) are duplicates
+        -- even when vanilla exposes two status ids for them (OILED/HYDRATED). Different
+        -- status concepts sharing an implementation path remain separate: ALCOHOLIC,
+        -- INGESTION_DRUNK and BRAIN_DAMAGE all use DRUNK internally but have distinct UI.
         if existing == nil and presentation ~= "" then existing = by_presentation[presentation] end
+        if existing == nil and entry.kind ~= "status" and path_key ~= nil then existing = by_path[path_key] end
         if existing == nil then
             by_identity[identity] = entry
-            if path_key ~= nil then by_path[path_key] = entry end
+            if entry.kind ~= "status" and path_key ~= nil then by_path[path_key] = entry end
             if presentation ~= "" then by_presentation[presentation] = entry end
             ordered[#ordered + 1] = entry
         else
             local merged = richer(existing, entry)
             by_identity[identity] = merged
-            if path_key ~= nil then by_path[path_key] = merged end
+            if entry.kind ~= "status" and path_key ~= nil then by_path[path_key] = merged end
             if presentation ~= "" then by_presentation[presentation] = merged end
             if merged ~= existing then
                 for key, value in pairs(by_identity) do if value == existing then by_identity[key] = merged end end
@@ -381,6 +485,9 @@ function catalog_api.entries()
             end
         end
         if type(entry.path) == "string" and entry.path ~= "" then seen_path[entry.path] = true end
+        for _, variant in ipairs(type(entry.variants) == "table" and entry.variants or {}) do
+            if type(variant.path) == "string" and variant.path ~= "" then seen_path[variant.path] = true end
+        end
     end
 
     for _, entry in ipairs(load_status_entries()) do include(entry) end
@@ -389,18 +496,35 @@ function catalog_api.entries()
             local meta = read_effect_metadata(path, {}, 0)
             local effect_name = tostring(meta.effect or "")
             local custom_effect_id = tostring(meta.custom_effect_id or "")
-            if not RESERVED_EFFECTS[effect_name] and not RESERVED_EFFECTS[custom_effect_id] then
+            local semantic_effect = string.upper((custom_effect_id ~= "" and custom_effect_id ~= "CUSTOM")
+                and custom_effect_id or effect_name)
+            if not RESERVED_EFFECTS[effect_name] and not RESERVED_EFFECTS[custom_effect_id]
+                and not perk_backed(meta)
+                and (semantic_effect == "" or status_effect_ids[semantic_effect] ~= true)
+            then
+                local presentation = user_presentation(meta) or {}
+                -- Raw one-word XML labels are developer metadata, not localized UI. Prefer
+                -- an XML title only when it is a real localization key; otherwise require a
+                -- curated presentation so the effects tab never leaks WEAKNESS/NO_HEAL
+                -- style English internals into non-English games.
+                local xml_name = type(meta.name) == "string" and string.sub(meta.name,1,1) == "$" and meta.name or nil
+                local xml_description = type(meta.description) == "string" and string.sub(meta.description,1,1) == "$" and meta.description or nil
+                local name_key = xml_name or presentation.name_key
+                local description_key = xml_description or presentation.description_key
+                local icon = (meta.icon ~= nil and meta.icon ~= "") and meta.icon or presentation.icon
                 include({
                     kind = "game_effect",
                     id = (custom_effect_id ~= "" and custom_effect_id) or (effect_name ~= "" and effect_name) or pretty_name(path),
                     path = path,
-                    icon = meta.icon or "",
-                    name_key = meta.name,
-                    description_key = meta.description,
-                    display_name = translated(meta.name),
-                    display_description = translated(meta.description),
+                    icon = icon or "",
+                    name_key = name_key,
+                    description_key = description_key,
+                    display_name = translated_user_name(name_key),
+                    display_description = translated(description_key),
                     game_effect = meta.effect,
                     custom_effect_id = meta.custom_effect_id,
+                    authored_frames = meta.authored_frames,
+                    authored_lifetime = meta.authored_lifetime,
                     disable_movement = meta.disable_movement == true,
                 })
             end

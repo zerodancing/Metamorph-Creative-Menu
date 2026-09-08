@@ -2,9 +2,14 @@ local root=assert(arg[1],'root required')
 local native_dofile=dofile
 local queued={}
 local drawn={}
-local acquired,released=0,0
+local acquired,released,text_suppressed=0,0,0
 local frame=1
-local saved={}
+local saved={
+    ['metamorph_creative_menu.ui_panel_x']=100,
+    ['metamorph_creative_menu.ui_panel_y']=20,
+    ['metamorph_creative_menu.ui_panel_width']=210,
+    ['metamorph_creative_menu.ui_panel_height']=170,
+}
 local left_just_down=false
 local left_down=false
 local mouse_gui_x,mouse_gui_y=80,30
@@ -18,6 +23,7 @@ local affordance_bounds=nil
 local button_labels={}
 local drag_handle_calls={}
 local tab_tiles={}
+local auto_box_right_extra=0
 
 local ui={
     ICON_STEP=20,EMPTY_SLOT='slot',audit=function() end,bind=function() end,begin_frame=function() end,
@@ -38,7 +44,7 @@ local ui={
     text_width=function(text) return #tostring(text)*5 end,
     white_text=function() end,colored_text=function() end,
     finish_auto_box=function()
-        return panel_bounds.x-4,panel_bounds.y-4,panel_bounds.width+8,panel_bounds.height+8
+        return panel_bounds.x-4,panel_bounds.y-4,panel_bounds.width+8+auto_box_right_extra,panel_bounds.height+8
     end,
     set_panel_bounds=function(x,y,width,height)
         panel_bounds={x=x,y=y,width=width,height=height}
@@ -63,6 +69,7 @@ local action_bindings={
 local guard={
     inventory_open=function() return false end,
     acquire_manual_controls=function(player) assert(player==1); acquired=acquired+1; return true end,
+    suppress_text_controls=function(player) assert(player==1); text_suppressed=text_suppressed+1; return true end,
     release_manual_controls=function() released=released+1; return true end,
     capture_scroll_selection=function() return nil end,
     restore_scroll_selection=function() end,
@@ -144,7 +151,9 @@ assert(tab_tiles.CONTROLS.icon=='data/ui_gfx/gun_actions/divide_2.png',
     'CONTROLS did not use the Divide by 2 spell icon')
 
 frame=2; text_active=true; controller.draw()
-assert(acquired==1,'focused text input did not temporarily suppress gameplay controls')
+assert(acquired==0 and text_suppressed>0,'focused text input did not suppress transient gameplay actions without disabling controls')
+
+local suppressed_while_focused=text_suppressed
 
 -- A context/tab switch releases the real focus owner before the next tab draws, so
 -- ControlsComponent is not kept disabled by a stale text-entry flag.
@@ -152,7 +161,7 @@ frame=2; queued.open_materials=true; controller.draw()
 assert(controller.active_tab()=='materials' and drawn[#drawn]=='materials',
     'direct section shortcut did not navigate while menu was open')
 assert(focus_blurs==1,'tab switch did not release focused text input')
-assert(acquired==1,'stale text focus kept gameplay controls disabled after tab switch')
+assert(acquired==0 and text_suppressed==suppressed_while_focused,'stale text focus kept suppressing gameplay actions after tab switch')
 assert(saved['metamorph_creative_menu.ui_last_tab']=='materials','last section was not persisted')
 
 frame=3; queued.tab_next=true; controller.draw()
@@ -250,27 +259,32 @@ frame=17; left_down=false; controller.draw()
 local clamped=assert(controller.layout())
 assert(clamped.x==10 and clamped.y==10,'panel drag did not keep the visible resize frame inside the viewport')
 
--- Minimize releases the gameplay-modal state and the title bar restores it.
+-- Close is a real visibility transition: no minimized title-bar-only state remains.
 frame=18; click_label='-'; controller.draw()
-assert(controller.layout().minimized and not controller.is_open(),'hide button did not minimize the menu')
-frame=19; click_label='+'; controller.draw()
-assert(not controller.layout().minimized and controller.is_open(),'restore button did not restore the menu')
+assert(not controller.is_open(),'hide button did not fully hide the menu')
+frame=19; queued.menu_toggle=true; controller.draw()
+assert(controller.is_open() and controller.layout().minimized==false,'F4 did not reopen fully closed menu')
 
--- Recovery button resets both dimensions and position.
+-- Recovery button must ignore stale measured insets from the current/narrow layout.
+-- A content-driven AutoBox can temporarily report a large right inset; one reset click
+-- must still land at the true default instead of requiring a second click next frame.
+auto_box_right_extra=80
+frame=191; controller.draw()
+auto_box_right_extra=0
 frame=20; click_label='R'; controller.draw()
 local reset=assert(controller.layout())
-assert(reset.x==100 and reset.y==20 and reset.width==210 and reset.height==170,
-    'layout reset did not restore responsive defaults')
+assert(reset.x==114 and reset.y==20 and reset.width==196 and reset.height==170,
+    'layout reset reused stale frame insets and required a second click')
 assert(resize_affordance_calls>0,'resizable window corners were never drawn')
 
--- The minimize/close control end of the title row is deliberately not a move target.
+-- The reset/close control end of the title row is deliberately not a move target.
 frame=21; left_just_down=true; left_down=true; mouse_gui_x=305; mouse_gui_y=22
 controller.draw()
 frame=22; left_just_down=false; left_down=true; mouse_gui_x=250; mouse_gui_y=50
 controller.draw()
 frame=23; left_down=false; controller.draw()
 local controls_excluded=assert(controller.layout())
-assert(controls_excluded.x==100 and controls_excluded.y==20,
+assert(controls_excluded.x==114 and controls_excluded.y==20,
     'window-control area incorrectly started title-bar movement')
 
-print('menu_navigation_bindings=PASS useful_default=true toggle=true direct_tabs=true cycling=true persistence=true controls_guard=true focus_tab_blur=true styled_drag_handle=true no_header_arrows=true tab_tooltips_clean=true exact_tab_icons=true full_titlebar_drag=true controls_excluded=true border_hover=true press_origin=true expanded_frame_target=true noita_frame_affordance=true minimize=true viewport_clamp=true reset=true')
+print('menu_navigation_bindings=PASS useful_default=true toggle=true direct_tabs=true cycling=true persistence=true controls_guard=true focus_tab_blur=true styled_drag_handle=true no_header_arrows=true tab_tooltips_clean=true exact_tab_icons=true full_titlebar_drag=true controls_excluded=true border_hover=true press_origin=true expanded_frame_target=true noita_frame_affordance=true full_close=true viewport_clamp=true reset=true')

@@ -55,15 +55,11 @@ require(hint is not None, 'localized spell controls hint missing')
 if hint is not None:
     require(len(hint) == 15, f'spell controls hint has {len(hint)} columns, expected 15')
     require(all(hint[i].strip() for i in range(1, 12)), 'spell controls hint has blank game-language column')
-scroll_hint = by_key.get('mcm_wand_strip_hint')
-require(scroll_hint is not None, 'horizontal strip wheel hint missing')
-if scroll_hint is not None:
-    require(all(scroll_hint[i].strip() for i in range(1, 12)), 'horizontal strip hint has blank game-language column')
-    require('drag' not in scroll_hint[1].lower(), 'English strip hint still promises drag-to-scroll')
+require('mcm_wand_strip_hint' not in by_key, 'obsolete horizontal wheel hint translation remains')
 
 if failures:
     print('spells_ui_structure_contract=FAIL')
     for failure in failures:
         print(' -', failure)
     raise SystemExit(1)
-print('spells_ui_structure_contract=PASS workspaces=2 catalog_surfaces=3 wand_strips=0 placement_modes=false hints_localized=true')
+print('spells_ui_structure_contract=PASS workspaces=2 catalog_surfaces=3 wand_strips=0 wheel_hint=false')

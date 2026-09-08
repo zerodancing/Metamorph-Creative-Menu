@@ -32,7 +32,14 @@ function always_cast_ui.draw(permanent_entries, panel_width, screen_width, scree
         end, 110)
     end
     GuiLayoutEnd(ui.gui())
-    if add_clicked and type(options.on_add_click) == "function" then options.on_add_click() end
+    -- Releasing a dragged spell on the + widget is both a native GuiButton click and a
+    -- drag/drop completion on the same frame. Only the drop may mutate the wand in that
+    -- case; otherwise the selected slot and the dragged slot can both be promoted, growing
+    -- raw deck capacity twice and creating two Always Cast cards from one gesture.
+    local drag_owns_release = type(drag_drop.pending) == "function" and drag_drop.pending() == true
+    if add_clicked and not drag_owns_release and type(options.on_add_click) == "function" then
+        options.on_add_click()
+    end
 
     if #permanent_entries == 0 then
         ui.wrapped_text(0, 0, ui.tr("$mcm_wand_always_cast_empty", "Drop a spell on + to make it Always Cast."), panel_width - 12)
@@ -77,12 +84,8 @@ function always_cast_ui.draw(permanent_entries, panel_width, screen_width, scree
             if right and type(options.on_right_click) == "function" then options.on_right_click(entry) end
             return false, false, hovered, x, y, width, height
         end,
-        {gui=ui.gui(), screen_width=screen_width, screen_height=screen_height})
+        {gui=ui.gui(), screen_width=screen_width, screen_height=screen_height, next_id=ui.next_id})
 
-    if #permanent_entries > strip.visible_count then
-        ui.white_text(0, 0, tostring(strip.first + 1) .. "-" .. tostring(strip.last + 1) .. " / " .. tostring(#permanent_entries)
-            .. "   " .. ui.tr("$mcm_wand_strip_hint", "wheel to scroll"))
-    end
     return strip
 end
 

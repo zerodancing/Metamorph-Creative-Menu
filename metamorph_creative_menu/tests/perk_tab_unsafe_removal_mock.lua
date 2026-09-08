@@ -37,6 +37,7 @@ local catalog={all=function() return {{
 
 dofile=function(path)
     if path=="mods/metamorph_creative_menu/files/ui/runtime.lua" then return ui end
+    if path=="mods/metamorph_creative_menu/files/ui/drag_drop.lua" then return {take_result=function() return nil end,source=function() end,active=function() return false end} end
     if path=="mods/metamorph_creative_menu/files/features/perks/service.lua" then return service end
     if path=="mods/metamorph_creative_menu/files/features/perks/catalog.lua" then return catalog end
     return native_dofile(path)

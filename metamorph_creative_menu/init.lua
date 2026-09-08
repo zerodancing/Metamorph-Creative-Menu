@@ -6,6 +6,7 @@ METAMORPH_CREATIVE_MENU_DEV_MODE = DEV_MODE
 
 -- init.lua is intentionally only the lifecycle/composition root. Feature state and
 -- behavior live in services, form adapters and UI tab modules under files/.
+local global_text = dofile("mods/metamorph_creative_menu/files/core/global_text.lua")
 local localization = dofile("mods/metamorph_creative_menu/files/platform/noita/localization.lua")
 local input_guard = dofile("mods/metamorph_creative_menu/files/platform/noita/input_guard.lua")
 local action_bindings = dofile("mods/metamorph_creative_menu/files/platform/noita/action_bindings.lua")
@@ -17,6 +18,7 @@ local world_rules = dofile("mods/metamorph_creative_menu/files/features/world_ru
 local menu_controller = dofile("mods/metamorph_creative_menu/files/ui/menu_controller.lua")
 local keybinds = dofile("mods/metamorph_creative_menu/files/features/possession/keybinds.lua")
 local ew_resilience = dofile("mods/metamorph_creative_menu/files/integrations/ew/resilience.lua")
+local ew_world_entities = dofile("mods/metamorph_creative_menu/files/integrations/ew/world_entities.lua")
 -- Load the legacy peer-local perk API for compatibility; its old mailbox has no producer
 -- and is intentionally not part of the per-frame lifecycle anymore.
 dofile("mods/metamorph_creative_menu/files/integrations/ew/perk_sync.lua")
@@ -25,6 +27,10 @@ local effect_service = dofile("mods/metamorph_creative_menu/files/features/effec
 local player_avatar = dofile("mods/metamorph_creative_menu/files/features/companion/player_avatar.lua")
 local material_painter = dofile("mods/metamorph_creative_menu/files/features/materials/painter.lua")
 local player_tools = dofile("mods/metamorph_creative_menu/files/features/player_tools/service.lua")
+local asset_service = dofile("mods/metamorph_creative_menu/files/platform/noita/assets.lua")
+local item_catalog = dofile("mods/metamorph_creative_menu/files/features/items/ui_catalog.lua")
+local spell_slot_settler = dofile("mods/metamorph_creative_menu/files/features/spells/slot_settler.lua")
+local death_recovery = dofile("mods/metamorph_creative_menu/files/features/death_recovery/service.lua")
 
 local MOD_NAME = "Metamorph: Creative Menu"
 local EW_RULES_MODULE = "mods/metamorph_creative_menu/files/integrations/ew/bootstrap.lua"
@@ -61,7 +67,7 @@ local function report_runtime_error(scope, failure)
         .. ": " .. scope .. " — " .. failure
     print(diagnostic_message)
     if type(GlobalsSetValue) == "function" then
-        pcall(GlobalsSetValue, "mcm_runtime_error_last_v1", scope .. ": " .. tostring(failure))
+        pcall(GlobalsSetValue, "mcm_runtime_error_last_v1", global_text.encode_diagnostic(scope .. ": " .. tostring(failure)))
     end
     if type(GamePrint) == "function" then pcall(GamePrint, user_message) end
     if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
@@ -140,12 +146,20 @@ function OnModPreInit()
     -- this file as an official extra module lets EW load it after net/ctx exist while
     -- keeping all source and behaviour owned by this mod.
     if ModIsEnabled("quant.ew") and ModDoesFileExist(EW_RULES_MODULE) then
+        protected_call("ew_boss_death.append", ModLuaFileAppend,
+            "mods/quant.ew/files/system/entity_sync_helper/death_notify.lua",
+            "mods/metamorph_creative_menu/files/integrations/ew/boss_death_notify.lua")
         protected_call("ew_extra_module.append", ModLuaFileAppend,
             "mods/quant.ew/files/api/extra_modules.lua", EW_RULES_MODULE)
     end
 end
 
 function OnModPostInit()
+    -- Resolve known vanilla/MCM sprite atlases only after every mod had its normal VFS
+    -- setup opportunity. External manifests remain lazy so mixed load orders cannot
+    -- permanently cache a placeholder. OnModPostInit is still inside Noita's supported
+    -- ModTextFileSetContent initialization window for generated one-frame proxies.
+    protected_call("item_icons.prewarm", item_catalog.prewarm_icons, asset_service)
     local ok_resilience, seed_fallbacks, biome_fallbacks, crosscall_guards =
         protected_call("ew_resilience.post_init", ew_resilience.post_init)
     if not ok_resilience then seed_fallbacks, biome_fallbacks, crosscall_guards = 0, 0, 0 end
@@ -172,8 +186,10 @@ function OnModPostInit()
 end
 
 function OnWorldPreUpdate()
+    protected_call("death_recovery.update", death_recovery.update)
     protected_call("input_guard.update", input_guard.update)
     protected_call("action_bindings.update", action_bindings.update)
+    protected_call("spell_slot_settler.update", spell_slot_settler.update)
     if diagnostics ~= nil then protected_call("diagnostics.update", diagnostics.update) end
     protected_call("effect_service.update", effect_service.update)
     if qa_controller ~= nil then protected_call("qa_controller.update", qa_controller.update) end
@@ -192,6 +208,7 @@ function OnWorldPreUpdate()
     -- is currently being streamed; player lists are never scanned in the background.
     protected_call("player_tools.update", player_tools.update)
     protected_call("perk_service.update", perk_service.update, tonumber(current) or 0)
+    protected_call("ew_world_entities.update", ew_world_entities.update)
     protected_call("player_avatar.update", player_avatar.update)
     protected_call("form_manager.update", form_manager.update)
     -- Vanilla HUD already reads the playerized form DamageModelComponent. The legacy
@@ -204,12 +221,10 @@ function OnWorldPreUpdate()
     -- UI consume it.
     local _, input_blocked = protected_call("input_guard.blocked", input_guard.blocked)
     local return_pressed = false
-    if menu_was_open ~= true then
-        local _, has_form = protected_call("form_manager.has_active_form", form_manager.has_active_form)
-        if has_form == true then
-            local _, pressed = protected_call("action_bindings.return_human", action_bindings.consume, "return_human")
-            return_pressed = pressed == true
-        end
+    local _, has_form = protected_call("form_manager.has_active_form", form_manager.has_active_form)
+    if has_form == true then
+        local _, pressed = protected_call("action_bindings.return_human", action_bindings.consume, "return_human")
+        return_pressed = pressed == true
     end
     local _, handled_return = protected_call("form_manager.handle_tab_return",
         form_manager.handle_tab_return, input_blocked == true, return_pressed)
@@ -221,6 +236,11 @@ function OnWorldPreUpdate()
     end
 
     protected_call("menu_controller.draw", menu_controller.draw)
+end
+
+function OnPausePreUpdate()
+    -- Death recovery is intentionally world-update owned. Keep pause lifecycle free of
+    -- Game Over state mutation.
 end
 
 function OnWorldPostUpdate()

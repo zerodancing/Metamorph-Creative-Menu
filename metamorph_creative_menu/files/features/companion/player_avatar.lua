@@ -2,11 +2,12 @@ if type(METAMORPH_CREATIVE_MENU_PLAYER_AVATAR) == "table" then return METAMORPH_
 
 local player_avatar = {}
 local ew_runtime = dofile("mods/metamorph_creative_menu/files/integrations/ew/runtime.lua")
-local companion_request = dofile("mods/metamorph_creative_menu/files/integrations/ew/companion_request.lua")
-local CLONE_PATH = "mods/metamorph_creative_menu/files/features/companion/player_clone.xml"
+local CLONE_PATH = "data/entities/misc/player_drone_clone.xml"
 local WAND_FALLBACK = "data/entities/items/wand_level_01.xml"
 local companion_health = dofile("mods/metamorph_creative_menu/files/features/companion/health.lua")
+local ew_world_entities = dofile("mods/metamorph_creative_menu/files/integrations/ew/world_entities.lua")
 local pending_health_guards = {}
+local pending_network_activation = {}
 
 local function valid(entity)
     return entity ~= nil and entity ~= 0 and EntityGetIsAlive(entity)
@@ -69,7 +70,7 @@ end
 
 local function copy_visuals(player, clone)
     local body_source = enabled_sprite(player, "character")
-    local body_target = enabled_sprite(clone, "character")
+    local body_target = enabled_sprite(clone, "character") or enabled_sprite(clone)
     for _, field in ipairs({"image_file", "offset_x", "offset_y", "alpha", "special_scale_x", "special_scale_y", "has_special_scale"}) do
         copy_scalar(body_source, body_target, field)
     end
@@ -114,6 +115,46 @@ local function human_blueprint(player, x, y)
         end
     end
     return source, true
+end
+
+local function ensure_companion_structure(clone)
+    if not valid(clone) then return false end
+    for _, tag in ipairs({"enemy", "metamorph_creative_menu_player_clone",
+        "metamorph_creative_menu_companion", "homing_target"}) do
+        if not EntityHasTag(clone, tag) then EntityAddTag(clone, tag) end
+    end
+    local controls = first_component(clone, "ControlsComponent")
+    if controls == nil then
+        controls = EntityAddComponent2(clone, "ControlsComponent", { enabled=false })
+    else
+        pcall(ComponentSetValue2, controls, "enabled", false)
+    end
+    local inventory = first_component(clone, "Inventory2Component")
+    if inventory == nil then
+        inventory = EntityAddComponent2(clone, "Inventory2Component", {
+            quick_inventory_slots=8, full_inventory_slots_x=16, full_inventory_slots_y=1,
+        })
+    end
+    if first_component(clone, "ItemPickUpperComponent") == nil then
+        EntityAddComponent2(clone, "ItemPickUpperComponent", {
+            is_in_npc=true, is_immune_to_kicks=true, drop_items_on_death=true,
+        })
+    end
+    if named_child(clone, "inventory_quick") == 0 then
+        local quick = EntityCreateNew("inventory_quick") or 0
+        if quick ~= 0 then EntityAddChild(clone, quick) end
+    end
+    for _, kind in ipairs({"AnimalAIComponent", "PathFindingComponent"}) do
+        for _, c in ipairs(EntityGetComponentIncludingDisabled(clone, kind) or {}) do
+            pcall(EntitySetComponentIsEnabled, clone, c, false)
+        end
+    end
+    if first_component(clone, "VariableStorageComponent", "mcm_companion_next_fire") == nil then
+        EntityAddComponent2(clone, "VariableStorageComponent", {
+            _tags="mcm_companion_next_fire", name="mcm_companion_next_fire", value_int=0,
+        })
+    end
+    return inventory ~= nil
 end
 
 local function active_wand(player)
@@ -272,9 +313,35 @@ local function equip_wand(player, clone, x, y)
     return false, actions, "inventory_attach"
 end
 
+local function add_local_runtime(clone)
+    if not valid(clone) then return false end
+    -- These scripts are deliberately added only after native DES has captured the initial
+    -- serialized entity. A stock peer therefore never needs any mods/metamorph... path.
+    local ai_present = false
+    for _, component in ipairs(EntityGetComponentIncludingDisabled(clone, "LuaComponent") or {}) do
+        if ComponentHasTag(component, "metamorph_creative_menu_companion_ai") then ai_present = true; break end
+    end
+    if not ai_present then
+        EntityAddComponent2(clone, "LuaComponent", {
+            _tags="metamorph_creative_menu_companion_ai,ew_remove_on_send",
+            script_source_file="mods/metamorph_creative_menu/files/features/companion/ai.lua",
+            execute_every_n_frame=1,
+        })
+    end
+    EntityAddComponent2(clone, "LuaComponent", {
+        _tags="mcm_companion_spawn_guard,ew_remove_on_send",
+        script_source_file="mods/metamorph_creative_menu/files/features/companion/spawn_guard.lua",
+        execute_on_added=true,
+        execute_every_n_frame=1,
+        remove_after_executed=false,
+    })
+    return true
+end
+
 local function build_clone(player, x, y)
     local clone = EntityLoad(CLONE_PATH, x, y) or 0
     if clone == 0 then return 0, "load" end
+    ensure_companion_structure(clone)
     if type(GenomeSetHerdId) == "function" then pcall(GenomeSetHerdId, clone, "player") end
     local genome = first_component(clone, "GenomeDataComponent")
     if genome ~= nil then pcall(ComponentSetValue2, genome, "herd_id", "player") end
@@ -304,18 +371,17 @@ local function build_clone(player, x, y)
             value_float=final_max, value_int=GameGetFrameNum(), value_bool=false,
         })
     end
-    EntityAddComponent2(clone, "LuaComponent", {
-        _tags="mcm_companion_spawn_guard",
-        script_source_file="mods/metamorph_creative_menu/files/features/companion/spawn_guard.lua",
-        execute_on_added=true,
-        execute_every_n_frame=1,
-        remove_after_executed=false,
-    })
-    -- Main-context clones also get a lifecycle-level guard. This is intentionally the
-    -- same companion_health.repair() implementation as the per-entity component above,
-    -- not a second health algorithm. It closes the real-engine case where a dynamically
-    -- added LuaComponent is scheduled too late to beat base_humanoid's 1/1 clamp.
+    -- Main-context health repair is safe before network registration because it contains
+    -- no file-path dependency. MCM Lua controllers are delayed until EW has assigned a
+    -- DES identity, so the initial entity serialization is fully stock-peer compatible.
     pending_health_guards[clone] = true
+    if ew_runtime.enabled() then
+        local prepared = ew_world_entities.track(clone)
+        if prepared == true then pending_network_activation[clone] = true
+        else add_local_runtime(clone) end
+    else
+        add_local_runtime(clone)
+    end
     if temporary and valid(source) then EntityKill(source) end
     return clone, "ok"
 end
@@ -345,13 +411,22 @@ function player_avatar.update()
             if finished then pending_health_guards[clone] = nil end
         end
     end
+    for clone in pairs(pending_network_activation) do
+        if not valid(clone) then
+            pending_network_activation[clone] = nil
+        elseif ew_world_entities.is_tracked(clone) then
+            add_local_runtime(clone)
+            pending_network_activation[clone] = nil
+        end
+    end
 end
 
 function player_avatar.request_spawn(player, offset_x, offset_y)
-    if ew_runtime.mode() ~= "client" then
-        return player_avatar.spawn_visual_copy(player, offset_x, offset_y) ~= 0, "local"
-    end
-    return companion_request.enqueue(offset_x, offset_y)
+    -- Distributed Entity Sync is authoritative on whichever peer creates the entity.
+    -- Never require an MCM RPC handler on the host: the other player may have stock EW
+    -- only. The locally-created serialized clone is enough for native DES replication.
+    local clone = player_avatar.spawn_visual_copy(player, offset_x, offset_y)
+    return clone ~= 0, ew_runtime.enabled() and "local_des" or "local"
 end
 
 METAMORPH_CREATIVE_MENU_PLAYER_AVATAR = player_avatar

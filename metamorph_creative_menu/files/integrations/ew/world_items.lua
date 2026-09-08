@@ -9,6 +9,13 @@ local OUTBOX_ENTITY_KEY = "mcm_world_item_outbox_entity_v1"
 local OUTBOX_ACK_KEY = "mcm_world_item_outbox_ack_v1"
 local OUTBOX_RESULT_KEY = "mcm_world_item_outbox_result_v1"
 local outbox_sequence = 0 -- merge the persisted value lazily in notify_world_item()
+local CREATIVE_PERK_SEQ_KEY = "mcm_creative_perk_spawn_seq_v1"
+local CREATIVE_PERK_ENTITY_KEY = "mcm_creative_perk_spawn_entity_v1:"
+local CREATIVE_PERK_ID_KEY = "mcm_creative_perk_spawn_id_v1:"
+local CREATIVE_PERK_X_KEY = "mcm_creative_perk_spawn_x_v1:"
+local CREATIVE_PERK_Y_KEY = "mcm_creative_perk_spawn_y_v1:"
+local CREATIVE_PERK_FRAME_KEY = "mcm_creative_perk_spawn_frame_v1:"
+local creative_perk_sequence = 0
 
 local function valid_entity(entity)
     return entity ~= nil and entity ~= 0 and EntityGetIsAlive(entity)
@@ -54,6 +61,28 @@ function world_items.notify_world_item(entity)
     -- Publish the sequence last so EW never consumes a half-written event.
     GlobalsSetValue(OUTBOX_SEQUENCE_KEY, tostring(outbox_sequence))
     return true, "queued:" .. tostring(outbox_sequence)
+end
+
+function world_items.register_creative_perk(entity, perk_id)
+    perk_id = tostring(perk_id or "")
+    if perk_id == "" or not valid_entity(entity) then return false, "invalid" end
+    if not ew_runtime.enabled() then return true, "singleplayer" end
+    if type(GlobalsSetValue) ~= "function" or type(GlobalsGetValue) ~= "function" then
+        return false, "globals_unavailable"
+    end
+    local x, y = EntityGetTransform(entity)
+    if tonumber(x) == nil or tonumber(y) == nil then return false, "position" end
+    creative_perk_sequence = math.max(creative_perk_sequence,
+        tonumber(GlobalsGetValue(CREATIVE_PERK_SEQ_KEY, "0")) or 0) + 1
+    local suffix = tostring(creative_perk_sequence)
+    GlobalsSetValue(CREATIVE_PERK_ENTITY_KEY .. suffix, tostring(entity))
+    GlobalsSetValue(CREATIVE_PERK_ID_KEY .. suffix, perk_id)
+    GlobalsSetValue(CREATIVE_PERK_X_KEY .. suffix, tostring(x))
+    GlobalsSetValue(CREATIVE_PERK_Y_KEY .. suffix, tostring(y))
+    GlobalsSetValue(CREATIVE_PERK_FRAME_KEY .. suffix,
+        tostring(type(GameGetFrameNum)=="function" and GameGetFrameNum() or 0))
+    GlobalsSetValue(CREATIVE_PERK_SEQ_KEY, suffix)
+    return true, "registered:" .. suffix
 end
 
 function world_items.world_sync_state(entity)

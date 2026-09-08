@@ -17,6 +17,73 @@ function effect_service.catalog()
     return effect_catalog.entries()
 end
 
+function effect_service.variant_count(entry)
+    local variants = type(entry) == "table" and entry.variants or nil
+    return type(variants) == "table" and math.max(1, #variants) or 1
+end
+
+function effect_service.max_variant_count()
+    local maximum = 1
+    for _, entry in ipairs(effect_service.catalog()) do
+        maximum = math.max(maximum, effect_service.variant_count(entry))
+    end
+    return maximum
+end
+
+function effect_service.resolve_variant(entry, index)
+    if type(entry) ~= "table" then return entry end
+    local variants = entry.variants
+    if type(variants) ~= "table" or #variants == 0 then return entry end
+    index = math.max(1, math.min(#variants, math.floor(tonumber(index) or 1)))
+    local variant = variants[index]
+    if type(variant) ~= "table" then return entry end
+    local resolved = {}
+    for key, value in pairs(entry) do if key ~= "variants" then resolved[key] = value end end
+    for key, value in pairs(variant) do resolved[key] = value end
+    resolved.variant_index = index
+    resolved.variant_count = #variants
+    return resolved
+end
+
+function effect_service.family_key(entry)
+    if type(entry) ~= "table" then return "" end
+    if entry.kind == "status" then return "status:" .. tostring(entry.id or entry.path or "") end
+    return "effect:" .. tostring(entry.id or entry.custom_effect_id or entry.game_effect or entry.path or "")
+end
+
+function effect_service.duration_policy(entry)
+    if type(entry) ~= "table" then return "editable" end
+    if entry.kind == "status" and type(entry.material) == "string" and entry.material ~= "" then return "native" end
+    if entry.disable_movement == true then return "authored" end
+    return "editable"
+end
+
+function effect_service.authored_frames(entry)
+    if type(entry) ~= "table" then return nil end
+    local value = tonumber(entry.authored_frames)
+    if value == nil then value = tonumber(entry.authored_lifetime) end
+    if value == nil then return nil end
+    return value < 0 and -1 or math.max(1, math.floor(value))
+end
+
+local function requested_duration(entry, frames)
+    if effect_service.duration_policy(entry) == "authored" then
+        return effect_service.authored_frames(entry)
+    end
+    if frames == nil then return nil end
+    frames = tonumber(frames)
+    if frames == nil then return nil end
+    return frames < 0 and -1 or math.max(1, math.floor(frames))
+end
+
+function effect_service.variant_label(entry, index)
+    local resolved = effect_service.resolve_variant(entry, index)
+    if type(resolved) ~= "table" then return tostring(index or 1) end
+    local label = tostring(resolved.display_name or resolved.id or "")
+    if label == "" then label = tostring(index or 1) end
+    return label
+end
+
 local function status_vector_value(player, entry)
     local comp = EntityGetFirstComponentIncludingDisabled(player, "StatusEffectDataComponent")
     if comp == nil or comp == 0 then return 0 end
@@ -63,28 +130,123 @@ local function add_surface_status(player, entry)
     return false
 end
 
+local function game_effect_components(entity)
+    if entity == nil or entity == 0 then return {} end
+    if type(EntityGetComponentIncludingDisabled) == "function" then
+        local ok, values = pcall(EntityGetComponentIncludingDisabled, entity, "GameEffectComponent")
+        if ok and type(values) == "table" then return values end
+    end
+    local first = EntityGetFirstComponentIncludingDisabled(entity, "GameEffectComponent")
+    return first ~= nil and first ~= 0 and {first} or {}
+end
+
+local function component_active(comp)
+    local frames = tonumber(ComponentGetValue2(comp, "frames")) or 0
+    return frames == -1 or frames > 1
+end
+local EFFECT_START_MARKER = "mcm_effect_start_frame"
+
+local function lifetime_component(entity)
+    if entity == nil or entity == 0 then return 0 end
+    local comp = EntityGetFirstComponentIncludingDisabled(entity, "LifetimeComponent")
+    return comp ~= nil and comp ~= 0 and comp or 0
+end
+
+local function effect_start_frame(entity)
+    for _, comp in ipairs(EntityGetComponentIncludingDisabled(entity, "VariableStorageComponent") or {}) do
+        if tostring(ComponentGetValue2(comp, "name") or "") == EFFECT_START_MARKER then
+            return tonumber(ComponentGetValue2(comp, "value_int"))
+        end
+    end
+    return nil
+end
+
+local function ensure_effect_start_frame(entity)
+    local existing = effect_start_frame(entity)
+    if existing ~= nil then return existing end
+    local frame = GameGetFrameNum()
+    local ok = pcall(EntityAddComponent2, entity, "VariableStorageComponent", {
+        name=EFFECT_START_MARKER, value_int=frame,
+    })
+    return ok and frame or nil
+end
+
+local function lifetime_remaining(entity)
+    local comp = lifetime_component(entity)
+    if comp == 0 then return nil end
+    local lifetime = tonumber(ComponentGetValue2(comp, "lifetime"))
+    if lifetime == nil then return nil end
+    if lifetime < 0 then return -1 end
+    local started = effect_start_frame(entity)
+    if started == nil then return lifetime end
+    return math.max(0, lifetime - math.max(0, GameGetFrameNum() - started))
+end
+
+local function entity_effect_active(entity)
+    if entity == nil or entity == 0 or not EntityGetIsAlive(entity) then return false end
+    for _, comp in ipairs(game_effect_components(entity)) do
+        if component_active(comp) then return true end
+    end
+    local lifetime = lifetime_component(entity)
+    if lifetime ~= 0 then
+        local remaining = lifetime_remaining(entity)
+        return remaining == -1 or remaining == nil or remaining > 0
+    end
+    return false
+end
+
 local function game_effect_name(entity)
-    local comp = EntityGetFirstComponentIncludingDisabled(entity, "GameEffectComponent")
+    local components = game_effect_components(entity)
+    local comp = components[1]
     if comp == nil or comp == 0 then return "" end
     local effect = tostring(ComponentGetValue2(comp, "effect") or "")
     if effect == "CUSTOM" then return tostring(ComponentGetValue2(comp, "custom_effect_id") or "") end
     return effect
 end
 
-local function apply_game_effect(player, entry, frames)
-    if type(entry.path) ~= "string" or entry.path == "" or not ModDoesFileExist(entry.path) then return false, "missing" end
-    local ok, effect_entity = pcall(LoadGameEffectEntityTo, player, entry.path)
-    if not ok or effect_entity == nil or effect_entity == 0 then return false, "load" end
-    EntityAddTag(effect_entity, "metamorph_creative_menu_effect")
-    local comp = EntityGetFirstComponentIncludingDisabled(effect_entity, "GameEffectComponent")
-    if comp ~= nil and comp ~= 0 then
-        local duration = tonumber(frames)
-        if duration ~= nil then pcall(ComponentSetValue2, comp, "frames", duration < 0 and -1 or math.max(1, math.floor(duration))) end
+local function set_effect_duration(entity, frames, additive, reset_remaining)
+    local requested = tonumber(frames)
+    if requested == nil then return true end
+    requested = requested < 0 and -1 or math.max(1, math.floor(requested))
+
+    local components = game_effect_components(entity)
+    if #components > 0 then
+        local wrote = false
+        for _, comp in ipairs(components) do
+            local current = tonumber(ComponentGetValue2(comp, "frames")) or 0
+            local value = requested
+            if additive == true then
+                if requested == -1 or current == -1 then
+                    value = -1
+                elseif current > 1 then
+                    value = current + requested
+                end
+            end
+            if pcall(ComponentSetValue2, comp, "frames", value) then wrote = true end
+        end
+        return wrote
     end
 
+    -- Several real player-facing vanilla effects (Twitchy, Wither, Hearty, shot effects)
+    -- are LifetimeComponent entities rather than GameEffectComponent entities. Treat their
+    -- lifetime as the same duration surface instead of listing buttons that silently fail.
+    local lifetime = lifetime_component(entity)
+    if lifetime == 0 then return false end
+    local current = tonumber(ComponentGetValue2(lifetime, "lifetime")) or 0
+    local value = requested
+    if reset_remaining == true and requested ~= -1 then
+        local started = ensure_effect_start_frame(entity) or GameGetFrameNum()
+        value = math.max(1, GameGetFrameNum() - started) + requested
+    elseif additive == true then
+        if requested == -1 or current == -1 then value = -1 else value = math.max(0,current) + requested end
+    end
+    return pcall(ComponentSetValue2, lifetime, "lifetime", value)
+end
+
+local function ensure_hud_icon(effect_entity, entry)
     -- Use Noita's own right-side HUD rather than a second mod-owned timer panel. A
     -- UIIconComponent on the same child entity as GameEffectComponent is the standard
-    -- presentation path; the GameEffect frames remain the single source of duration.
+    -- presentation path; GameEffect frames remain the single source of duration.
     local icon = EntityGetFirstComponentIncludingDisabled(effect_entity, "UIIconComponent")
     if icon == nil or icon == 0 then
         local ok_icon, created = pcall(EntityAddComponent2, effect_entity, "UIIconComponent", {
@@ -101,7 +263,60 @@ local function apply_game_effect(player, entry, frames)
         pcall(ComponentSetValue2, icon, "is_perk", false)
         if tostring(entry.icon or "") ~= "" then pcall(ComponentSetValue2, icon, "icon_sprite_file", tostring(entry.icon)) end
     end
-    return true, game_effect_name(effect_entity)
+    return icon
+end
+
+local function perk_owned_effect(child)
+    if type(EntityHasTag) ~= "function" then return false end
+    local ok, tagged = pcall(EntityHasTag, child, "perk_entity")
+    return ok and tagged == true
+end
+
+local function active_exact_path_effect(player, path, editable_only)
+    path = tostring(path or "")
+    if path == "" then return 0 end
+    for _, child in ipairs(EntityGetAllChildren(player) or {}) do
+        if EntityGetIsAlive(child) and tostring(EntityGetFilename(child) or "") == path
+            and entity_effect_active(child)
+            and (editable_only ~= true or not perk_owned_effect(child))
+        then
+            return child
+        end
+    end
+    return 0
+end
+
+local function apply_game_effect(player, entry, frames)
+    if type(entry.path) ~= "string" or entry.path == "" or not ModDoesFileExist(entry.path) then return false, "missing" end
+
+    -- Reapplying the exact same vanilla effect variant extends the existing entity.
+    -- Creating another child makes Noita show five separate HUD rows for five clicks and
+    -- also changes semantics for custom effects. Different XML paths remain independent
+    -- (e.g. the four mushroom-trip strengths deliberately share custom_effect_id TRIP_00).
+    local duration = requested_duration(entry, frames)
+    local existing = active_exact_path_effect(player, entry.path, true)
+    if existing ~= 0 then
+        -- Ordinary effects stack duration on repeat. Hard control-lock effects (the
+        -- vanilla electrocution/freeze style) are authored as short pulses and must
+        -- never become a minutes-long or infinite input lock through the editor.
+        local additive = effect_service.duration_policy(entry) ~= "authored"
+        if not set_effect_duration(existing, duration, additive) then return false, "stack_failed" end
+        ensure_hud_icon(existing, entry)
+        return true, additive and "stacked" or "retriggered"
+    end
+
+    local ok, effect_entity = pcall(LoadGameEffectEntityTo, player, entry.path)
+    if not ok or effect_entity == nil or effect_entity == 0 then return false, "load" end
+    EntityAddTag(effect_entity, "metamorph_creative_menu_effect")
+    if lifetime_component(effect_entity) ~= 0 then ensure_effect_start_frame(effect_entity) end
+    if not set_effect_duration(effect_entity, duration, false) then
+        pcall(EntityKill, effect_entity)
+        return false, "component_missing"
+    end
+    ensure_hud_icon(effect_entity, entry)
+    local name = game_effect_name(effect_entity)
+    if name == "" then name = tostring(entry.id or entry.path or "effect") end
+    return true, name
 end
 
 function effect_service.add(player, entry, frames)
@@ -155,22 +370,30 @@ end
 
 local function expire_effect_entity(entity)
     if entity == nil or entity == 0 or not EntityGetIsAlive(entity) then return false, false end
-    local comp = EntityGetFirstComponentIncludingDisabled(entity, "GameEffectComponent")
-    if comp == nil or comp == 0 then return false, false end
-    local effect = effective_component_id(comp)
-    if RESERVED_EFFECTS[effect] or not is_user_facing_effect_entity(entity) then return false, false end
+    local components = game_effect_components(entity)
+    if #components == 0 then
+        if lifetime_component(entity) == 0 or not is_user_facing_effect_entity(entity) then return false, false end
+        -- Lifetime-backed status entities rely on execute_on_removed cleanup scripts.
+        -- Killing the exact child is the native way to run those end hooks immediately.
+        pcall(EntityKill, entity)
+        return true, true
+    end
+    for _, comp in ipairs(components) do
+        local effect = effective_component_id(comp)
+        if RESERVED_EFFECTS[effect] then return false, false end
+    end
+    if not is_user_facing_effect_entity(entity) then return false, false end
 
-    -- First ask Noita to expire the effect normally. Some persistent GameEffect entities
-    -- keep their XML child alive even after frames reaches 1, however; merely observing
-    -- frames<=1 made the old QA report success while PROTECTION_ALL was still resident.
-    -- For effects created by this service we therefore keep a short, bounded retirement
-    -- journal: the engine gets several updates to run normal expiry callbacks, then only
-    -- the still-resident mod-owned entity is retired. Pre-existing/perk effects are never
-    -- force-killed by this fallback.
-    local before = tonumber(ComponentGetValue2(comp, "frames")) or -1
-    local ok = pcall(ComponentSetValue2, comp, "frames", 1)
-    local after = ok and tonumber(ComponentGetValue2(comp, "frames")) or before
-    local changed = ok and after ~= nil and after <= 1 and (before == -1 or before > 1)
+    -- Ask every GameEffectComponent in the selected entity to expire. Some strong
+    -- variants contain more than one component (the strongest trip also carries its
+    -- secondary sickness state), so touching only the first left partial residue.
+    local changed = false
+    for _, comp in ipairs(components) do
+        local before = tonumber(ComponentGetValue2(comp, "frames")) or -1
+        local ok = pcall(ComponentSetValue2, comp, "frames", 1)
+        local after = ok and tonumber(ComponentGetValue2(comp, "frames")) or before
+        if ok and after ~= nil and after <= 1 and (before == -1 or before > 1) then changed = true end
+    end
     if changed and EntityHasTag(entity, "metamorph_creative_menu_effect") then
         pending_expiry[entity] = GameGetFrameNum()
     end
@@ -179,6 +402,32 @@ end
 
 function effect_service.update()
     local frame = GameGetFrameNum()
+    -- Repair legacy MCM-owned control-lock effects created by older editor builds.
+    -- Those builds could stretch ELECTROCUTION from its authored 40 frames to minutes/∞.
+    -- Clamp only MCM-owned children and only components that actually disable movement.
+    local owned_effects = type(EntityGetWithTag) == "function" and (EntityGetWithTag("metamorph_creative_menu_effect") or {}) or {}
+    for _, child in ipairs(owned_effects) do
+        if EntityGetIsAlive(child) then
+            for _, comp in ipairs(game_effect_components(child)) do
+                local ok_lock, locked = pcall(ComponentGetValue2, comp, "disable_movement")
+                if ok_lock and locked == true then
+                    local current = tonumber(ComponentGetValue2(comp, "frames")) or 0
+                    local filename = tostring(EntityGetFilename(child) or "")
+                    local authored = nil
+                    for _, entry in ipairs(effect_service.catalog()) do
+                        if tostring(entry.path or "") == filename then authored = effect_service.authored_frames(entry); break end
+                        for _, variant in ipairs(type(entry.variants)=="table" and entry.variants or {}) do
+                            if tostring(variant.path or "") == filename then authored = effect_service.authored_frames(variant); break end
+                        end
+                        if authored ~= nil then break end
+                    end
+                    if authored ~= nil and authored > 0 and (current == -1 or current > authored) then
+                        pcall(ComponentSetValue2, comp, "frames", authored)
+                    end
+                end
+            end
+        end
+    end
     for entity, started in pairs(pending_expiry) do
         if entity == nil or entity == 0 or not EntityGetIsAlive(entity)
             or not EntityHasTag(entity, "metamorph_creative_menu_effect")
@@ -186,13 +435,15 @@ function effect_service.update()
             pending_expiry[entity] = nil
         else
             local age = frame - (tonumber(started) or frame)
-            local comp = EntityGetFirstComponentIncludingDisabled(entity, "GameEffectComponent")
-            if comp == nil or comp == 0 then
+            local components = game_effect_components(entity)
+            if #components == 0 then
                 pending_expiry[entity] = nil
             else
                 -- Escalate once after the normal frames=1 request. frames=0 gives the
                 -- GameEffect lifecycle another deterministic expiry tick before fallback.
-                if age >= 2 then pcall(ComponentSetValue2, comp, "frames", 0) end
+                if age >= 2 then
+                    for _, comp in ipairs(components) do pcall(ComponentSetValue2, comp, "frames", 0) end
+                end
                 if age >= 4 then
                     -- Only our own tagged child reaches this path. It has already had
                     -- multiple normal expiry updates, so retiring it cannot delete a
@@ -238,17 +489,95 @@ function effect_service.update()
 end
 
 matches_entry = function(child, entry)
-    local filename = EntityGetFilename(child)
-    if type(entry.path) == "string" and entry.path ~= "" and filename == entry.path then return true end
+    local filename = tostring(EntityGetFilename(child) or "")
+    local path = tostring(entry.path or "")
+    -- Path-backed catalogue entries are exact variants. Never fall through to a shared
+    -- custom id: all four TRIP XMLs report TRIP_00, and removing one strength must not
+    -- remove the other three.
+    if path ~= "" then return filename == path end
     local comp = EntityGetFirstComponentIncludingDisabled(child, "GameEffectComponent")
     if comp == nil or comp == 0 then return false end
-    local effect = tostring(ComponentGetValue2(comp, "effect") or "")
-    if effect == "CUSTOM" then effect = tostring(ComponentGetValue2(comp, "custom_effect_id") or "") end
+    local effect = effective_component_id(comp)
     if type(entry.game_effect) == "string" and entry.game_effect ~= "" and effect == entry.game_effect then return true end
     if type(entry.custom_effect_id) == "string" and entry.custom_effect_id ~= "" and effect == entry.custom_effect_id then return true end
     return false
 end
 
+
+function effect_service.remaining_frames(player, entry)
+    if not valid_player(player) or type(entry) ~= "table" then return nil end
+    local path = tostring(entry.path or "")
+    if path ~= "" then
+        local entity = active_exact_path_effect(player, path)
+        if entity ~= 0 then
+            local components = game_effect_components(entity)
+            if #components == 0 then return lifetime_remaining(entity) end
+            local remaining = nil
+            for _, comp in ipairs(components) do
+                local frames = tonumber(ComponentGetValue2(comp, "frames"))
+                if frames == -1 then return -1 end
+                if frames ~= nil and frames > 1 then remaining = math.max(remaining or 0, frames) end
+            end
+            return remaining
+        end
+    end
+    return nil
+end
+
+function effect_service.family_remaining_frames(player, entry)
+    if not valid_player(player) or type(entry) ~= "table" then return nil end
+    local remaining = nil
+    for index=1,effect_service.variant_count(entry) do
+        local value = effect_service.remaining_frames(player, effect_service.resolve_variant(entry,index))
+        if value == -1 then return -1 end
+        if value ~= nil then remaining = math.max(remaining or 0, value) end
+    end
+    return remaining
+end
+
+function effect_service.set_remaining(player, entry, frames)
+    if not valid_player(player) or type(entry) ~= "table" then return false, "target" end
+    if effect_service.duration_policy(entry) ~= "editable" then return false, "fixed_duration" end
+    local entity = active_exact_path_effect(player, tostring(entry.path or ""), true)
+    if entity == 0 then return false, "inactive" end
+    local duration = requested_duration(entry, frames)
+    if duration == nil then duration = effect_service.authored_frames(entry) end
+    if duration == nil then return false, "duration_unknown" end
+    return set_effect_duration(entity, duration, false, true), "set"
+end
+
+function effect_service.switch_variant(player, entry, variant_index)
+    if not valid_player(player) or type(entry) ~= "table" then return false, "target" end
+    local remaining = effect_service.family_remaining_frames(player, entry)
+    local count = effect_service.variant_count(entry)
+    variant_index = math.max(1, math.min(count, math.floor(tonumber(variant_index) or 1)))
+    if remaining == nil then return true, "selected" end
+    local selected = effect_service.resolve_variant(entry, variant_index)
+    effect_service.remove_family(player, entry)
+    local duration = effect_service.duration_policy(selected) == "authored" and nil or remaining
+    return effect_service.add(player, selected, duration)
+end
+
+function effect_service.is_family_active(player, entry, snapshot)
+    if type(entry) ~= "table" then return false end
+    local count = effect_service.variant_count(entry)
+    for index=1,count do
+        if effect_service.is_active(player, effect_service.resolve_variant(entry,index), snapshot) then return true end
+    end
+    return false
+end
+
+-- Return the strongest currently active authored variant. This lets the editor open on the
+-- state the player actually has instead of always snapping back to variant 1.
+function effect_service.active_variant_index(player, entry, snapshot)
+    if type(entry) ~= "table" then return nil end
+    for index=effect_service.variant_count(entry),1,-1 do
+        if effect_service.is_active(player, effect_service.resolve_variant(entry,index), snapshot) then
+            return index
+        end
+    end
+    return nil
+end
 function effect_service.remove(player, entry)
     if not valid_player(player) or type(entry) ~= "table" then return 0 end
     local removed = 0
@@ -263,6 +592,42 @@ function effect_service.remove(player, entry)
     for _, child in ipairs(EntityGetAllChildren(player) or {}) do
         if not EntityHasTag(child, "perk_entity") and matches_entry(child, entry) then
             if expire_effect_entity(child) then removed = removed + 1 end
+        end
+    end
+    return removed
+end
+
+-- Variant families represent mutually-exclusive authored stages (TRIP, CURSE_CLOUD,
+-- ingestion drunkenness, ...), not independent catalogue effects. Applying a new stage
+-- retires active sibling stages, while reapplying the already-selected stage keeps the
+-- useful additive-duration behavior.
+function effect_service.set_variant(player, entry, variant_index, frames)
+    if not valid_player(player) or type(entry) ~= "table" then return false, "target" end
+    local count = effect_service.variant_count(entry)
+    variant_index = math.max(1, math.min(count, math.floor(tonumber(variant_index) or 1)))
+    local selected = effect_service.resolve_variant(entry, variant_index)
+    if count > 1 then
+        local snapshot = effect_service.active_snapshot(player)
+        for index=1,count do
+            if index ~= variant_index then
+                local sibling = effect_service.resolve_variant(entry, index)
+                if effect_service.is_active(player, sibling, snapshot) then effect_service.remove(player, sibling) end
+            end
+        end
+    end
+    return effect_service.add(player, selected, frames)
+end
+
+function effect_service.remove_family(player, entry)
+    if not valid_player(player) or type(entry) ~= "table" then return 0 end
+    local removed = 0
+    local seen = {}
+    for index=1,effect_service.variant_count(entry) do
+        local variant = effect_service.resolve_variant(entry, index)
+        local key = tostring(variant.path or "") .. "|" .. tostring(variant.id or "")
+        if not seen[key] then
+            seen[key] = true
+            removed = removed + effect_service.remove(player, variant)
         end
     end
     return removed
@@ -337,16 +702,16 @@ function effect_service.active_snapshot(player)
     end
 
     for _, child in ipairs(EntityGetAllChildren(player) or {}) do
-        local comp = EntityGetFirstComponentIncludingDisabled(child, "GameEffectComponent")
-        if comp ~= nil and comp ~= 0 then
-            local frames = tonumber(ComponentGetValue2(comp, "frames")) or 0
-            if frames == -1 or frames > 1 then
-                local filename = EntityGetFilename(child)
-                if type(filename) == "string" and filename ~= "" then snapshot.paths[filename] = true end
-                local effect = tostring(ComponentGetValue2(comp, "effect") or "")
-                if effect == "CUSTOM" then effect = tostring(ComponentGetValue2(comp, "custom_effect_id") or "") end
-                if effect ~= "" then snapshot.effect_ids[effect] = true end
+        local active = entity_effect_active(child)
+        if active then
+            for _, comp in ipairs(game_effect_components(child)) do
+                if component_active(comp) then
+                    local effect = effective_component_id(comp)
+                    if effect ~= "" then snapshot.effect_ids[effect] = true end
+                end
             end
+            local filename = EntityGetFilename(child)
+            if type(filename) == "string" and filename ~= "" then snapshot.paths[filename] = true end
         end
     end
     return snapshot
@@ -363,7 +728,7 @@ function effect_service.is_active(player, entry, snapshot)
             then return true end
         end
         local path = tostring(entry.path or "")
-        if path ~= "" and snapshot.paths[path] then return true end
+        if path ~= "" then return snapshot.paths[path] == true end
         local game_effect = tostring(entry.game_effect or "")
         if game_effect ~= "" and snapshot.effect_ids[game_effect] then return true end
         local custom_effect = tostring(entry.custom_effect_id or "")
@@ -381,11 +746,7 @@ function effect_service.is_active(player, entry, snapshot)
         end
     end
     for _, child in ipairs(EntityGetAllChildren(player) or {}) do
-        if matches_entry(child, entry) then
-            local comp = EntityGetFirstComponentIncludingDisabled(child, "GameEffectComponent")
-            local frames = comp ~= nil and comp ~= 0 and tonumber(ComponentGetValue2(comp, "frames")) or 0
-            if frames == -1 or frames > 1 then return true end
-        end
+        if matches_entry(child, entry) and entity_effect_active(child) then return true end
     end
     return false
 end

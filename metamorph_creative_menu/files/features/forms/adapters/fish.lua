@@ -7,8 +7,23 @@ local valid = component_ops.valid
 local component = component_ops.first
 local ensure_controls = component_ops.ensure_controls
 local set_component_type_enabled = component_ops.set_type_enabled
+local set_typed_scalar = component_ops.set_typed_scalar
 
-function fish_adapter.configure(entity)
+function fish_adapter.configure(entity, profile)
+    -- Native polymorph can leave player respiratory values on the playerized body.
+    -- Fish authored with air_needed=0 must keep that property; otherwise the transformed
+    -- player drowns in water even though the source creature cannot. Restore only fields
+    -- explicitly authored by the selected form so modded fish retain their own breathing
+    -- model instead of receiving a hard-coded fish exemption.
+    local damage_model = component(entity, "DamageModelComponent")
+    local authored_damage = type(profile) == "table" and profile.damage or nil
+    if valid(damage_model) and type(authored_damage) == "table" then
+        for _, field in ipairs({"air_needed", "air_in_lungs_max", "air_in_lungs", "air_lack_of_damage"}) do
+            local authored = authored_damage[field]
+            if authored ~= nil then set_typed_scalar(damage_model, field, authored) end
+        end
+    end
+
     set_component_type_enabled(entity, "AdvancedFishAIComponent", true)
     local fish_ai_component = component(entity, "AdvancedFishAIComponent")
     if valid(fish_ai_component) then

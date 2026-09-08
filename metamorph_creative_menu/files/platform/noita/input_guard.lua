@@ -1,6 +1,7 @@
 if type(METAMORPH_CREATIVE_MENU_INPUT_GUARD) == "table" then return METAMORPH_CREATIVE_MENU_INPUT_GUARD end
 
 local input_guard = {}
+local text_entry_guard = dofile("mods/metamorph_creative_menu/files/platform/noita/text_entry_guard.lua")
 local keycodes = dofile("mods/metamorph_creative_menu/files/platform/noita/keycodes.lua")
 
 local alt_key_codes = nil
@@ -82,7 +83,11 @@ function input_guard.update()
     -- while updates are suspended, so a discontinuity is a key-independent resume guard.
     local time_read_succeeded, real_time_seconds = pcall(GameGetRealWorldTimeSinceStarted)
     if time_read_succeeded and type(real_time_seconds) == "number" then
-        if previous_real_time_seconds ~= nil and real_time_seconds - previous_real_time_seconds > FOCUS_GAP_SECONDS then
+        -- First-use search/localization work can exceed this threshold without any
+        -- window focus change. A timing gap alone must not tear down an owned editor.
+        -- Explicit Alt transitions above still quarantine input while typing.
+        if not text_entry_guard.active() and previous_real_time_seconds ~= nil
+            and real_time_seconds - previous_real_time_seconds > FOCUS_GAP_SECONDS then
             quarantine_actions(frame_number, FOCUS_RESUME_QUARANTINE_FRAMES)
             mark_resume(frame_number, real_time_seconds, FOCUS_RESUME_HEAVY_QUARANTINE_SECONDS)
         end

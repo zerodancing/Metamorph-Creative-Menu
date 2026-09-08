@@ -31,6 +31,7 @@ dofile=function(path)
 end
 function ComponentGetEntity() return 1 end
 function ComponentSetValue2(c,f,v) values[c]=values[c] or {}; values[c][f]=v end
+function ComponentGetIsEnabled() return true end
 function EntityGetRootEntity() return 1 end
 function EntityGetTransform() return 0,0,0,1,1 end
 function DEBUG_GetMouseWorld() return 100,0 end
@@ -39,7 +40,11 @@ function ModDoesFileExist(path) return path=="secondary.xml" end
 function EntityLoad() loads=loads+1; return 100+loads end
 function EntityKill(e) killed[e]=true end
 function GameShootProjectile() error("native shoot failed") end
-function EntityGetComponentIncludingDisabled() return {} end
+function EntityGetComponentIncludingDisabled(_,kind)
+ if kind=="AnimalAIComponent" then return {animal} end
+ if kind=="AIAttackComponent" then return {attack} end
+ return {}
+end
 function GamePlayAnimation() end
 local combat=assert(native_dofile(root.."/files/features/forms/combat.lua"))
 local first=combat.update_secondary_attacks(1)

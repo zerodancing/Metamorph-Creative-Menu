@@ -1,10 +1,345 @@
-Metamorph: Creative Menu 2.0.0
+TEST 36 - COMPLETE MATERIAL SEARCH / TEXT FOCUS
+
+- Material search now spans ALL categories. water_static remains correctly classified as STATIC and can be found/selected for painting from the default LIQUIDS view. Clearing search restores the selected category.
+- Supplement CellFactory enumerations with named CellData/CellDataChild definitions from the loaded vanilla materials.xml. Only definitions with a valid runtime material identity are admitted; unloaded/commented definitions cannot become bogus air entries. Runtime mod-material enumerations remain included. A completeness fixture covers all 466 unique supplied definition names and deliberately omits water_static and every fifth material from API lists to verify recovery.
+- Release the click's ControlsComponent ownership in the same frame that a text field acquires focus, before the first typing frame.
+- Preserve native InventoryGui mActive while a visible text editor owns the keyboard, before menu visibility synchronization and again after the engine update. This prevents I or a rebound inventory key from closing/opening inventory during text entry, in inventory-attached and F4-only menu modes. Blur releases the reservation.
+- Do not interpret a long frame as an Alt-Tab while a text field owns focus. First-use search/localization stalls no longer reset the editor or suppress the menu until the inventory closes. Explicit Alt transitions keep their existing protection.
+- Reserve the search clear-button widget ID even when the query is empty, so the first character cannot change the native identities of following controls.
+- Validation: 266 checks passed (16 contracts, 250 Lua mocks). Five focused regression scenarios fail against TEST 35 and pass against TEST 36. No live Noita/Entangled Worlds session was run. Perk and form gameplay files are unchanged from TEST 35.
+
+TEST 35 - MATERIAL CATEGORY FIX / PERK ROLLBACK
+
+- Normalize literal bracketed CellFactory tags. Cache full/static-free/particle-free enumerations, using their differences for untagged statics and particle-FX materials. Search every cached source per semantic category so materials cannot disappear after reclassification. Keep incremental work budgets.
+- Restore transactions.lua and transactions/mutation_journal.lua byte-for-byte from TEST 33 at the user's request. TEST 34 structural journal expansion and its specific out-of-order test are retired with that implementation; the existing TEST 33 transaction tests remain. This is a rollback, not a claim that TEST 33's existing removal limitations are solved.
+- Remove the separate ESSENCES / CURSES headings and removal buttons. Active essences and Greed Curse appear only as ordinary tiles in the REMOVE grid, with search/icons/counters. LMB removes one essence copy; RMB removes all. Normal perks use the restored transaction path. Fire resistance multipliers and active counters/flags are reversed; progression flags are preserved.
+- Show live X/Y coordinates without CURRENT / СЕЙЧАС.
+- Preserve TEST 34 creature movement code unchanged, including Boss Robot's flying IK fix.
+- Healthbar source audit: supplied vanilla boss_meat.xml explicitly enables gui=1 (default), in_world=1; worm_big.xml enables gui=0, in_world=1. Their above-body health_bar sprites are authored vanilla features. Among 15 animal XML definitions with those sprites, only these two directly enable in_world. No MCM-added duplicate was established. Do not globally remove vanilla bars. EW restoration preserves authored presentation fields in a targeted mock; engine rendering has not been run.
+- Validation: 265 automated checks (16 contracts, 249 Lua behavioral mocks), including a 216-material vanilla root-definition fixture, all five essence types with stacked removal, standard removal-grid routing and original EW/form checks. These checks do not replace a live Noita test. See TEST35_RU.md.
+
+TEST 34 RELEASE CANDIDATE - FINAL SINGLE-PLAYER POLISH / REVERSIBILITY
+
+- Reworked MATERIALS classification around Noita's authored material tags instead of raw CellFactory implementation classes. The UI now separates liquids, powders, static terrain, gases, fires, physics solids and special/hax materials while retaining fallback discoverability for third-party materials without vanilla tags.
+- Fixed order-dependent perk rollback residue. Structural snapshot-only component fields and enabled states now participate in the same layered property ownership journal as intercepted setter mutations, so removing perk A before later perk B can no longer make B restore A's already-removed intermediate state.
+- Added an ESSENCES / CURSES cleanup surface inside PERKS without inserting non-perk states into the perk catalog. Earth/Light, Fire, Water, Air and Spirits essences can be removed selectively; Fire also reverses its accumulated 1.3x projectile/explosion multiplier contribution. Greed Curse is removed using the vanilla runtime gone-state semantics. Persistent discovery/progression flags are intentionally preserved.
+- Fixed the movement family used by Boss Robot and other flying LimbBoss/IK forms. Authored pure flyers (can_fly=1, can_walk=0) no longer inherit the grounded IK attachment/gravity rule after PhysicsAI is disabled, so manual vertical control does not fight forced gravity. Grounded IK forms retain the previous attachment behavior.
+- TELEPORTATION now displays the local player's current X/Y coordinates live above the coordinate inputs.
+- Removed direct English GamePrint/GamePrintImportant literals from production gameplay/QA/diagnostic paths, including the Kolmisilma encounter-start failure; all user-facing messages now resolve through translation keys. Translation coverage remains complete across all 11 shipped language columns.
+- Validation: 264/264 regression checks pass (16 contracts, 248 behavioral mocks) in both the working tree and a freshly unpacked release ZIP. 243/244 unchanged TEST 33 behavioral mocks pass against TEST 34; the sole old failure is the intentionally changed material-category surface.
+
+TEST 32 - GENERAL BOSS DEATH COMMIT / MODDED BOSS SUPPORT
+
+- Generalized the successful TEST 31 native lifecycle approach to other bosses. Runtime detection uses boss/miniboss/mcm_boss tags, BossHealthBar/BossDragon components (including HUDs on child entities), and delayed-kill or keepalive+damage roots. No whitelist of vanilla boss filenames is required. LimbBossComponent alone is deliberately insufficient: ordinary lukki and leggy chests also use it.
+- The generic guard recognizes final kill_now, the actual death notification, or removal of an observed authoritative body. It does NOT retire an unknown boss just because HP reached zero. Delayed death animations and HP-reset phase transitions retain their original scripts and network identity until final death.
+- Appended an owner-only mailbox observer to EW's stock death LuaComponent. It preserves exact u64 GIDs, positions and the responsible entity even when the body dies between observations, without re-entering native DES from a Lua callback. The original callback continues normally.
+- Final notifications are queued before native world update; original bodies retain their death scripts/loot. A stale local reconstruction of a confirmed dead GID is retired from DES, acknowledged with find_by_gid, then quietly removed with child death/loot callbacks disabled. New phases or summons with different GIDs are allowed. Existing replicas receive stock KillEntity; boss XML is excluded from distant SpawnOnce death replay.
+- The proven vanilla Kolmisilma behavior is retained. Its early-HP special case now also checks the vanilla filename, so a modded multi-phase boss merely inheriting the boss_centipede tag uses the generic final-death rules instead.
+- Existing boss demotion and unrelated gameplay/audit items are unchanged. Boss discovery reuses new-entity events and new-ID gaps, with a recovery sweep once per 60 frames; it does not rescan every enemy every frame.
+- Validation: 248 regression checks (16 contracts, 232 Lua mocks), 461 Lua files parsed. The new test reproduces retained authority on TEST 31 and passes on TEST 32. Additional execution of the supplied, unchanged Koipi update/death Lua scripts preserves the 120-frame death coroutine, three item entities, four spell drops and the unlock. Game engine/network DLL and arbitrary third-party mods were not run here. See BOSS_FIX_TEST32_RU.md.
+
+TEST 31 - KOLMISILMA NATIVE DEATH COMMIT
+
+- Fixed a verified TEST 30 failure: the menu VM may have no ewext table, but arena deduplication still killed an already tracked global boss. It now queues the exact string GID for the EW VM and retains the body until find_by_gid confirms that native DES removed the record. If the bridge is unavailable, the existing root is reused instead of creating another one.
+- Added a Kolmisilma-only lifecycle guard around EW's native update. It observes local ownership before and after that update, queues lethal states and between-frame body deaths before DES can release/transfer authority, and confirms native retirement afterwards. This works for natural and creative Kolmi, including roots first tracked or reconstructed inside the native call; it does not depend on the creative tag surviving reconstruction.
+- The original active boss keeps its authored wait-for-kill animation, portal and death scripts. An inert initialized=false body with lethal HP cannot finish that coroutine or safely reinitialize HP; it is quietly removed after native retirement. A later local incarnation of an already retired exact GID is likewise retired, then disposed of without duplicate death scripts or loot. A new boss with a different GID at the same position is allowed.
+- Existing replicas receive EW's standard KillEntity message, requiring no MCM code on the recipient. Kolmi death notification uses an empty SpawnOnce filename to avoid asking distant peers to instantiate a new pre-fight boss as a death replay. Network replicas can therefore disappear at lethal HP while the original local body finishes its animation.
+- TEST 30's ordinary-boss demotion, other boss fixes, authored combat/CrossCall patches, and RPC namespaces/slot order remain unchanged. Player forms and foreign-owned roots are excluded from the new guard.
+- Validation: 247 regression checks pass (16 contracts, 231 Lua mocks), including a TEST 30 before/after regression with ewext absent in the menu VM. New lifecycle scenarios cover native queue ordering, late callbacks, inert zero-HP bodies, authority reconstruction, exact u64 GIDs, new summons, exclusions and failed notifications/acknowledgements. All 456 Lua files pass parsing. These are automated/source checks, not an in-game multiplayer verification; see KOLMI_FIX_TEST31_RU.md.
+
+TEST 30 - KOLMISILMA ARENA ROOT DEDUPLICATION
+
+- Live TEST 29 changed the survivor back to an inert pre-fight Kolmisilma instead of removing it. Re-reading the supplied vanilla boss_arena.lua exposed a separate, much simpler duplication source we had not accounted for: the real final-boss arena always spawns its own boss_centipede root in spawn_items(), and the real Sampo pickup activates every entity carrying sampo_or_boss. Spawning another creative Kolmisilma on top of the authored arena can therefore create two nearly coincident boss roots before the fight even starts; when one dies, the other suddenly becomes visible and looks like a post-death clone.
+- Removed TEST 29's post-death GID tombstone wrapper entirely. It changed which surviving root was visible but did not remove the underlying duplicate encounter, so it is no longer part of runtime behavior.
+- Creative Kolmisilma spawn now has a preflight before EntityLoad. Within 192 px it detects an existing authored non-player/non-replay/non-MCM boss_centipede root. If the root is locally owned (or not yet DES-tracked), MCM retires that exact root silently through empty-filename DES death notification when available, strips its death/damage Lua callbacks and wait-for-kill state, and removes it before loading the creative replacement. If the authored root is remote-owned, MCM reuses it instead of manufacturing a second final boss on this peer.
+- The authored arena reference_point is reused when one already exists within 768 px and is published as ew_synced for later authority transfer. Outside the real arena, MCM still creates its own reference exactly as TEST 25-29 did. This removes a second hidden duplication source (multiple reference roots) while preserving creative Kolmi anywhere in the world.
+- TEST 25's working shared-NoitaPatcher/CrossCall combat fix and TEST 27's non-global first-track classification remain unchanged. Ordinary bosses, natural Kolmi outside an explicit MCM Kolmi spawn, boss_limbs, and ordinary mobs are untouched.
+- Validation: 246/246 regression checks pass (16 contracts, 230 Lua behavioral mocks). Dedicated arena-dedupe coverage proves the existing tracked Kolmi GID is retired without replay, the authored reference is reused, and only one creative root is left for the encounter.
+
+TEST 29 - Kolmisilma authoritative GID tombstone
+
+- TEST 28 is considered disproven by the live one-peer repro: a local clone still appeared even though distant SpawnOnce delivery has no destination in a solo EW world. The replay-filename append was removed.
+- Creative Kolmisilma now arms an exact string-GID tombstone as soon as the authoritative owner reaches hp <= 0. The tombstone wraps EW native world update and inspects the result immediately after GotAuthority processing.
+- If the proxy reconstructs the same tombstoned GID, MCM queues ewext.des_death_notify on that tracked replacement before quietly killing it. On the next native update pending death is processed before !alive, forcing DeleteEntity rather than ReleaseAuthority and removing the retained proxy snapshot.
+- Duplicate retirement strips ItemChest/death/damage Lua side effects first, so an authority-resurrection copy cannot produce a second encounter, loot or death sequence. The guard also recognizes ew_no_enemy_sync replay bodies and creative-marker reconstructions near the exact death site, while leaving unrelated natural Kolmisilma untouched.
+- The working TEST 25 Kolmisilma combat/CrossCall fix, TEST 27 non-global first-track demotion, boss anti-respawn fixes, possession fast-reject and startup changes remain unchanged.
+
+TEST 28 KOLMISILMA STOCK DEATH-NOTIFY REPLAY FILENAME SUPPRESSION
+
+- Live TEST 27 changed the post-death clone from an inert pre-fight Kolmisilma into an immediately active attacking Kolmisilma. That behavior matches EW 1.6.3's SpawnOnce::Enemy special-case for boss_centipede exactly: the replay EntityLoad is switched from enabled_at_start to disabled_at_start, protection is removed, and the copy is queued for kill_later. This is stronger evidence than TEST 26's earlier inference and shows the non-global classification removed the retained-authority clone while exposing EW's separate distant death-replay body.
+- Kept TEST 27's creative-Kolmi is_global=false classification and TEST 25's now-working authored combat/CrossCall path unchanged. No Sampo/bootstrap, phase, AI, shield, movement or HP logic is modified in this test.
+- Added an append to EW's actual files/system/entity_sync_helper/death_notify.lua. For an MCM-created Kolmisilma, the stock death callback still sends the real entity id, wait_for_kill flag, position and responsible entity through ew_death_notify, but sends an empty replay filename. Native DES can therefore delete the real GID and kill interested replicas without constructing SpawnOnce::Enemy("data/entities/animals/boss_centipede/boss_centipede.xml") for distant peers.
+- The suppression is limited to creative Kolmi. It recognizes the local mcm_creative_kolmi_v3 tag and also the ew_synced_var mcm_creative_kolmi_reference_v3 marker so the rule survives filename-backed GotAuthority on another MCM-equipped peer. Natural Kolmisilma and every ordinary enemy delegate to EW's original death() function byte-for-byte.
+- This differs from TEST 26: TEST 26 submitted a second early des_death_notify while the real stock death callback could still run later. TEST 28 changes the one authoritative stock death callback itself, so there is no later non-empty filename to enqueue a replay.
+- Validation: 246/246 regression checks pass (16 contracts, 230 Lua behavioral mocks). Dedicated coverage proves creative tag and synced-marker deaths use an empty replay filename, natural Kolmi and ordinary enemies preserve stock filenames, and OnModPreInit appends only to EW's death_notify.lua.
+
+TEST 27 CREATIVE KOLMISILMA NON-GLOBAL DES CLASSIFICATION
+
+- Live TEST 26 feedback disproved the pre-death notify / SpawnOnce-cleanup theory: the inactive pre-fight Kolmisilma still appeared immediately after the authored death. Because TEST 26 already removed ew_no_enemy_sync replay roots and the survivor remained, the remaining clone is consistent with the same retained-GID ReleaseAuthority path that caused Maggot/Alchemist/Dragon resurrection, not a disposable SpawnOnce corpse.
+- Removed TEST 26's kolmi_predeath_hook.lua, kolmi_death_retire.lua, CrossCall registration and narrow replay scanner entirely. They did not change the live result and are no longer part of runtime behavior.
+- Re-tested the earlier Kolmi demotion idea under the now-correct TEST 25 combat transport. The original reason Kolmi was excluded from non-global classification was confounded: her combat coroutine was independently dying on EW CrossCall because MCM and EW could load separate NoitaPatcher registries. TEST 25 fixed that and live feedback confirmed full authored combat now works.
+- MCM-created Kolmisilma roots tagged mcm_creative_kolmi_v3 are now the one intentional exception to the wait_for_kill bypass in boss_global_demote.lua. Before the first native DES track, the disabled pre-fight StreamingKeepAlive component keeps its original ID but is hidden, BossHealthBar is temporarily removed, and a temporary CameraBound marker forces filename-backed spawn_info. After ew_gid_lid appears, the exact pre-fight enabled states are restored before the stock Sampo-driven encounter starts.
+- Natural Kolmisilma and boss_limbs remain on EW's stock global/wait-for-kill lifecycle. Only creative Kolmi gets the proven ordinary-boss is_global=false treatment, so its final kill must take the normal DeleteEntity(gid) path instead of global ReleaseAuthority -> retained FullEntityData -> same-GID boss_centipede.xml reconstruction.
+- TEST 25's shared NoitaPatcher/CrossCall fail-open fix, stock Sampo encounter bootstrap, player-form movement fix, possession fast-reject optimization and the working ordinary-boss anti-resurrection path are unchanged.
+- Validation: 245/245 regression checks pass (16 contracts, 229 Lua behavioral mocks). The DES demotion mock now proves creative wait-for-kill Kolmi is hidden through the real native tracking window, restored to its authored disabled pre-fight healthbar/keepalive state after GID assignment, while natural Kolmi and boss_limbs remain untouched.
+
+TEST 26 KOLMISILMA PRE-DEATH DES RETIREMENT / POST-DEATH REPLAY CLEANUP
+
+- Live TEST 25 feedback confirmed that the hard part is finally fixed: creative Kolmisilma now runs its authored combat loop normally (movement, projectile phases, helpers, shield changes and normal encounter behavior). The remaining failure moved strictly to post-death: after the real boss finished dying, one inert pre-fight Kolmisilma appeared at the death position and waited for a Sampo that did not exist.
+- TEST 26 deliberately leaves the working TEST 25 combat/CrossCall fixes untouched. No Sampo bootstrap, phase code, shield code, AI logic, attacks or player-form controls are changed in this iteration.
+- Added kolmi_predeath_hook.lua as a tiny append around the stock check_death() entry. It does not replace the vanilla function. On the authoritative DES owner, the first hp<=0 check submits one MCM CrossCall before the stock ~120-frame wait-for-kill death sequence runs, then immediately delegates to the original check_death().
+- Added kolmi_death_retire.lua inside EW's official extra-module VM. The CrossCall validates boss_centipede + owner ew_gid_lid + hp<=0, then calls ewext.des_death_notify while the entity is still alive. This gives native DES a deterministic pending death before vanilla eventually sets DamageModel.kill_now, so the global entity cannot fall through !alive -> ReleaseAuthority and return as the same retained GID.
+- The early Kolmi DES death uses the real wait_for_kill flag but an empty replay filename. Existing interested replicas still receive KillEntity, while distant peers do not EntityLoad a fresh boss_centipede.xml solely for death replay. Kolmi's authored XML is unsafe as a generic SpawnOnce template because it starts in the pre-fight wait-for-Sampo state.
+- Added a narrow defensive cleanup for EW SpawnOnce leftovers: the EW update queries only boss_centipede roots and acts only on ew_no_enemy_sync entities without ew_gid_lid. Such replay-only copies have Lua death scripts disabled, wait_for_kill cleared, kill_now set and are removed silently, preventing duplicate loot/portal/flags. Real tracked Kolmi roots and ordinary bosses are untouched.
+- The ordinary-boss TEST 18-21 non-global classification remains unchanged, as do TEST 25's shared NoitaPatcher/CrossCall fix and possession fast-reject optimization.
+- Validation: 247/247 regression checks pass (16 contracts, 231 Lua behavioral mocks). Dedicated mocks prove owner-only hp<=0 retirement, idempotent DES submission, empty SpawnOnce filename, stock check_death delegation and quiet ew_no_enemy_sync Kolmi cleanup. The supplied vanilla boss_centipede_update.lua + the exact patched EW 1.6.3 Kolmi append + the TEST 26 predeath append compile together successfully.
+
+TEST 25 KOLMISILMA COROUTINE SURVIVAL / SHARED NOITAPATCHER REGISTRY / IK ROOT UNFREEZE
+
+- Live TEST 24 feedback proved that creative Kolmisilma still was not suffering from one missing phase flag: after Sampo it moved only for a couple of seconds, then permanently stopped attacking/spawning and could never finish its wait_for_kill death. The same player form could fire scripted attacks but its root/legs were immobile. These symptoms point to two engine-level failures rather than missing authored attacks.
+- The timing matches vanilla Kolmi precisely: the initial combat phase moves/waits for roughly 50 frames before shield_on(). EW 1.6.3 wraps shield_on(), set_main_animation() and ending portal EntityLoad() with CrossCall transport calls. If MCM and EW load their byte-identical NoitaPatcher DLLs from two physical mod paths, CrossCallAdd registrations can live in separate native module instances. The first failed CrossCall raises a Lua error inside the single boss_centipede_update.lua coroutine; Noita's coroutine helper ignores resume errors, so the whole authored state machine silently dies. That one failure explains the simultaneous loss of projectile phases, minion phases, shield evolution, aggro transitions and final check_death()->kill_now.
+- MCM's NoitaPatcher bridge now reuses mods/quant.ew/NoitaPatcher/load.lua whenever EW is enabled and that loader exists. Standalone/singleplayer still uses MCM's bundled NoitaPatcher. This avoids creating a second native CrossCall registry merely because the DLL is loaded from another filesystem path.
+- Added a verified source patch for EW 1.6.3's files/system/kolmi/append/boss_update.lua. All four Kolmi transport CrossCalls are fail-open: the normal CrossCall is attempted, an np.CrossCall fallback is attempted when available, and transport failure is recorded once but never propagates into the vanilla boss coroutine. Vanilla old_shield_on/old_shield_off, animation and EntityLoad always continue, so network presentation failure cannot kill local combat/death logic.
+- Added the same fail-open rule to EW's Sampo spawn_kolmi wrapper. If the remote Sampo CrossCall registry is unavailable, the wrapper falls back to the original vanilla item_pickup path instead of leaving the encounter inert.
+- TEST 24's stock Sampo-driven creative encounter remains the entrypoint, but it now schedules a short external combat verifier. The verifier only checks the authored VariableStorageComponent `initialized`. If the enabled stock boss_centipede_update.lua component never entered init_boss() within 8 frames, that exact authored LuaComponent is recreated once in a fresh ONE_PER_COMPONENT_INSTANCE coroutine VM. It still loads the normal VFS path, so the code remains vanilla Noita + EW append; MCM does not emulate phases, projectiles, minions or death.
+- Fixed the separate player-form mobility bug for Kolmisilma and other static IK/physics roots. The physics adapter now calls PhysicsSetStatic(entity,false) before applying player forces. LimbBossComponent forms are also explicitly placed into the authored MoveTo state while directional input is active, so mMoveToPositionX/Y actually drive limb targets instead of leaving a disabled-AI FollowPlayer state with no valid prey. This addresses the reported centered legs / immovable root while preserving MCM's scripted player-controlled attacks.
+- Optimized possession miss-targeting. G no longer performs recursive XML/<Base> classification for obvious pickups, rocks, props, buildings, particles or projectiles that have no live creature motor/tag. Runtime component discovery is collapsed from up to ~14 repeated tree traversals per candidate into one memoized signature walk, and the creature service is loaded once per targeting module instead of re-entered for every nearby entity. Exact unsafe-path checks, uncatalogued mod creatures, multipart wrappers and EW replicas remain supported. A dedicated regression asserts that a health pickup plus physics rock causes zero XML/classification calls and zero descendant walks.
+- The working TEST 18-21 anti-resurrection classification for ordinary bosses is unchanged. Kolmisilma/boss_limbs remain outside global demotion because of wait_for_kill semantics; Alchemist, Maggot Tiny, Dragon Boss and other already validated boss deaths keep their current path.
+- Validation: 245/245 regression checks pass (16 contracts, 229 Lua behavioral mocks). New mocks cover split CrossCall registry fail-open behavior, Sampo fallback, shared EW NoitaPatcher physical loader, stock Kolmi combat VM restart, and static IK/LimbBoss player movement. The supplied vanilla boss_centipede_update.lua + the exact patched EW 1.6.3 boss_update append and vanilla sampo_pickup.lua + patched spawn_kolmi append both compile successfully as combined Lua chunks; all raw ew_kolmi_* CrossCalls in the patched boss append are replaced by guarded calls.
+
+TEST 24 STOCK SAMPO-DRIVEN KOLMISILMA ENCOUNTER / NO MCM BOSS-UPDATE PATCH
+
+- Live TEST 23 feedback showed no behavioral improvement over TEST 22: creative Kolmisilma still moved but failed to run its full projectile/phase loop, usually spawned only one helper and never completed its authored wait-for-kill -> kill_now death sequence. The remaining semantic mismatch was that MCM was enabling Kolmi's enable_coroutines combat LuaComponent from another LuaComponent on the boss itself. Vanilla never does this: the combat component is enabled externally by Sampo's script_item_picked_up callback.
+- Removed MCM's kolmi_update_append.lua entirely and removed the ModLuaFileAppend hook into data/entities/animals/boss_centipede/boss_centipede_update.lua. Creative Kolmi now runs the exact vanilla boss update plus EW 1.6.3's own Kolmi append, with no MCM function replacement, EntityGetWithTag shadow, phase code, shield code, attack code or death code in that VM.
+- Creative spawn still creates the authored reference_point.xml and leaves boss_centipede.xml completely in its pre-fight state while EW assigns the initial owner GID. The reference is marked ew_synced so a later MCM peer can receive the same authored anchor; its coordinates remain on the boss as ew_synced_var while the local reference entity id is explicitly ew_remove_on_send.
+- Reworked kolmi_creative_bootstrap.lua into a pure ownership gate. In EW it waits for ew_gid_lid.value_bool=true and refuses to start from a remote replica. In singleplayer it yields one authored initialization frame. It never changes disabled_at_start/enabled_at_start, PhysicsAI, protection, healthbar, shield, FINAL_BOSS_ACTIVE or any combat variable itself.
+- Added kolmi_encounter_start.lua as a separate one-shot entity VM. The controller is deliberately scheduled for the following world frame instead of execute_on_added, so the final-boss coroutine is not enabled from inside the boss' own Lua update call stack. This mirrors the engine boundary of a real Sampo pickup.
+- The controller dofiles the actual data/entities/animals/boss_centipede/sampo_pickup.lua at runtime. Therefore Noita's original item_pickup implementation and EW 1.6.3's existing ModLuaFileAppend wrapper execute unchanged. During that single synchronous call MCM only scopes EntityGetWithTag so the stock script receives exactly the creative boss, its authored reference and the nearest local player rather than accidentally activating a natural Sampo/Kolmi elsewhere in the loaded world. The API is restored immediately after the call.
+- No synthetic Sampo is put into the player's inventory, avoiding the ending-sequence side effects of holding the McGuffin. The one-shot controller merely supplies the same +80 Y pickup position used by the authored boss arena; the stock Sampo pickup function still owns the real combat transition, battle flags/music, protection removal and component enable/disable sequence.
+- The TEST 18-21 anti-resurrection fix for ordinary bosses is unchanged. wait_for_kill bosses (Kolmisilma and boss_limbs) remain excluded from non-global demotion. Alchemist, Maggot Tiny, Dragon Boss and the other already validated bosses therefore keep the working death lifecycle.
+- Validation: 239/239 regression checks pass (16 contracts, 223 Lua behavioral mocks). Dedicated tests assert owner-only activation, next-frame external VM execution, exact stock Sampo item_pickup routing, isolation from unrelated Sampo/reference/player roots, restoration of EntityGetWithTag after the call, and absence of any MCM boss_centipede_update append. The supplied vanilla sampo_pickup.lua + EW 1.6.3 spawn_kolmi append and vanilla boss_centipede_update.lua + EW 1.6.3 boss_update append both parse successfully as stock combined chunks.
+
+TEST 23 FULL VANILLA KOLMISILMA ENCOUNTER STATE / POST-DES ACTIVATION
+
+- Live TEST 22 feedback showed that symptom-level creative-Kolmi activation was still incomplete: movement recovered, but projectile phases did not run reliably, phase behavior stopped evolving, only one helper appeared and the wait-for-kill boss still never reached its authored kill_now death sequence. TEST 23 stops emulating individual combat symptoms and restores the authored encounter ordering instead.
+- Creative boss_centipede.xml now remains in its exact pre-fight XML state while EW performs the first DES discovery/tracking pass. MCM creates the authored data/entities/animals/boss_centipede/reference_point.xml at the creative spawn position and stores those coordinates in an ew_synced_var, but does NOT enable PhysicsAI/update/hitbox/healthbar before ew_gid_lid exists. This matches natural Kolmi, which is already known to DES before the Sampo starts the fight. A 30-frame bounded fallback preserves standalone/singleplayer behavior if no GID exists.
+- Added kolmi_creative_bootstrap.lua. After initial tracking it mirrors the full engine-facing combat transition from vanilla sampo_pickup.lua for the one creative boss root: FINAL_BOSS_ACTIVE=1, boss battle music transition/random seed, disabled_at_start ON, enabled_at_start OFF, static OFF, boss_centipede_active tag, and removal of the authored protection child. It then removes itself. It does not implement attacks, shield phases, minions, aggro, damage thresholds or death.
+- Replaced TEST 22's move_to_reference() override. TEST 23 never redefines Kolmi's combat/state-machine functions. The append only shadows EntityGetWithTag("reference") inside that one boss-update Lua VM when the synced MCM reference variable exists. It returns the nearest MCM-created authored reference_point, recreating it from synced coordinates after authority transfer if necessary. Natural Kolmi has no marker and receives the untouched engine EntityGetWithTag result.
+- This means vanilla boss_centipede_update.lua once again owns next_phase, circleshot, firepillar, homingshot, polymorph, minion spawning, shield_on/off, aggro transition, check_death and the final wait-for-kill -> kill_now sequence without MCM replacing any of those functions. EW 1.6.3's own Kolmi append remains in the same chunk and continues to synchronize animations, shields and portal creation.
+- The working TEST 18-21 anti-resurrection path for ordinary bosses is unchanged. Wait-for-kill bosses remain excluded from global demotion. Static audit of the supplied game data still finds only 17 direct animal roots with BossHealthBarComponent/BossDragonComponent; ordinary mobs are outside this path. No other animal script directly treats BossHealthBarComponent as phase state; Kolmisilma remains the unique disabled_at_start healthbar encounter root.
+- Startup hidden catalogue prewarm remains disabled until MCM has actually been opened. The separate large-Extra-Life polymorph hitch is not changed in this build.
+- Validation: 239/239 regression checks pass (16 contracts, 223 Lua behavioral mocks). The supplied vanilla boss_centipede_update.lua + EW 1.6.3 Kolmi append + MCM reference append compile successfully as one Lua chunk.
+
+TEST 22 CREATIVE KOLMISILMA ENCOUNTER BOOTSTRAP / ZERO HIDDEN STARTUP WARMUP
+
+- Live TEST 21 feedback separated Kolmisilma from the resurrection bug: Alchemist still dies normally, while Kolmisilma can be damaged through the shield down to zero HP but does not respawn. It remains alive in place. This matches its authored DamageModelComponent.wait_for_kill_flag_on_death=1 contract: final removal is deferred until boss_centipede_update.lua finishes the death sequence and explicitly sets kill_now=1.
+- A raw data/entities/animals/boss_centipede/boss_centipede.xml is not an immediately valid combatant. It is authored in pre-fight state: the update/PhysicsAI/hitbox/healthbar/keepalive combat set is disabled_at_start, the before-fight script is enabled_at_start, the boss is static and a protection child provides pre-fight immunity. Vanilla sampo_pickup.lua performs the transition into combat. TEST 22 now mirrors that transition only when MCM itself creates this exact root from the creature menu, and does so before EW DES first tracks it.
+- Creative Kolmisilma now enables disabled_at_start, disables enabled_at_start, clears static mode, removes the pre-fight protection child and adds boss_centipede_active before network tracking. Natural arena Kolmisilma is not touched by this bootstrap and continues through the stock Sampo/EW kolmi system.
+- Added an MCM-only synced arena anchor VariableStorageComponent (mcm_creative_kolmi_reference_v1, tagged ew_synced_var) containing the creative spawn position. The vanilla/EW boss update chunk receives a tiny append which overrides move_to_reference only when this marker exists. A creative Kolmisilma therefore has a stable encounter anchor even though no vanilla world-global `reference` entity was created; natural Kolmisilma falls through to the original move_to_reference unchanged. The synced variable also survives DES authority transfer between MCM-equipped peers.
+- The working TEST 18-21 anti-resurrection model is otherwise unchanged. Maggot Tiny, Dragon Boss, Alchemist and other normal boss roots still use pre-track global demotion where safe; wait-for-kill bosses such as boss_centipede and boss_limbs remain excluded from that demotion path.
+- Boss/mob scope was rechecked: ordinary mobs are not passed through the boss global-demotion path. The supplied game data has only a small set of direct animal roots with BossHealthBarComponent/BossDragonComponent; Kolmisilma is the exceptional pre-fight encounter root whose combat lifecycle must be explicitly bootstrapped when spawned out of context.
+- Removed the remaining hidden fresh-world catalogue warmup. Mobs/Perks background prewarming is now locked until the player has actually opened MCM once; visible menu content still resolves on demand immediately. After first use, the existing delayed/throttled warmup may continue in the background. This targets the residual short fresh-world FPS sag without delaying menu availability.
+- The separate creature->human hitch with very large Extra Life stacks is intentionally not changed here. It should be A/B tested with 0/1 versus ~100 RESPAWN stacks before changing polymorph/perk restoration.
+- Validation: 238/238 regression checks pass (16 contracts, 222 Lua behavioral mocks). The supplied vanilla boss_centipede_update.lua + EW 1.6.3 boss_update append + MCM creative-Kolmi append compile successfully as one Lua chunk.
+
+TEST 21 WAIT-FOR-KILL BOSS PRESERVATION / NON-DESTRUCTIVE DEMOTION
+
+- TEST 20 fixed resurrection for Maggot Tiny, Dragon Boss, Alchemist and multiple other bosses, but broke Kolmisilma/boss_centipede: it could enter combat and then stall with a permanent shield. The distance/authority-radius theory was rejected after live feedback; Kolmisilma normally remains in the arena and in view.
+- Audited all vanilla animal XML roots containing BossHealthBarComponent or BossDragonComponent (17 direct roots in the supplied game data). Ordinary mobs without those components are outside the demotion path; StreamingKeepAlive by itself is not treated as boss identity.
+- Found the important lifecycle distinction: boss_centipede and boss_limbs use DamageModelComponent.wait_for_kill_flag_on_death=1. EW's stock death_notify forwards that exact flag, allowing Noita/EW's delayed-kill handshake to finish before the entity is removed. TEST 21 therefore bypasses global demotion for any boss using that native wait-for-kill contract instead of mutating its phase/activation components.
+- Kolmisilma is especially sensitive: its BossHealthBarComponent and StreamingKeepAliveComponent are disabled_at_start, and both vanilla sampo_pickup.lua and EW's native DES have dedicated boss_centipede activation logic. Removing/recreating that healthbar changes a component involved in the final-boss state machine. TEST 21 leaves the original component IDs and enabled state untouched.
+- Reduced mutation for every other demoted boss. StreamingKeepAliveComponent and BossDragonComponent are no longer removed/recreated; their original component IDs are preserved and merely disabled until native track_entity attaches ew_gid_lid. BossHealthBarComponent still must be temporarily absent because EW checks it including disabled.
+- Added a temporary disabled CameraBoundComponent while a boss is hidden. EW's native track_entity already removes CameraBoundComponent before serialization; that removal forces EntitySpawnInfo::Filename. This prevents later remote/authority reconstruction from using a serialized snapshot captured while BossHealthBar was absent. The marker is disabled (no gameplay behavior) and is consumed by native tracking or removed by MCM's fail-safe.
+- Added regression coverage that Kolmisilma and boss_limbs bypass demotion, their original component IDs/states survive, Maggot's BossDragon and StreamingKeepAlive IDs are preserved, BossHealthBar is the only recreated boss component, all demoted bosses force filename-backed spawn info, a StreamingKeepAlive-only ordinary mob remains untouched, and natural/native-gap plus authority-reconstruction paths still work.
+
+TEST 20 NATURAL-BOSS GAP / AUTHORITY-REACQUIRE DEMOTION + STARTUP WARMUP THROTTLE
+
+- TEST 18/19 confirmed the root boss-respawn cause: EW DES must not classify authored boss roots as global on first tracking. Global death can race Lua death notification, take ReleaseAuthority, retain FullEntityData in the proxy and recreate the same GID indefinitely. The working component-hiding approach remains unchanged: BossHealthBarComponent, StreamingKeepAliveComponent and BossDragonComponent stay hidden until native tracking actually attaches ew_gid_lid, then their authored state is restored.
+- Fixed a remaining one-frame hole for naturally generated bosses such as boss_alchemist. EW's top-level Lua new-entity pass can finish, another EW/world hook can create an entity, and native EntitySync::on_world_update can discover that newer ID immediately afterward. TEST 19 used EntityGetWithTag("boss"/"miniboss") at this boundary; a freshly created entity is not guaranteed to be visible through those tag indices yet. TEST 20 records the highest ID seen by the Lua discovery array and, immediately before native DES update, examines only IDs created after that watermark. This is a tiny gap scan, not a world/enemy scan.
+- Wrapped EntityLoad and EwextDeserialize inside EW's own extra-module VM. When GotAuthority reconstructs a boss on an MCM-equipped peer during native DES update, its global-signalling components are hidden before native track_entity continues and restored after the new ew_gid_lid appears. This keeps the non-global classification across authority reacquisition between peers that run MCM instead of fixing only the initial owner.
+- Removed TEST 19's every-frame EntityGetWithTag boss/miniboss prescan. This reduces background work and avoids relying on tag-index timing.
+- Reduced the short join-time FPS sag from MCM UI prewarming. Hidden Mobs/Perks catalogue warmup now waits 180 frames after the menu controller starts and then advances one step every 4 frames instead of doing one XML/catalogue warmup step every rendered frame while the menu is closed. Opening the menu still uses the normal on-demand paths.
+- The reported form->human hitch with ~100 Extra Life stacks is kept separate from this boss lifecycle change. Vanilla RESPAWN is stackable and each pickup installs its own persistent RESPAWN GameEffect child, so a 100-stack player gives native polymorph a very large player tree to serialize/restore. TEST 20 does not virtualize or remove those lives; use a 0/1-vs-100 stack A/B test before changing that lifecycle.
+
+TEST 19 NATURAL-BOSS PRE-NATIVE GLOBAL DEMOTION
+- TEST 18 is the first live build that actually stopped the Maggot Tiny resurrection. The working mechanism is preserved unchanged: BossHealthBar/StreamingKeepAlive/BossDragon are hidden until EW native track_entity assigns ew_gid_lid, so EntityInfo.is_global is permanently false and a later death uses DeleteEntity instead of ReleaseAuthority.
+- Fixed the gap exposed by a naturally spawned mage boss. EW 1.6.3 has a second discovery path inside native module_on_world_update: it scans entity IDs itself and calls EntitySync.on_new_entity directly. Entities discovered there never pass through the Lua ewext.module_on_new_entity wrapper used by TEST 18.
+- Immediately before every native DES update, MCM now performs two narrow engine tag lookups (boss and miniboss only) and applies the same temporary global-component hide to any alive, local, untracked boss. This catches vanilla alchemist/wizard/pit/robot/sky/etc. roots before native fallback discovery without scanning every enemy or every ew_des entity.
+- Already-tracked DES bosses, remote replicas, player/polymorphed forms and ew_no_enemy_sync replay copies are still excluded. Component restoration still waits for the actual ew_gid_lid/ew_des result, with the existing 30-frame fail-safe.
+- The reported ~5-second hitch after returning from a boss player form is treated as a separate articulated-form retirement issue; TEST 19 does not change player-form death/return semantics so the successful boss lifecycle experiment stays isolated.
+
+TEST 18 NATIVE-DES GLOBAL CLASSIFICATION DEMOTION / CORRECTED TEST 08
+- TEST 17 did not change the live infinite respawn. TEST 18 is the second and final non-workaround hypothesis before switching to the user-proposed fallback design.
+- The strongest live fact remains unchanged: each Maggot Tiny resurrection gets a new local entity id while retaining the same ew_gid_lid GID. In EW 1.6.3, a dead entity takes ReleaseAuthority instead of DeleteEntity only when native track_entity classified it as global; the proxy then retains FullEntityData and can hand the same GID back through GotAuthority.
+- Corrected a flaw in the old TEST 08 global-demotion experiment. EW module_on_new_entity does NOT classify immediately: it queues candidates in EntitySync.to_track, and track_and_upload_entity runs later inside native module_on_world_update. Restoring boss components immediately after on_new_entity therefore made the old test ineffective.
+- Added boss_global_demote.lua in EW's official extra-module context. It wraps ewext.module_on_new_entity and ewext.module_on_world_update. New local untracked boss roots temporarily lose BossHealthBarComponent, StreamingKeepAliveComponent AND BossDragonComponent and stay that way until native DES has actually attached ew_gid_lid/ew_des. Removing BossDragon is essential because EW automatically adds StreamingKeepAlive back when BossDragon remains visible.
+- Once native tracking has completed, the original boss components are recreated immediately with their authored member values, enabled state and component tags. If EW's 2 ms to_track budget delays a boss, the components remain hidden into the next native update instead of being restored too early; a 30-frame fail-safe restores them if tracking never completes.
+- Existing remote DES entities, ew_no_enemy_sync death-replay copies, player units/polymorphed players and ordinary non-boss enemies are excluded. There is no world scan, no death-hook override, no HP mutation and no per-frame screen logging.
+- Removed TEST 17's tombstone module and death_notify append entirely rather than stacking experiments. No TEST 14 scanner/firewall, TEST 15 tracer/host-spawn, or TEST 16 preflush remains.
+- Validation: all 16 contracts and all 220 Lua behavioral mocks pass (236 total checks). Dedicated demotion mock verifies delayed-until-GID timing, BossDragon hiding, authored-field restoration, remote-DES exclusion and ordinary-enemy exclusion.
+
+TEST 17 SAME-GID RECONSTRUCTION TOMBSTONE / CURRENT-ENTITY RETIREMENT
+- TEST 16 did not stop the live respawn. The confirmed TEST 15 trace still remains the strongest fact: every resurrection receives a new local entity id while retaining the exact same ew_gid_lid GID. TEST 17 therefore stops trying to win the original corpse/death-notify timing race.
+- Added boss_gid_tombstone.lua in EW's official extra-module context. The authoritative stock boss death records only its GID, original entity id, file and position through a dedicated CrossCall; remote replicas never create tombstones.
+- The module inserts a constant-time callback immediately before EW's ewext_init on_new_entity hook. It examines only EW's already-bounded new-entity array; there is no world scan, enemy scan or per-frame entity enumeration.
+- If a later entity is a boss, is authoritative, and carries a tombstoned GID while having a different local entity id, it is the confirmed bad reconstruction. TEST 17 submits ewext.des_death_notify for this CURRENT live tracked entity id, with an empty replay filename, before native on_new_entity runs. This avoids every previous failure mode where native DES was asked to retire an already-gone corpse id.
+- After native death submission succeeds, the reconstructed copy is tagged ew_no_enemy_sync, all script_death callbacks are cleared, and it is killed locally. This prevents duplicate loot/flags and prevents the cleanup copy from creating another SpawnOnce boss. The tombstone remains bounded for 900 frames so a delayed duplicate of the same GID is retired again instead of restarting the loop.
+- Removed TEST 16's pre-native death preflush and prequeue append. They did not change live behavior and are intentionally not stacked with TEST 17.
+- No TEST 14 scanner/firewall and no TEST 15 screen tracer/host-only spawn are present.
+- Regression suite: 237/237 PASS (16 contracts, 221 behavioral mocks). Supplied EW 1.6.3 stock death_notify.lua plus the TEST 17 append also compiles as Lua.
+
+TEST 16 SAME-GID GLOBAL BOSS PRE-NATIVE DEATH COMMIT
+- TEST 15's live trace finally isolated the respawn mechanism: Maggot Tiny returned with a new local entity id while keeping the same ew_gid_lid GID. That rules out Extra Life, maggotspot/new-enemy spawning, and a new-GID clone. The repeated EntityLoad is the filename-backed reconstruction of the same retained DES snapshot after authority is released.
+- Entangled Worlds 1.6.3 queues stock ew_death_notify in Lua and normally forwards it to ewext.des_death_notify only from on_world_update_post. Native ewext_init.on_world_update can therefore observe an already-dead global boss first; with no native pending death it selects ReleaseAuthority, leaving the proxy's FullEntityData/GID available for GotAuthority and reconstruction.
+- Added a boss-only prequeue append to EW's stock entity_sync_helper/death_notify.lua. It preserves the original stock death callback and payload, but additionally records the death through a dedicated MCM CrossCall while the boss death script is executing.
+- Added boss_death_preflush.lua in the official EW extra-module context. It inserts one constant-time hook immediately before the existing ewext_init entry in ctx.hook.on_world_update and flushes queued boss deaths into ewext.des_death_notify before native DES examines tracked entities. No entity/world scans, damage firewalls, HP mutation, boss-component mutation, or per-frame logging are used.
+- Preserved the original boss filename in the early native death submission so EW's normal distant death/loot replay semantics remain available. The later stock post-update submission is intentionally left intact; after the first submission retires the tracked entity, the duplicate is harmless.
+- Removed TEST 15's host-only boss spawn experiment and all event/watcher screen spam. Creative creature spawning is back on the established native-DES discovery path; TEST 16 changes only the ordering of global-boss death commitment.
+- Extra Life is not part of the fix. Live testing confirmed the same respawn without Extra Life.
+- Regression suite: 237/237 PASS after the TEST 16 changes (16 contracts, 221 Lua behavioral mocks).
+
+TEST 15 HOST-AUTHORITY BOSS SPAWN / EVENT-ONLY RESPAWN TRACE
+- Removed the TEST 14 full-world ew_des boss scanner, replica firewall, fatal-damage guard and DES damage wrapper. TEST 15 performs no permanent global entity scan and does not modify EW's immortal.lua damage semantics.
+- Rolled boss death handling back to EW 1.6.3 stock semantics for this experiment: the TEST 12/13 immediate death/source override path is not applied. This isolates the remaining respawn from previous death-notify workarounds.
+- Creative Menu spawns whose XML is a global boss root (BossHealthBarComponent, StreamingKeepAliveComponent or BossDragonComponent) are now routed through an EW RPC and created exactly once on the EW host/authority peer. A requesting client does not EntityLoad the boss locally. Ordinary creatures keep the existing local/native-DES spawn path.
+- Added event-only EW spawn tracing. It wraps only EntityLoad and EwextDeserialize inside EW's own Lua state, records boss creations, and waits briefly for ew_gid_lid to report AUTH/REMOTE plus GID. It never searches all enemies or ew_des entities every frame.
+- Added a bounded Creative Menu boss watcher. Only explicitly spawned test bosses are followed; after one dies, a small 180px enemy query runs for at most 360 frames to classify a replacement as SAME_GID / NEW_GID / NO_GID and correlate it with ENTITYLOAD / DESERIALIZE when available.
+- Added a diagnostic append to EW's stock entity_sync_helper/death_notify.lua. It prints STOCK_DEATH AUTH/REMOTE/GID only when the stock death callback actually runs and does not alter the CrossCall payload, filename, timing, HP, boss components or kill flags.
+- Investigation note: EW 1.6.3 stores global DES entities in proxy EntityStorage. If a tracked global entity disappears without a pending death, native DES issues ReleaseAuthority instead of DeleteEntity; a later authority request can return the retained FullEntityData and deserialize the entity again. Maggot Tiny is unambiguously global because its XML directly contains StreamingKeepAliveComponent, BossDragonComponent and BossHealthBarComponent.
+- Regression suite: 240/240 PASS before packaging.
+
+TEST 13 RUNTIME EW BOSS-DEATH INTERCEPT / SPAWNONCE SUPPRESSION
+- TEST 12 did not remove the decisive load-order ambiguity: rewriting Entangled Worlds' entity_sync_helper source from MCM OnModPreInit cannot guarantee that the rewritten ew_death_notify handler is the function already registered in EW's Lua VM. TEST 13 installs the boss-death bridge from MCM's official EW extra-module bootstrap, after stock EW systems have loaded.
+- Added boss_death_runtime.lua. It replaces the registered ew_death_notify CrossCall at runtime through EW util.add_cross_call / NoitaPatcher CrossCallAdd. NoitaPatcher explicitly supports replacing an existing cross-call registration, so this path cannot lose the earlier source-load race.
+- Global DES bosses (BossHealthBarComponent, StreamingKeepAliveComponent, or BossDragonComponent) submit ewext.des_death_notify directly in the death callback frame and deliberately pass an empty filename. This preserves normal KillEntity delivery to existing DES replicas while preventing DeadEntities / SpawnOnce::Enemy from EntityLoad()-ing a fresh boss XML solely to replay distant death effects.
+- Ordinary enemies keep EW's stock deferred post-update death timing and original filename. A failed native global-boss submission is retried with the filename still suppressed instead of dropping the death event.
+- Added runtime diagnostics mcm_ew_boss_death_runtime_v1, mcm_ew_boss_death_immediate_v1, mcm_ew_boss_death_deferred_v1, mcm_ew_boss_death_last_entity_v1 and mcm_ew_boss_death_last_gid_v1.
+- Added behavioral coverage for Maggot Tiny-style global death, CrossCall replacement, SpawnOnce filename suppression, ordinary deferred deaths, and failed-native retry. Full suite: 237 tests.
+
+
+TEST 12 GLOBAL-BOSS DEATH COMMIT / HEAVY-FORM BACKPRESSURE
+- Fixed a TEST 11 wiring error: the marker-verified `mcm_boss_death_pressure_v1` patch existed and had a regression test, but `resilience.pre_init/post_init` never applied it to Entangled Worlds' `entity_sync_helper/death_notify.lua`. It is now a verified critical compatibility patch with surfaced failure status.
+- Added `mcm_immediate_des_death_v1` to EW 1.6.3's `entity_sync_helper.lua`. Only global boss roots (`BossHealthBarComponent` or `StreamingKeepAliveComponent`) submit `ewext.des_death_notify` immediately from EW's existing `ew_death_notify` CrossCall while the dying entity still has its DES identity. Ordinary enemies keep EW's stock post-update queue, and any native-call failure falls back to that same queue. This targets the global ReleaseAuthority/recreation window without adding an MCM death component or a second GID.
+- Reworked fast polymorph terrain integration to `mcm_poly_world_sync_v5`. MCM's additional camera-independent chunk scheduler now yields completely for heavy articulated/global forms (`BossDragonComponent`, `WormComponent`, `BossHealthBarComponent`, `StreamingKeepAliveComponent`), leaving terrain synchronization to stock EW instead of allowing giant destructive forms to build an observer-side network backlog.
+- Removed the player-form `ewext.notrack` call. EW 1.6.3 native DES already excludes the `polymorphed_player` tag, and `notrack` is a one-shot discovery guard rather than authority retirement. MCM keeps the explicit `ew_no_enemy_sync` tag and the accidental-GID diagnostic.
+- Added behavioral regression coverage for immediate global-boss DES death submission vs. ordinary deferred enemy death, heavy-form world-sync suppression, critical patch wiring/status, and exact-patch compilation against the supplied EW 1.6.3 sources.
+
+Intermediate handoff pass (test_11):
+- Restored the original MCM Entangled Worlds source-patching/resilience path (ModTextFileSetContent) after test_10; this is intentional compatibility architecture and must not be removed as a workaround.
+- Keeps the natural/creative boss DES integrity diagnostics from test_10 for continued investigation.
+- No claim that the boss respawn issue is fixed in this handoff build; use as the continuation baseline.
+TEST 11 BOSS NETWORK PRESSURE / GIANT-FORM TRAFFIC PASS
+- Restored MCM's intentional marker-verified Entangled Worlds source integration. TEST 10's stock-API-only experiment is superseded; verified `ModTextFileSetContent` patches remain part of the compatibility design and fail closed when their expected EW source anchors are absent.
+- Reworked the fast-polymorph world-sync patch to `mcm_poly_world_sync_v4`. The old persistent 3x3 trail queue is removed: when a polymorphed player is far from the local camera, MCM now forces only the central chunk and immediate 3x3 ring through EW's own phased sender and deliberately skips the extra radius-2/radius-3 forced phases. This preserves nearby destruction sync while removing the largest long-lived binary backlog created by fast giant forms.
+- Added a marker-verified hook to EW's stock boss death notifier that publishes a 12-frame local pressure window without replacing or delaying EW's existing `ew_death_notify` CrossCall. During that short window MCM yields only its optional extra world/form traffic so DES entity deletion can reach the proxy without competing with MCM's high-volume pixel-world stream.
+- Reduced articulated worm/dragon fallback pose updates from roughly 20 Hz to roughly 10 Hz and suppresses them during the boss-death pressure window. This targets the severe spectator-side load reported for giant transformed bosses without disabling native EW form replication.
+- MCM-owned player forms now receive `ew_no_enemy_sync` at the earliest owned-form marking point. The EW forms bridge reinforces the tag and calls `ewext.notrack` once only as a pre-discovery guard; if a polymorphed player nevertheless already has an `ew_gid_lid` GID, diagnostic globals record the dual-identity race instead of pretending `notrack` can retire an existing DES authority.
+- Removed the unsuccessful TEST 10 global boss-integrity mutator. Natural and creative bosses retain EW's normal death components; this pass attacks shared network pressure / duplicate-identity causes that can affect natural bosses as well as MCM-spawned bosses.
+
+TEST 10 STOCK-EW BOSS LIFECYCLE ISOLATION
+- Removed all runtime Entangled Worlds source rewriting from the resilience layer. MCM now treats EW as an external dependency and extends it only through the documented extra_modules.lua hook and stock ewext/CrossCall APIs.
+- Removed the creative-only boss death callback and remote damage guard. Natural and MCM-spawned bosses now share the same stock DES lifecycle instead of carrying separate MCM death semantics.
+- Added a bounded boss DES integrity bridge for natural and creative bosses. Local owners recover EW's stock death_notify callback only if it is missing or was replaced by an old MCM experiment; remote replicas recover EW's stock ew_immortal callback and wait-for-kill invariant when missing.
+- Added cleanup for a boss-shaped EW SpawnOnce::Enemy replay that remains alive without any GID (ew_des + ew_no_enemy_sync). Such a replay is retired without running Lua death callbacks again, preventing it from surviving as a new boss or duplicating boss loot.
+- Added same-GID boss recreation diagnostics so a remaining live failure can be distinguished from a new-GID respawn. BossHealthBarComponent and StreamingKeepAliveComponent are not modified.
+
+TEST 09 REMOTE-REPLICA / DEATH-REPLAY CORRECTION
+- Creative boss death no longer supplies the boss XML filename to Entangled Worlds' delayed SpawnOnce::Enemy death replay. The authoritative GID is still retired through EW's stock ew_death_notify path, while distant peers cannot later EntityLoad the boss XML solely to replay loot/death effects.
+- MCM peers mark only non-authority replicas of registered creative creatures with a local-only, ew_remove_on_send lethal-damage guard. This prevents a replica from running boss death scripts and dropping loot while its authority is still alive, which native DES would otherwise repair by recreating the same GID from its live snapshot.
+- Added per-GID diagnostics for same-GID replica recreation so a remaining live failure can distinguish remote replica respawn from a genuinely new network entity.
+- Reverted the TEST 08 boss-global demotion experiment entirely; boss health-bar and keepalive components are no longer modified.
+- Spell pagination arrows keep the same 9x22 geometry and placement, but are forced to full opacity on a foreground GUI Z layer so the menu panel cannot wash them out.
+
+TEST 07 GLOBAL BOSS RETIREMENT / STOCK-PEER FOLLOW-UP
+- MCM-spawned global bosses now hold their first lethal death until native DES has actually removed the boss GID. The EW bridge submits the authoritative death, polls ewext.find_by_gid, and only publishes ACK after the GID is gone; only then does MCM set kill_now. This closes the global ReleaseAuthority resurrection window instead of treating a queued death request as completion.
+- Creative perk retirement now submits owner-side DES death before local removal and also handles the first observed stock-peer perk-count increase when the peer was recently near the matching creative pickup.
+- Spawnable PLAYER now uses Noita's vanilla data/entities/misc/player_drone_clone.xml as its network base, so filename replication remains valid on peers without MCM. MCM-only control scripts stay owner-local.
+- Wand/spell slot pagination now uses one tall high-contrast image arrow per side, with a larger vertical hit target while reserving less horizontal space than text chevrons.
+
+TEST 06 NATIVE DES / STOCK-PEER COMPATIBILITY
+- Supersedes the test03-test05 manual creative-creature tracking experiments. Ordinary MCM-spawned enemies now use exactly one lifecycle: Entangled Worlds native DES discovery. MCM no longer calls ewext.track/notrack or installs a competing natural-death hook; unusual entities only receive EW's documented ew_synced opt-in tag.
+- Creative world perks now register their owner-side authority. The MCM owner's EW extra-module watches stock EW's ew_current_perks state for remote peers and correlates count increases with recent peer positions, then retires the matching authoritative pickup. The player who takes the perk does not need MCM.
+- The spawnable PLAYER companion no longer requires an MCM RPC handler on the host. Its network base is a vanilla Noita entity path available to every peer; owner-only controllers are attached only after DES identity exists.
+- Wand/spell horizontal slot pagination uses dedicated high-contrast image controls rather than repeated text chevrons.
+- The previous test05 ewext.notrack assumption was incorrect: current EW uses notrack only to suppress future discovery, not to retire an already tracked authority. That workaround has been removed.
+
+TEST 05 NETWORK CREATURE DEATH FOLLOW-UP
+- Creative creatures owned through EW DES now call ewext.notrack immediately after the authoritative des_death_notify succeeds. This prevents the owner tracker from publishing another live snapshot while the death packet propagates, eliminating the short resurrection loop seen with Maggot Tiny.
+- The portable stock EW death callback remains on serialized replicas, so peers without MCM still receive normal EW death semantics.
+
+Metamorph: Creative Menu 3.0.0
 ================================
+
+Intermediate creative-boss natural-death correction
+---------------------------------------------------
+
+- Fixed the remaining natural-death race for MCM-spawned creatures in Entangled Worlds.
+  Client-authored DES creatures now report their network death synchronously from the
+  owner-side death callback while `ew_gid_lid` is still valid, instead of relying only on
+  EW's post-update death queue after Noita has already started destroying the entity.
+- The owner-only MCM death callback is tagged `ew_remove_on_send`; EW strips it from the
+  serialized entity, so peers without MCM keep only EW's stock portable death callback and
+  gain no dependency on MCM files.
+- Host-authored creative enemies now receive EW's stock `ew_es_death_notify` component at
+  spawn time rather than waiting for the next enemy_sync upload pass. This also covers
+  one-frame lethal hits on large bosses such as Maggot Tiny.
+- Added regression coverage for Maggot Tiny-style lethal death, synchronous DES retirement,
+  stale-id rejection, remote MCM independence and immediate host enemy death notification.
+
+Intermediate Maggot Tiny / boss network correction
+--------------------------------------------------
+
+- Corrected creative-creature network ownership in Entangled Worlds. Host-created
+  creatures now stay exclusively on EW's native host `enemy_sync`; client-created
+  creatures use DES and are tagged `ew_no_enemy_sync` before handoff. A creative boss is
+  therefore never driven simultaneously by DES and enemy_sync, which could recreate a
+  lethally damaged Maggot Tiny from the other transport's still-live snapshot.
+- Client-authored DES creatures keep EW's stock `entity_sync_helper/death_notify.lua`, so
+  combat death remains an EW-native operation even when no other player has MCM.
+- DES possession retirement is now acknowledged by the EW extra-module context before
+  MCM removes the local multipart creature tree. The tracked entity and `ew_gid_lid` stay
+  alive until `ewext.des_death_notify` has resolved the network identity, removing the
+  same-frame GID destruction race from the previous test build.
+- Pure `ew_replicated` enemy_sync proxies are no longer incorrectly sent through the DES
+  death channel; the two EW transports are treated as distinct ownership systems.
+
+Intermediate boss-ownership follow-up
+-------------------------------------
+
+- Creative creature spawns in Entangled Worlds are now explicitly submitted to EW's
+  native DES tracker instead of relying on new-entity discovery timing. EW's stock
+  `entity_sync_helper/death_notify.lua` is attached before handoff so a boss killed by
+  any peer retires the authoritative network identity instead of being reconstructed.
+- Possession now resolves the clicked boss part to its EW-tracked network entity and
+  queues the stock `ew_death_notify` event before local retirement. The previous quiet
+  removal stripped the very Lua death callback EW needed to learn that the boss was gone.
+- Multipart possession separates network identity from visual-tree cleanup: EW receives
+  death for the tracked entity, while MCM suppresses death side effects and removes the
+  entire local creature tree from its actual root. No MCM-specific peer RPC is required.
+
+Intermediate network-stability pass
+-----------------------------------
+
+- Disabled only the post-Game-Over “I didn’t die” recovery while Entangled Worlds is
+  active. Form-death return-to-human remains independent and available in multiplayer.
+- Hardened the optional 32-bit native Game Over module so it validates the running Noita
+  PE image and profiled signatures before touching any version-specific Lua/API address.
+- Creative perk world spawns now attach Entangled Worlds' stock DES death notification
+  before handoff, so a pickup by a non-owner can retire the authoritative network entity
+  instead of being recreated indefinitely.
+- Added perk catalogue drag-and-drop: short LMB keeps the nearby spawn behavior, while a
+  completed drag outside the menu spawns at the confirmed world cursor position.
+- In Entangled Worlds, a dead player-form is now retired quietly after human restoration
+  instead of being converted into a second generic `ew_synced` boss/corpse identity.
+- Possession/replacement of a remotely-owned creature now requests retirement through
+  Entangled Worlds' stock DES death notification path; correctness no longer depends on
+  another peer having MCM or receiving an MCM-specific retirement RPC.
+- Giant-form multiplayer performance work is intentionally deferred from this pass.
 
 Upgrade compatibility
 ---------------------
 
-- Keeps the original `metamorph_creative_menu` mod id and folder name, so 2.0.0 is an
+- Keeps the original `metamorph_creative_menu` mod id and folder name, so 3.0.0 is an
   in-place update for the previous release.
 - Preserves existing keybinding migration, saved window layout, last selected section
   and V1 wand-blueprint loading.
@@ -40,7 +375,10 @@ Interface
   result, preventing an old item/spell operation from replaying after the menu is reopened.
 - Editable text/numeric fields now keep one stable native GuiTextInput identity across
   inactive, clicked and off-hover frames while the existing logical focus owner handles
-  blur, context changes and gameplay-input blocking.
+  blur, context changes and gameplay-input blocking. Off-hover character capture runs in a
+  separate Gui context so hovering other MCM controls cannot steal input or scroll the page.
+- Search reuses normalized catalogue fields between query changes, avoiding repeated full
+  localization/path normalization while the user is typing.
 - Wand stats no longer expose CURRENT STATE or technical suffix glyphs; appearance toggles
   verify fresh components after sync, transient errors are reported once, and saved wand
   presets show blueprint icons with separate APPLY and GET COPY actions.
@@ -89,3 +427,10 @@ Validation
 - The release is built only after the complete syntax, architecture, localization and
   behavioral mock suite passes. Offline mocks validate contracts but do not substitute for
   live Noita or two-client EW verification of engine/network behavior.
+
+R4 native Game Over safety rework (3.0 work)
+- Game Over button click is request-only; no engine state is mutated from the UI click stack.
+- Removed all native pause-state reads/writes from death recovery.
+- Recovery entity is prepared only after vanilla OnPlayerDied returns and remains detached from player authority while Game Over is active.
+- The verified main-loop call to the stock Game Over update is wrapped; gameover is released only after the entire stock UI update returns and only when a prepared recovery entity exists.
+- Player authority is committed on the first resumed OnWorldPreUpdate, then 1800-frame protection is reasserted.

@@ -55,6 +55,65 @@ end
     return guard .. content, 1
 end
 
+
+function resilience_patches.patch_kolmi_boss_update_source(content)
+    if type(content) ~= "string" or content == "" then return content, 0 end
+    if string.find(content, "mcm_kolmi_crosscall_failopen_v1", 1, true) ~= nil then return content, 0 end
+    if string.find(content, 'CrossCall("ew_kolmi_', 1, true) == nil then return content, 0 end
+    local helper = [[-- mcm_kolmi_crosscall_failopen_v1
+-- EW's Kolmi append is transport glue layered on top of the vanilla boss coroutine.
+-- A transport failure must never abort that coroutine: otherwise attacks, phase changes,
+-- minion spawning and the final kill_now all stop together. Prefer the normal entity-VM
+-- CrossCall registry, then the published NoitaPatcher bridge when this Lua state has it.
+local mcm_kolmi_crosscall_error_seen = {}
+local function mcm_kolmi_crosscall(name, ...)
+    local ok, a, b, c, d = false, nil, nil, nil, nil
+    if type(CrossCall) == "function" then
+        ok, a, b, c, d = pcall(CrossCall, name, ...)
+        if ok then return true, a, b, c, d end
+    end
+    if type(np) == "table" and type(np.CrossCall) == "function" then
+        ok, a, b, c, d = pcall(np.CrossCall, name, ...)
+        if ok then return true, a, b, c, d end
+    end
+    local signature = tostring(name) .. "|" .. tostring(a)
+    if not mcm_kolmi_crosscall_error_seen[signature] then
+        mcm_kolmi_crosscall_error_seen[signature] = true
+        if type(GlobalsSetValue) == "function" then
+            pcall(GlobalsSetValue, "mcm25_kolmi_crosscall_failure_v1", signature)
+        end
+        print("[Metamorph: Creative Menu] Kolmisilma EW CrossCall failed open: " .. signature)
+    end
+    return false, a
+end
+]]
+    local changed, count = string.gsub(content, "CrossCall%(", "mcm_kolmi_crosscall(")
+    if count <= 0 then return content, 0 end
+    return helper .. changed, count
+end
+
+function resilience_patches.patch_kolmi_spawn_source(content)
+    if type(content) ~= "string" or content == "" then return content, 0 end
+    if string.find(content, "mcm_kolmi_spawn_crosscall_failopen_v1", 1, true) ~= nil then return content, 0 end
+    local before = '            CrossCall("ew_spawn_kolmi", ComponentGetValue2(gid, "value_string"))'
+    local first, last = string.find(content, before, 1, true)
+    if first == nil then return content, 0 end
+    local after = [[            -- mcm_kolmi_spawn_crosscall_failopen_v1
+            local mcm_ok = false
+            if type(CrossCall) == "function" then
+                mcm_ok = pcall(CrossCall, "ew_spawn_kolmi", ComponentGetValue2(gid, "value_string"))
+            end
+            -- If the native cross-VM registry is split/unavailable, fail open into the
+            -- vanilla pickup path. A missed network convenience call is preferable to a
+            -- permanently inert final boss encounter.
+            if not mcm_ok then old(ent) end]]
+    local patched = string.sub(content, 1, first - 1) .. after .. string.sub(content, last + 1)
+    -- Be robust even if the target Lua file has no final newline and the engine's append
+    -- implementation concatenates bytes directly rather than inserting a separator.
+    if string.sub(patched, 1, 1) ~= "\n" then patched = "\n" .. patched end
+    return patched, 1
+end
+
 function resilience_patches.patch_seed_source(content)
     if type(content) ~= "string" then return content, 0 end
     local replacement = [[local ew_seed_ok, sx, sy = pcall(CrossCall, "ew_per_peer_seed")
@@ -74,15 +133,10 @@ function resilience_patches.patch_detour_source(content)
 end
 
 function resilience_patches.patch_world_sync_source(content, metrics_enabled)
-    if type(content) ~= "string" or string.find(content, "mcm_poly_world_sync_v3", 1, true) ~= nil then
+    if type(content) ~= "string" or string.find(content, "mcm_poly_world_sync_v5", 1, true) ~= nil then
         return content, 0
     end
     local original = content
-    -- ModTextFileGetContent can return either LF or CRLF depending on how the EW build
-    -- was installed.  The patch below deliberately uses readable literal anchors, so
-    -- normalize line endings before matching them.  Returning `original` on any failed
-    -- anchor keeps the all-or-nothing guarantee; a successful patch is safe to publish
-    -- with canonical LF endings, which Noita accepts.
     content = string.gsub(content, "\r\n", "\n")
     content = string.gsub(content, "\r", "\n")
     local changed = 0
@@ -92,24 +146,23 @@ function resilience_patches.patch_world_sync_source(content, metrics_enabled)
         return string.sub(source, 1, first - 1) .. after .. string.sub(source, last + 1), true
     end
 
-    -- State is deliberately tiny/bounded. It records chunks a fast polymorphed player
-    -- has just left so destructive worm/dragon movement cannot outrun the normal EW
-    -- camera-centred scheduler.
+    -- Keep MCM's intended fast-form world-sync integration, but do not create a second
+    -- persistent 3x3 trail scheduler.  EW's world frames and DES traffic share the same
+    -- netmanager connection; the old trail queue could dominate that connection while a
+    -- large worm/dragon form continuously destroys terrain.  That starves entity death /
+    -- DeleteEntity traffic and also explains the severe lag seen by the observing peer.
     local state_anchor = "local iter_slow_2 = 0"
     local metrics_literal = metrics_enabled == true and "true" or "false"
     local state_block = [[local iter_slow_2 = 0
 
--- mcm_poly_world_sync_v3
+-- mcm_poly_world_sync_v5
 local EWCM_METRICS_ENABLED = ]] .. metrics_literal .. [[
-local mcm_trail_queue = {}
-local mcm_trail_seen = {}
-local mcm_trail_head, mcm_trail_tail, mcm_trail_count = 1, 0, 0
-local mcm_last_poly_cx, mcm_last_poly_cy = nil, nil
 local mcm_sent_chunks, mcm_sent_bytes = 0, 0
 local mcm_recv_chunks, mcm_recv_bytes = 0, 0
-local mcm_trail_sent = 0
-local mcm_trail_dropped = 0
-local EWCM_TRAIL_LIMIT = 96]]
+local mcm_poly_scheduler_calls = 0
+local mcm_poly_scheduler_paused = 0
+local mcm_last_poly_cx, mcm_last_poly_cy = nil, nil
+local MCM_BOSS_DEATH_PRESSURE_KEY = "mcm_ew_boss_death_pressure_until_v1"]]
     local ok
     content, ok = replace_once(content, state_anchor, state_block)
     if not ok then return original, 0 end
@@ -129,50 +182,22 @@ local int = 4 -- ctx.proxy_opt.world_sync_interval]]
     end
 end
 
-local function mcm_enqueue_trail(cx, cy)
-    local key = tostring(cx) .. ":" .. tostring(cy)
-    if mcm_trail_seen[key] then return end
-    -- Preserve old trail chunks when saturated: they are no longer covered by EW's
-    -- player-centred scheduler, while the newest/current chunks still are.  A fixed ring
-    -- avoids the O(n) table.remove(1) shift in the network hot path.
-    if mcm_trail_count >= EWCM_TRAIL_LIMIT then
-        if EWCM_METRICS_ENABLED then mcm_trail_dropped = mcm_trail_dropped + 1 end
-        return
-    end
-    mcm_trail_tail = (mcm_trail_tail % EWCM_TRAIL_LIMIT) + 1
-    mcm_trail_seen[key] = true
-    mcm_trail_queue[mcm_trail_tail] = { cx, cy }
-    mcm_trail_count = mcm_trail_count + 1
+local function mcm_boss_death_pressure_active()
+    if type(GlobalsGetValue) ~= "function" then return false end
+    local until_frame = tonumber(GlobalsGetValue(MCM_BOSS_DEATH_PRESSURE_KEY, "-1")) or -1
+    return until_frame >= GameGetFrameNum()
 end
 
-local function mcm_note_poly_chunk(cx, cy)
-    if mcm_last_poly_cx ~= nil and (cx ~= mcm_last_poly_cx or cy ~= mcm_last_poly_cy) then
-        for oy = -1, 1 do
-            for ox = -1, 1 do mcm_enqueue_trail(mcm_last_poly_cx + ox, mcm_last_poly_cy + oy) end
-        end
-    end
-    mcm_last_poly_cx, mcm_last_poly_cy = cx, cy
-end
-
-local function mcm_drain_trail()
-    -- One full authoritative chunk every other frame is enough to guarantee eventual
-    -- convergence in steady state.  Drain every frame above half capacity so a burst can
-    -- recover without discarding the oldest, least likely to be revisited chunks.
-    if mcm_trail_count == 0
-        or (mcm_trail_count <= EWCM_TRAIL_LIMIT / 2 and GameGetFrameNum() % 2 ~= 1)
-    then return end
-    local item = mcm_trail_queue[mcm_trail_head]
-    mcm_trail_queue[mcm_trail_head] = nil
-    mcm_trail_head = (mcm_trail_head % EWCM_TRAIL_LIMIT) + 1
-    mcm_trail_count = mcm_trail_count - 1
-    if item == nil then return end
-    mcm_trail_seen[tostring(item[1]) .. ":" .. tostring(item[2])] = nil
-    send_chunks(item[1], item[2])
-    -- A binary world frame is a two-key protocol transaction. Closing this injected
-    -- chunk immediately prevents it from leaking into a later stock scheduler frame,
-    -- which can otherwise grow malformed native batches during sustained fast travel.
-    net.proxy_bin_send(KEY_WORLD_END, string.char(0) .. tostring(ctx.proxy_opt.world_num or 0))
-    if EWCM_METRICS_ENABLED then mcm_trail_sent = mcm_trail_sent + 1 end
+local function mcm_heavy_polymorph_active()
+    local entity = ctx.my_player ~= nil and ctx.my_player.entity or 0
+    if entity == nil or entity == 0 or not EntityHasTag(entity, "polymorphed_player") then return false end
+    -- Giant articulated/destructive forms are exactly the forms for which MCM's extra
+    -- camera-independent chunk scheduler can outrun the network.  EW still performs its
+    -- normal world synchronization; we only suppress MCM's additional fast-form path.
+    return EntityGetFirstComponentIncludingDisabled(entity, "BossDragonComponent") ~= nil
+        or EntityGetFirstComponentIncludingDisabled(entity, "WormComponent") ~= nil
+        or EntityGetFirstComponentIncludingDisabled(entity, "BossHealthBarComponent") ~= nil
+        or EntityGetFirstComponentIncludingDisabled(entity, "StreamingKeepAliveComponent") ~= nil
 end
 
 local function mcm_publish_world_metrics()
@@ -181,9 +206,13 @@ local function mcm_publish_world_metrics()
     GlobalsSetValue("mcm_world_sync_sent_bytes_v1", tostring(mcm_sent_bytes))
     GlobalsSetValue("mcm_world_sync_recv_chunks_v1", tostring(mcm_recv_chunks))
     GlobalsSetValue("mcm_world_sync_recv_bytes_v1", tostring(mcm_recv_bytes))
-    GlobalsSetValue("mcm_world_sync_trail_backlog_v1", tostring(mcm_trail_count))
-    GlobalsSetValue("mcm_world_sync_trail_sent_v1", tostring(mcm_trail_sent))
-    GlobalsSetValue("mcm_world_sync_trail_dropped_v1", tostring(mcm_trail_dropped))
+    -- Keep the historical keys so existing diagnostics remain readable.  v4 has no
+    -- persistent trail queue by design, therefore backlog/sent are always zero.
+    GlobalsSetValue("mcm_world_sync_trail_backlog_v1", "0")
+    GlobalsSetValue("mcm_world_sync_trail_sent_v1", "0")
+    GlobalsSetValue("mcm_world_sync_trail_dropped_v1", "0")
+    GlobalsSetValue("mcm_world_sync_poly_scheduler_calls_v1", tostring(mcm_poly_scheduler_calls))
+    GlobalsSetValue("mcm_world_sync_poly_scheduler_paused_v1", tostring(mcm_poly_scheduler_paused))
     GlobalsSetValue("mcm_world_sync_last_poly_chunk_v1", tostring(mcm_last_poly_cx or "") .. ":" .. tostring(mcm_last_poly_cy or ""))
 end
 
@@ -196,7 +225,7 @@ local int = 4 -- ctx.proxy_opt.world_sync_interval]]
     local n = 0]]
     local chunk_block = [[    local ocx, ocy = math.floor(px / CHUNK_SIZE), math.floor(py / CHUNK_SIZE)
     if EntityHasTag(ctx.my_player.entity, "polymorphed_player") then
-        mcm_note_poly_chunk(ocx, ocy)
+        mcm_last_poly_cx, mcm_last_poly_cy = ocx, ocy
     else
         mcm_last_poly_cx, mcm_last_poly_cy = nil, nil
     end
@@ -214,26 +243,7 @@ local int = 4 -- ctx.proxy_opt.world_sync_interval]]
         else
             wait = GameGetFrameNum() + 30
         end]]
-    local v2_far = [[        if ctx.spectating_over_peer_id ~= nil and ctx.spectating_over_peer_id ~= ctx.my_id then
-            if GameGetFrameNum() % 3 ~= 2 then
-                get_all_chunks(cx, cy, pos_data, 16, false)
-            else
-                get_all_chunks(ocx, ocy, pos_data, 16, true)
-            end
-        elseif EntityHasTag(ctx.my_player.entity, "polymorphed_player") then
-            -- mcm_fast_poly_world_sync_v2
-            -- Fast playable worms/dragons can outrun the camera by several chunks. The
-            -- upstream pauses world sync for 30 frames in that case. An earlier patch tried to
-            -- compensate by calling get_all_chunks only on frame%%int==0, which meant
-            -- only the central chunk was ever emitted: get_all_chunks's neighbour-ring
-            -- phases happen on other frame residues. Call the normal budgeted scheduler
-            -- every frame around the *player* instead. It still sends only the chunks
-            -- EW normally budgets for that frame, while destruction cannot outrun sync.
-            get_all_chunks(ocx, ocy, pos_data, 0, true)
-        else
-            wait = GameGetFrameNum() + 30
-        end]]
-    local far_block = [[        if ctx.spectating_over_peer_id ~= nil and ctx.spectating_over_peer_id ~= ctx.my_id then
+    local old_v3_far = [[        if ctx.spectating_over_peer_id ~= nil and ctx.spectating_over_peer_id ~= ctx.my_id then
             if GameGetFrameNum() % 3 ~= 2 then
                 get_all_chunks(cx, cy, pos_data, 16, false)
             else
@@ -246,8 +256,39 @@ local int = 4 -- ctx.proxy_opt.world_sync_interval]]
         else
             wait = GameGetFrameNum() + 30
         end]]
+    local far_block = [[        if ctx.spectating_over_peer_id ~= nil and ctx.spectating_over_peer_id ~= ctx.my_id then
+            if GameGetFrameNum() % 3 ~= 2 then
+                get_all_chunks(cx, cy, pos_data, 16, false)
+            else
+                get_all_chunks(ocx, ocy, pos_data, 16, true)
+            end
+        elseif EntityHasTag(ctx.my_player.entity, "polymorphed_player") then
+            -- Fast playable forms can outrun the camera.  Keep exactly ONE instance of
+            -- EW's normal ring scheduler centred on the form, rather than an additional
+            -- persistent trail queue.  During a boss-death pressure window, yield these
+            -- optional world frames briefly so DES DeleteEntity/authority traffic wins.
+            if mcm_boss_death_pressure_active() or mcm_heavy_polymorph_active() then
+                -- Do not generate an MCM-owned terrain stream for giant boss/worm forms.
+                -- Their destruction volume can produce data faster than the observer can
+                -- consume it, which manifests as lag that keeps growing until unpolymorph.
+                mcm_poly_scheduler_paused = mcm_poly_scheduler_paused + 1
+                wait = GameGetFrameNum() + 30
+            else
+                -- Only the central chunk (frame %% int == 0) and the immediate 3x3 ring
+                -- (frame %% int == 2) are forced while the form outruns the camera. The
+                -- radius-2/radius-3 phases are intentionally skipped here; they were the
+                -- dominant bandwidth multiplier for huge destructive boss forms.
+                local phase = GameGetFrameNum() % int
+                if phase == 0 or phase == 2 then
+                    mcm_poly_scheduler_calls = mcm_poly_scheduler_calls + 1
+                    get_all_chunks(ocx, ocy, pos_data, 0, true)
+                end
+            end
+        else
+            wait = GameGetFrameNum() + 30
+        end]]
     content, ok = replace_once(content, upstream_far, far_block)
-    if not ok then content, ok = replace_once(content, v2_far, far_block) end
+    if not ok then content, ok = replace_once(content, old_v3_far, far_block) end
     if not ok then return original, 0 end
     changed = changed + 1
 
@@ -255,7 +296,7 @@ local int = 4 -- ctx.proxy_opt.world_sync_interval]]
 end
 
 local PixelRun_const_ptr]]
-    local tail_block = [[    end
+    local old_v3_tail = [[    end
     -- Keep draining after returning to human. Otherwise the last destroyed chunks of
     -- a fast form could remain queued forever at the exact moment the form ends.
     mcm_drain_trail()
@@ -263,7 +304,13 @@ local PixelRun_const_ptr]]
 end
 
 local PixelRun_const_ptr]]
+    local tail_block = [[    end
+    mcm_publish_world_metrics()
+end
+
+local PixelRun_const_ptr]]
     content, ok = replace_once(content, tail_anchor, tail_block)
+    if not ok then content, ok = replace_once(content, old_v3_tail, tail_block) end
     if not ok then return original, 0 end
     changed = changed + 1
 
@@ -279,6 +326,59 @@ local PixelRun_const_ptr]]
     if not ok then return original, 0 end
     changed = changed + 1
     return content, changed
+end
+
+
+function resilience_patches.patch_entity_sync_death_source(content)
+    if type(content) ~= "string" or string.find(content, "mcm_immediate_des_death_v1", 1, true) ~= nil then
+        return content, 0
+    end
+    local anchor = [[util.add_cross_call("ew_death_notify", function(entity, wait_on_kill, x, y, file, responsible)
+    table.insert(dead, { entity, wait_on_kill, x, y, file, responsible })
+end)]]
+    local block = [[util.add_cross_call("ew_death_notify", function(entity, wait_on_kill, x, y, file, responsible)
+    -- mcm_immediate_des_death_v1
+    -- Stock EW queues this CrossCall until on_world_update_post.  Global bosses are
+    -- authority-transfer entities, so only for BossHealthBar/StreamingKeepAlive roots
+    -- make the native DES death decision while the dying entity still has ew_gid_lid.
+    -- Ordinary enemies retain EW's stock deferred path. If the native API throws,
+    -- preserve EW's original deferred queue exactly as a compatibility fallback.
+    local submitted = false
+    local is_global_boss = EntityGetFirstComponentIncludingDisabled(entity, "BossHealthBarComponent") ~= nil
+        or EntityGetFirstComponentIncludingDisabled(entity, "StreamingKeepAliveComponent") ~= nil
+    if is_global_boss and type(ewext) == "table" and type(ewext.des_death_notify) == "function" then
+        submitted = pcall(ewext.des_death_notify, entity, wait_on_kill, x, y, file, responsible)
+    end
+    if not submitted then
+        table.insert(dead, { entity, wait_on_kill, x, y, file, responsible })
+    end
+end)]]
+    local first, last = string.find(content, anchor, 1, true)
+    if first == nil then return content, 0 end
+    return string.sub(content, 1, first - 1) .. block .. string.sub(content, last + 1), 1
+end
+
+function resilience_patches.patch_boss_death_pressure_source(content)
+    if type(content) ~= "string" or string.find(content, "mcm_boss_death_pressure_v1", 1, true) ~= nil then
+        return content, 0
+    end
+    local anchor = [[    local ent = GetUpdatedEntityID()
+    local x, y = EntityGetTransform(ent)]]
+    local block = [[    local ent = GetUpdatedEntityID()
+    -- mcm_boss_death_pressure_v1
+    -- This does NOT change EW death semantics.  It only gives MCM's optional fast-form
+    -- world-sync traffic a short back-pressure hint so DES deletion/authority messages
+    -- are not queued behind large pixel-world frames when any global boss dies.
+    if EntityGetFirstComponentIncludingDisabled(ent, "BossHealthBarComponent") ~= nil
+        or EntityGetFirstComponentIncludingDisabled(ent, "StreamingKeepAliveComponent") ~= nil
+    then
+        local frame = type(GameGetFrameNum) == "function" and GameGetFrameNum() or 0
+        GlobalsSetValue("mcm_ew_boss_death_pressure_until_v1", tostring((tonumber(frame) or 0) + 12))
+    end
+    local x, y = EntityGetTransform(ent)]]
+    local first, last = string.find(content, anchor, 1, true)
+    if first == nil then return content, 0 end
+    return string.sub(content, 1, first - 1) .. block .. string.sub(content, last + 1), 1
 end
 
 local POLYMORPH_DEATH_ANCHOR = [[        if has_hp_component and hp <= 0 and not gameover_requested then

@@ -1,6 +1,7 @@
 local root = assert(arg[1], "root required")
 local alive = { [1]=true }
 local killed = false
+local sampled_materials = {}
 function EntityGetIsAlive(entity_id) return alive[entity_id] == true end
 function EntityGetTransform(entity_id) return 10, 20 end
 function EntityLoad(path, x, y)
@@ -11,11 +12,19 @@ function EntityLoad(path, x, y)
 end
 function RemoveMaterialInventoryMaterial(entity_id) end
 function AddMaterialInventoryMaterial(entity_id, material_id, amount)
-    assert(material_id == "water" and amount == 1000, "wrong preview material")
+    assert(type(material_id) == "string" and material_id ~= "" and amount == 1000, "wrong preview material")
+    sampled_materials[#sampled_materials + 1] = material_id
 end
 function GameGetPotionColorUint(entity_id)
     -- 0x00332211 => red=0x11, green=0x22, blue=0x33
     return 0x00332211
+end
+function EntityGetFirstComponentIncludingDisabled(entity_id, component_type)
+    if entity_id == 2 and component_type == "ItemComponent" then return 20 end
+    return 0
+end
+function ComponentGetValue2(component_id, field_name)
+    if component_id == 20 and field_name == "ui_sprite" then return "data/ui_gfx/items/potion.png" end
 end
 function EntityKill(entity_id) alive[entity_id] = false; killed = true end
 function ModTextFileGetContent(path)
@@ -31,10 +40,14 @@ end
 
 METAMORPH_CREATIVE_MENU_MATERIAL_PREVIEW = nil
 local preview = assert(dofile(root .. "/files/platform/noita/material_preview.lua"))
+assert(preview.liquid_icon() == "data/ui_gfx/items/potion.png", "preview does not use the vanilla inventory flask")
+assert(preview.liquid_mask == nil and preview.liquid_offset == nil,
+    "world-sprite liquid mask API survived in inventory preview")
 local color = assert(preview.sample_liquid_color(1, "water"))
 assert(math.abs(color[1] - 0x11/255) < 0.00001, "red byte decoded incorrectly")
 assert(math.abs(color[2] - 0x22/255) < 0.00001, "green byte decoded incorrectly")
 assert(math.abs(color[3] - 0x33/255) < 0.00001, "blue byte decoded incorrectly")
+assert(color[4] == 1, "real potion UI tint was made translucent")
 assert(killed == true, "preview probe leaked")
 assert(preview.texture("rock_child") == "data/materials_gfx/rock.png",
     "child material did not inherit its authored texture")
@@ -43,4 +56,9 @@ assert(math.abs(tint[1] - 0x11/255) < 0.00001
     and math.abs(tint[2] - 0x22/255) < 0.00001
     and math.abs(tint[3] - 0x33/255) < 0.00001,
     "authored material tint was decoded incorrectly")
-print("item_liquid_preview=PASS probe_cleanup=true color_order=true texture_inheritance=true")
+local warmup = preview.new_liquid_warmup()
+preview.warm_liquid_colors(1, {{id="oil"}}, warmup, 1, "search:oil")
+preview.warm_liquid_colors(1, {{id="acid"}}, warmup, 1, "search:acid")
+assert(sampled_materials[#sampled_materials-1] == "oil" and sampled_materials[#sampled_materials] == "acid",
+    "same-sized liquid search result reused stale warmup completion")
+print("item_liquid_preview=PASS vanilla_inventory_bottle=true engine_tint=true opaque=true probe_cleanup=true color_order=true texture_inheritance=true search_rekey=true")

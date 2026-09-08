@@ -2,6 +2,7 @@ local root = assert(arg[1], "root required")
 local native_dofile = dofile
 local spawn_call = nil
 local notified_entity = nil
+local registered_entity, registered_perk = nil, nil
 
 local stubs = {
     ["mods/metamorph_creative_menu/files/features/perks/inverse_registry.lua"]={has=function() return false end},
@@ -10,7 +11,10 @@ local stubs = {
     ["mods/metamorph_creative_menu/files/features/perks/nested_pickups.lua"]={update=function() end,state_snapshot=function() return {scopes=0,children=0} end},
     ["mods/metamorph_creative_menu/files/features/perks/locomotion_guard.lua"]={capture_if_idle=function() end,repair_if_idle=function() end,baseline_count=function() return 0 end},
     ["mods/metamorph_creative_menu/files/features/perks/presentation.lua"]={update=function() end},
-    ["mods/metamorph_creative_menu/files/integrations/ew/world_items.lua"]={notify_world_item=function(entity) notified_entity=entity; return true,"direct" end},
+    ["mods/metamorph_creative_menu/files/integrations/ew/world_items.lua"]={
+        notify_world_item=function(entity) notified_entity=entity; return true,"direct" end,
+        register_creative_perk=function(entity,perk_id) registered_entity,registered_perk=entity,perk_id; return true,"registered" end,
+    },
     ["mods/metamorph_creative_menu/files/integrations/ew/perk_visibility.lua"]={refresh=function() return true,"singleplayer" end},
 }
 dofile=function(path)
@@ -26,4 +30,5 @@ local ok,reason,entity=service.spawn(1,{id="EXTRA_HP"})
 assert(ok==true and reason=="spawned" and entity==77,"LMB perk spawn failed")
 assert(spawn_call.x==112 and spawn_call.y==192 and spawn_call.id=="EXTRA_HP","perk world spawn placement/id changed")
 assert(notified_entity==77,"spawned vanilla perk was not handed to the optional EW world-item adapter")
-io.write("perk_spawn=PASS lmb=true world_item_handoff=true\n")
+assert(registered_entity==77 and registered_perk=="EXTRA_HP","creative perk was not registered for stock-peer consume correlation")
+io.write("perk_spawn=PASS lmb=true world_item_handoff=true stock_peer_watch=true\n")

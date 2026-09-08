@@ -107,13 +107,21 @@ end
 function physics_adapter.configure(entity, profile, is_ik)
     steering_x, steering_y = 0, 0
     captured_tuning = capture_tuning(entity, profile)
+    -- Several authored physics/IK bosses (notably Kolmisilma) spawn with a static root and
+    -- expect their encounter script to call PhysicsSetStatic(false).  Player forms suppress
+    -- that autonomous encounter script, so forces were being applied to an immovable body.
+    if type(PhysicsSetStatic) == "function" then pcall(PhysicsSetStatic, entity, false) end
     set_component_type_enabled(entity, "PhysicsAIComponent", false)
     local physics_tuning = captured_tuning or (profile and profile.physics_ai or {})
-    if is_ik then configure_ik_attachment(entity) end
+    local pure_flyer = type(profile) == "table" and profile.pure_flyer == true
+    if is_ik and not pure_flyer then configure_ik_attachment(entity) end
     for _, physics_body_id in ipairs(PhysicsBodyIDGetFromEntity(entity) or {}) do
-        if is_ik then
-            pcall(PhysicsBodyIDSetGravityScale, physics_body_id, 1)
-        elseif physics_tuning.levitate == true then
+        -- LimbBoss/IK is a shape/animation family, not proof that the authored creature
+        -- is ground-bound. Several bosses (boss_robot, boss_meat, boss_limbs,
+        -- boss_centipede, boss_pit) explicitly have can_fly=1 + can_walk=0. Forcing
+        -- gravity back to 1 made those player forms sink continuously and rendered UP
+        -- almost useless. Preserve zero-gravity flight for that whole profile family.
+        if pure_flyer or physics_tuning.levitate == true then
             pcall(PhysicsBodyIDSetGravityScale, physics_body_id, 0)
         else
             pcall(PhysicsBodyIDSetGravityScale, physics_body_id, 1)
@@ -133,8 +141,9 @@ function physics_adapter.update(entity, profile, is_ik)
     local torque_balance_coefficient = tonumber(physics_tuning.torque_balancing_coeff) or 0.2
     local maximum_torque = tonumber(physics_tuning.torque_max) or 50
 
+    local pure_flyer = type(profile) == "table" and profile.pure_flyer == true
     local has_support = true
-    if is_ik then
+    if is_ik and not pure_flyer then
         local attached_count, attachment_count = ik_attachment_count(entity)
         local required_attachments = attachment_count >= 2 and 2 or 1
         has_support = attachment_count == 0 or attached_count >= required_attachments
@@ -146,6 +155,10 @@ function physics_adapter.update(entity, profile, is_ik)
         local entity_x, entity_y = EntityGetTransform(entity)
         if entity_x ~= nil then
             for _, limb_component in ipairs(tree_components(entity, "LimbBossComponent")) do
+                -- limbboss_system.cpp state 4 = MoveTo.  Merely writing mMoveToPosition while
+                -- leaving the authored FollowPlayer state active has no player target after the
+                -- AI components are suppressed, which collapses Kolmi's legs at the root.
+                pcall(ComponentSetValue2, limb_component, "state", 4)
                 pcall(ComponentSetValue2, limb_component, "mMoveToPositionX", entity_x + direction_x * 96)
                 local target_y = entity_y + direction_y * 96
                 if has_support or target_y >= entity_y then

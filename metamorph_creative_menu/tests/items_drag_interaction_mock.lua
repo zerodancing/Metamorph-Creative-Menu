@@ -9,7 +9,7 @@ end
 -- Real Items tab/runtime/drag_drop/item service/inventory_slots/world_items are loaded below.
 -- Only Noita engine boundaries are faked.
 local target_path="data/entities/items/pickup/bloodmoney_10.xml"
-local target_icon="data/ui_gfx/items/book.png"
+local target_icon="data/ui_gfx/items/goldnugget.png"
 local alive={[1]=true,[2]=true,[3]=true}
 local names={[1]="player",[2]="inventory_quick",[3]="inventory_full"}
 local parent={[2]=1,[3]=1}

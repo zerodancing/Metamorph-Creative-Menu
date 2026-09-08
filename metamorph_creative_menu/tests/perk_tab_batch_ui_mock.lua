@@ -49,6 +49,13 @@ local service={
 local catalog={all=function() return {{id="TEST",ui_name="Test",ui_description="Desc",ui_icon="perk.png",func=function() end}} end}
 dofile=function(path)
     if path=="mods/metamorph_creative_menu/files/ui/runtime.lua" then return ui end
+    if path=="mods/metamorph_creative_menu/files/ui/drag_drop.lua" then return {
+        take_result=function()
+            if draw_index==1 then return {click=true,payload={kind="catalog_perk",id="TEST",data={id="TEST",func=function() end},display_name="Test"}} end
+            return nil
+        end,
+        source=function() end, active=function() return false end,
+    } end
     if path=="mods/metamorph_creative_menu/files/features/perks/service.lua" then return service end
     if path=="mods/metamorph_creative_menu/files/features/perks/catalog.lua" then return catalog end
     return native_dofile(path)

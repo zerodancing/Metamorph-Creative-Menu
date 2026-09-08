@@ -47,7 +47,7 @@ stubs[prefix.."files/features/items/ui_catalog.lua"]={
     entries_for=function() return {item_entry} end,liquids=function() return {} end,
 }
 stubs[prefix.."files/features/items/service.lua"]={spawn=function()return true end,give=function()return true end,spawn_filled_flask=function()return true end}
-stubs[prefix.."files/platform/noita/material_preview.lua"]={new_liquid_warmup=function()return{}end,warm_liquid_colors=function()end,liquid_icon=function()return"potion.png"end,liquid_color=function()return{1,1,1,1}end}
+stubs[prefix.."files/platform/noita/material_preview.lua"]={new_liquid_warmup=function()return{}end,warm_liquid_colors=function()end,liquid_icon=function()return"potion.png"end,liquid_mask=function()return"liquid.png"end,liquid_offset=function()return-1,0 end,liquid_color=function()return{1,1,1,1}end}
 stubs[prefix.."files/ui/drag_drop.lua"]={take_result=function()return nil end,source=function()end,active=function()return false end}
 stubs[prefix.."files/platform/noita/inventory_slots.lua"]={native_drop_bounds=function()return nil end}
 

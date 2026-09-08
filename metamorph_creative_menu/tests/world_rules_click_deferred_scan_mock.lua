@@ -32,6 +32,7 @@ local empty_adapter={
     recover_persisted=function() return true end,
 }
 local stain={supported=function() return true end,apply=function() end,cleanup_stale=function() end,restore_all=function() return true end,has_overrides=function() return false end}
+local time_dt={supported=function() return true end,apply_day_multiplier=function() return true,"ok" end,release_day_multiplier=function() return true,"ok" end,reassert=function() return true,"ok" end,has_day_override=function() return false end,has_persisted_recovery=function() return false end,recover_persisted=function() return true end}
 local stubs={
     ["mods/metamorph_creative_menu/files/platform/noita/player_locator.lua"]={get=function() return 1 end},
     ["mods/metamorph_creative_menu/files/platform/noita/input_guard.lua"]={heavy_updates_allowed=function() return true end},
@@ -42,6 +43,7 @@ local stubs={
     ["mods/metamorph_creative_menu/files/features/world_rules/world_state.lua"]=empty_adapter,
     ["mods/metamorph_creative_menu/files/features/world_rules/stains.lua"]=stain,
     ["mods/metamorph_creative_menu/files/features/world_rules/magic_numbers.lua"]=empty_adapter,
+    ["mods/metamorph_creative_menu/files/features/world_rules/time_dt.lua"]=time_dt,
 }
 dofile=function(path)
     if stubs[path] ~= nil then return stubs[path] end

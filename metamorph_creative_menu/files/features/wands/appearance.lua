@@ -1,10 +1,12 @@
 if type(METAMORPH_CREATIVE_MENU_WAND_APPEARANCE) == "table" then return METAMORPH_CREATIVE_MENU_WAND_APPEARANCE end
 
 local appearance = {}
+local utf8_text = dofile("mods/metamorph_creative_menu/files/core/utf8_text.lua")
 local wand_api = dofile("mods/metamorph_creative_menu/files/platform/noita/wand.lua")
 local wand_sync = dofile("mods/metamorph_creative_menu/files/features/wands/sync.lua")
 
 local function valid(component) return component ~= nil and component ~= 0 end
+local function safe_name(value) return utf8_text.truncate_bytes(tostring(value or ""), 160) end
 local function finite(value)
     value = tonumber(value)
     return value ~= nil and value == value and value > -math.huge and value < math.huge and value or nil
@@ -132,8 +134,7 @@ function appearance.set_name(player, wand, name, show_name_in_ui)
     local before, reason = appearance.snapshot(wand)
     if before == nil then return false, reason end
     if not valid(before.item) then return false, "item_missing" end
-    name = tostring(name or "")
-    if #name > 160 then name = string.sub(name, 1, 160) end
+    name = safe_name(name)
     if name == "" then show_name_in_ui = false end
     local target_show = show_name_in_ui == true
     if not write_verified(before.item, "item_name", name)
@@ -320,8 +321,7 @@ function appearance.apply(player, wand, desired, options)
     local current = select(1, appearance.snapshot(wand)) or before
     if meta.name ~= nil or meta.show_name_in_ui ~= nil then
         if not valid(current.item) then restore(before); return false, "item_missing" end
-        local name = meta.name ~= nil and tostring(meta.name) or current.name
-        if #name > 160 then name = string.sub(name, 1, 160) end
+        local name = meta.name ~= nil and safe_name(meta.name) or current.name
         local show = current.show_name_in_ui
         if meta.show_name_in_ui ~= nil then show = meta.show_name_in_ui == true end
         if name == "" then show = false end
@@ -339,8 +339,7 @@ function appearance.apply(player, wand, desired, options)
     local after = select(1, sync_then_snapshot(player, wand, options.skip_sync == true))
     if after == nil then rollback_after_failure(player, before, options.skip_sync == true); return false, "appearance_verify_failed" end
     if meta.name ~= nil then
-        local expected_name = tostring(meta.name or "")
-        if #expected_name > 160 then expected_name = string.sub(expected_name, 1, 160) end
+        local expected_name = safe_name(meta.name)
         if tostring(after.name or "") ~= expected_name then
             rollback_after_failure(player, before, options.skip_sync == true); return false, "name_verify_failed"
         end

@@ -9,8 +9,10 @@ local input_guard = dofile("mods/metamorph_creative_menu/files/platform/noita/in
 local menu_inventory_guard = dofile("mods/metamorph_creative_menu/files/platform/noita/menu_inventory_guard.lua")
 local action_bindings = dofile("mods/metamorph_creative_menu/files/platform/noita/action_bindings.lua")
 local panel_layout = dofile("mods/metamorph_creative_menu/files/core/panel_layout.lua")
+local visibility_policy = dofile("mods/metamorph_creative_menu/files/core/menu_visibility_policy.lua")
 local pointer = dofile("mods/metamorph_creative_menu/files/platform/noita/pointer.lua")
 local drag_drop = dofile("mods/metamorph_creative_menu/files/ui/drag_drop.lua")
+local gameplay_input = dofile("mods/metamorph_creative_menu/files/platform/noita/gameplay_input.lua")
 
 local tabs = {
     { id="spells", key="$mcm_tab_spells", fallback="SPELLS", icon="data/ui_gfx/gun_actions/light_bullet.png", fallback_icon="data/ui_gfx/inventory/icon_gun.png", module=dofile("mods/metamorph_creative_menu/files/ui/tabs/spells.lua") },
@@ -34,25 +36,31 @@ local pending_selection_restore = nil
 local last_panel_width = 260
 local layout = nil
 local pointer_operation = nil
-local minimized = false
 local tab_error_signatures = {}
 local last_resume_serial = 0
 local suppress_inventory_until_closed = false
 local warmup_tab_cursor = 1
 local warmup_done = {}
+local background_warmup_first_frame = nil
+local background_warmup_unlocked = false
+local BACKGROUND_WARMUP_DELAY_FRAMES = 180
+local BACKGROUND_WARMUP_INTERVAL_FRAMES = 4
 local menu_opened = false
 local visible_last_frame = false
-local manual_open = false
-local suppress_native_until_closed = false
-local last_native_open = false
+local visibility_state = visibility_policy.new()
+local remembered_open = true
+local remembered_loaded = false
 local resize_hover_edges = nil
 local frame_insets = nil
+local layout_reset_pending = false
 local restored_last_tab = false
 local LAST_TAB_SETTING = "metamorph_creative_menu.ui_last_tab"
 local LAYOUT_X_SETTING = "metamorph_creative_menu.ui_panel_x"
 local LAYOUT_Y_SETTING = "metamorph_creative_menu.ui_panel_y"
 local LAYOUT_WIDTH_SETTING = "metamorph_creative_menu.ui_panel_width"
 local LAYOUT_HEIGHT_SETTING = "metamorph_creative_menu.ui_panel_height"
+local INVENTORY_POLICY_SETTING = "metamorph_creative_menu.inventory_open_policy"
+local INVENTORY_REMEMBERED_SETTING = "metamorph_creative_menu.ui_inventory_remembered_open"
 local HEADER_CONTROL_RESERVE = 34
 local BORDER_VISUAL_OUTSET = 2
 local BORDER_VISUAL_THICKNESS = 5
@@ -115,43 +123,87 @@ local function step_tab(direction)
     set_active_tab(((active_tab - 1 + direction) % count) + 1, "shortcut")
 end
 
-local function close_menu(native_open)
-    manual_open = false
+local function read_setting(id)
+    if type(ModSettingGet) ~= "function" then return nil end
+    local ok, value = pcall(ModSettingGet, id)
+    if not ok then return nil end
+    return value
+end
+
+local function current_inventory_policy()
+    return visibility_policy.normalize_mode(read_setting(INVENTORY_POLICY_SETTING))
+end
+
+
+local function load_remembered_open()
+    if remembered_loaded then return remembered_open end
+    remembered_loaded = true
+    local value = read_setting(INVENTORY_REMEMBERED_SETTING)
+    if type(value) == "boolean" then remembered_open = value else remembered_open = true end
+    return remembered_open
+end
+
+local function save_remembered_open(value)
+    remembered_open = value == true
+    remembered_loaded = true
+    if type(ModSettingSet) == "function" then
+        pcall(ModSettingSet, INVENTORY_REMEMBERED_SETTING, remembered_open)
+    end
+end
+
+local function set_user_visible(visible)
+    local preference = visibility_policy.set_user_visible(visibility_state, visible == true)
+    if preference ~= nil then save_remembered_open(preference) end
+end
+
+local function close_menu()
+    set_user_visible(false)
     menu_opened = false
-    if native_open then suppress_native_until_closed = true end
     if type(ui.reset_text_inputs) == "function" then ui.reset_text_inputs() end
     drag_drop.cancel()
 end
 
 local function process_shortcuts(native_open)
     action_bindings.update()
-    if native_open and not last_native_open then suppress_native_until_closed = false end
-    if not native_open then suppress_native_until_closed = false end
-
-    local visible_before = manual_open or (native_open and not suppress_native_until_closed)
+    local visible_before = visibility_policy.visible(visibility_state)
     if action_bindings.consume("menu_toggle") then
-        if visible_before then close_menu(native_open) else manual_open = true end
+        if visible_before then close_menu() else set_user_visible(true) end
     elseif action_bindings.consume("menu_close") and visible_before then
-        close_menu(native_open)
+        close_menu()
     end
 
     for _, tab in ipairs(tabs) do
         if action_bindings.consume(tab.action) then
             open_tab(tab.id, "shortcut")
-            suppress_native_until_closed = false
-            if not native_open then manual_open = true end
+            set_user_visible(true)
         end
     end
 
-    local visible_after = manual_open or (native_open and not suppress_native_until_closed)
-    if visible_after then
+    if visibility_policy.visible(visibility_state) then
         if action_bindings.consume("tab_previous") then step_tab(-1) end
         if action_bindings.consume("tab_next") then step_tab(1) end
     end
-    last_native_open = native_open
 end
 
 local function background_warmup()
+    -- A fresh world should do zero hidden catalogue work. The menus already resolve
+    -- their visible content on demand, so background prewarming is unlocked only after
+    -- the player has actually opened MCM once in this session. This keeps EW/world
+    -- streaming and large perk trees uncontended during initial spawn.
+    if background_warmup_unlocked ~= true then return end
+    -- Do not spend the first few seconds after joining a world prewarming hidden UI.
+    -- EW, world streaming and perk reconstruction are busiest there; doing catalogue XML
+    -- work every rendered frame produces a visible short FPS sag on large saves. Once the
+    -- initial join burst has settled, amortize the same work at one step every few frames.
+    local frame = 0
+    if type(GameGetFrameNum) == "function" then
+        local ok, value = pcall(GameGetFrameNum)
+        if ok then frame = tonumber(value) or 0 end
+    end
+    if background_warmup_first_frame == nil then background_warmup_first_frame = frame end
+    if frame - background_warmup_first_frame < BACKGROUND_WARMUP_DELAY_FRAMES then return end
+    if BACKGROUND_WARMUP_INTERVAL_FRAMES > 1 and frame % BACKGROUND_WARMUP_INTERVAL_FRAMES ~= 0 then return end
+
     -- Warm catalog-heavy tabs by stable ids rather than positional indexes so adding a
     -- new UI section cannot silently redirect background work to the wrong feature.
     local order = { tab_index_by_id("mobs"), tab_index_by_id("perks") }
@@ -261,8 +313,7 @@ local function border_edges_at_mouse(screen_width, screen_height)
     local left = layout.x - (tonumber(insets.left) or 0)
     local top = layout.y - (tonumber(insets.top) or 0)
     local right = layout.x + layout.width + (tonumber(insets.right) or 0)
-    local bottom = layout.y + (minimized and 16 or layout.height)
-        + (not minimized and (tonumber(insets.bottom) or 0) or 0)
+    local bottom = layout.y + layout.height + (tonumber(insets.bottom) or 0)
 
     -- The hit band is exactly the visible frame: part of it overlays the stock menu
     -- edge and part sits just outside it. Nothing is armed merely by crossing this
@@ -280,7 +331,7 @@ local function border_edges_at_mouse(screen_width, screen_height)
         left=mouse_x <= left + inner,
         right=mouse_x >= right - inner,
         top=mouse_y <= top + inner,
-        bottom=not minimized and mouse_y >= bottom - inner,
+        bottom=mouse_y >= bottom - inner,
     }
     return (edges.left or edges.right or edges.top or edges.bottom) and edges or nil
 end
@@ -304,26 +355,33 @@ local function begin_titlebar_operation(screen_width, screen_height)
     local left = layout.x - (tonumber(insets.left) or 0) + 5
     local right = layout.x + layout.width - HEADER_CONTROL_RESERVE
     local top = layout.y - (tonumber(insets.top) or 0) + 5
-    local bottom = layout.y + (minimized and 14 or 24)
+    local bottom = layout.y + 24
     if mouse_x >= left and mouse_x <= right and mouse_y >= top and mouse_y <= bottom then
         begin_pointer_operation("move", screen_width, screen_height)
     end
 end
 
 local function reset_layout(screen_width, screen_height)
-    layout = panel_layout.create(screen_width, screen_height, {}, layout_outsets())
-    last_panel_width = layout.width
+    -- The reset button is drawn after GuiLayoutBeginVertical/GuiBeginAutoBox have already
+    -- captured this frame's old origin. Mutating layout immediately makes finish_auto_box()
+    -- compare the old measured frame against the new default coordinates, producing bogus
+    -- outsets and a one-click jump toward the middle. Defer the actual reset until the
+    -- current AutoBox is closed; the next frame then starts at the canonical default in one
+    -- click instead of requiring a corrective second click.
+    layout_reset_pending = true
     pointer_operation = nil
-    frame_insets = nil
-    minimized = false
-    save_layout()
-    audit("menu.layout_reset", "width=" .. tostring(math.floor(layout.width + 0.5)))
+    audit("menu.layout_reset_requested", "screen=" .. tostring(screen_width) .. "x" .. tostring(screen_height))
 end
 
 local function draw_tab_bar(width)
     -- The header is a responsive grid rather than a permanently growing row. New
     -- tabs can be added without changing panel geometry or depending on label length.
-    local per_row = math.max(1, math.floor(((tonumber(width) or 260) - 8) / ui.ICON_STEP))
+    -- GuiImageButton uses an 18 px slot background here; ICON_STEP (20) is a catalog-grid
+    -- pitch with extra breathing room. Using it for the navigation bar made the tenth tab
+    -- wrap at the minimum panel width even though the actual button still fit. Reserve only
+    -- the tiny AutoBox edge allowance and pack by the real tile footprint.
+    local tab_pitch = 18
+    local per_row = math.max(1, math.floor(((tonumber(width) or 260) - 2) / tab_pitch))
     for start = 1, #tabs, per_row do
         GuiLayoutBeginHorizontal(ui.gui(), 0, 0, true)
         for index = start, math.min(start + per_row - 1, #tabs) do
@@ -353,30 +411,19 @@ local function draw_header(native_open, screen_width, screen_height)
         ui.button(0, 0, drag_text, true,
             ui.tr("$mcm_menu_drag", "Drag menu"), ui.tr("$mcm_menu_drag_hint", "Hold and move the mouse"))
     end
-    if not minimized then
-        if ui.button(0, 0, "R", false, ui.tr("$mcm_menu_layout_reset", "Reset menu position and size"), "") then
-            reset_layout(screen_width, screen_height)
-        end
+    if ui.button(0, 0, "R", false, ui.tr("$mcm_menu_layout_reset", "Reset menu position and size"), "") then
+        reset_layout(screen_width, screen_height)
     end
-    local minimize_label = minimized and "+" or "-"
-    local minimize_title = minimized and ui.tr("$mcm_menu_restore", "Restore window")
-        or ui.tr("$mcm_menu_minimize", "Hide window")
-    if ui.button(0, 0, minimize_label, false, minimize_title, "") then
-        minimized = not minimized
-        menu_opened = not minimized
-        if minimized then
-            if type(ui.reset_text_inputs) == "function" then ui.reset_text_inputs() end
-        end
-        pointer_operation = nil
-        audit("menu.minimized", "value=" .. tostring(minimized))
+    if ui.button(0, 0, "-", false, ui.tr("$mcm_menu_minimize", "Hide window"), "") then
+        close_menu()
     end
     if ui.button(0, 0, "X", false, ui.tr("$mcm_bind_menu_close", "Close creative menu"), "") then
-        close_menu(native_open)
+        close_menu()
     end
     GuiLayoutEnd(ui.gui())
 end
 
-local function pointer_click_inside_window(screen_width, screen_height)
+local function pointer_inside_window(screen_width, screen_height)
     if layout == nil then return false end
     local mouse_x, mouse_y = mouse_gui_position(screen_width, screen_height)
     local insets = frame_insets or {left=0,right=0,top=0,bottom=0}
@@ -384,11 +431,14 @@ local function pointer_click_inside_window(screen_width, screen_height)
     local y = layout.y - (tonumber(insets.top) or 0) - BORDER_VISUAL_OUTSET
     local width = layout.width + (tonumber(insets.left) or 0) + (tonumber(insets.right) or 0)
         + BORDER_VISUAL_OUTSET * 2
-    local content_height = minimized and 16 or layout.height
-    local height = content_height + (tonumber(insets.top) or 0)
-        + (minimized and 0 or (tonumber(insets.bottom) or 0)) + BORDER_VISUAL_OUTSET * 2
+    local height = layout.height + (tonumber(insets.top) or 0)
+        + (tonumber(insets.bottom) or 0) + BORDER_VISUAL_OUTSET * 2
+    return pointer.inside(x, y, width, height, mouse_x, mouse_y)
+end
+
+local function pointer_click_inside_window(screen_width, screen_height)
     local clicking = pointer.left_down() or (type(pointer.right_down) == "function" and pointer.right_down())
-    return clicking and pointer.inside(x, y, width, height, mouse_x, mouse_y)
+    return clicking and pointer_inside_window(screen_width, screen_height)
 end
 
 local function remember_scroll_selection(player_entity_id)
@@ -402,6 +452,7 @@ local function remember_scroll_selection(player_entity_id)
 end
 function menu_controller.draw()
     menu_opened = false
+    gameplay_input.set_ui_blocked(false)
     if gui == nil then gui = GuiCreate() end
     GuiStartFrame(gui)
     GuiOptionsAdd(gui, GUI_OPTION.NoPositionTween)
@@ -412,8 +463,22 @@ function menu_controller.draw()
     local player = player_locator.get()
     restore_last_tab()
     local native_inventory_open = menu_inventory_guard.inventory_open(player)
+    -- Resolve text ownership before a native inventory edge can close the panel and
+    -- reset its focused field. The guard also restores edges processed after our draw.
+    if type(menu_inventory_guard.hold_text_inventory) == "function" then
+        if visible_last_frame and type(ui.text_input_active) == "function"
+            and ui.text_input_active() == true and not input_guard.blocked() then
+            native_inventory_open = menu_inventory_guard.hold_text_inventory(player, native_inventory_open)
+        else
+            menu_inventory_guard.release_text_inventory()
+        end
+    end
+    visibility_policy.sync_inventory(visibility_state, native_inventory_open,
+        current_inventory_policy(), load_remembered_open())
     process_shortcuts(native_inventory_open)
-    if not native_inventory_open and not manual_open then background_warmup() end
+    if not native_inventory_open and not visibility_policy.visible(visibility_state) then background_warmup() end
+    local screen_width, screen_height = GuiGetScreenDimensions(gui)
+    local input_blocked = input_guard.blocked() == true
     local serial = type(input_guard.resume_serial) == "function" and input_guard.resume_serial() or 0
     if serial ~= last_resume_serial then
         last_resume_serial = serial
@@ -421,41 +486,52 @@ function menu_controller.draw()
         -- hundreds of creative-menu tiles while EW is draining its resume backlog.
         if native_inventory_open then suppress_inventory_until_closed = true end
     end
+
     if suppress_inventory_until_closed then
         if native_inventory_open then
             if visible_last_frame and type(ui.reset_text_inputs) == "function" then ui.reset_text_inputs() end
             visible_last_frame = false
             drag_drop.cancel()
             menu_inventory_guard.release_manual_controls()
-            return
+                    return
         end
         suppress_inventory_until_closed = false
     end
-    local opened = manual_open or (native_inventory_open and not suppress_native_until_closed)
-    if not opened or input_guard.blocked() then
+    local opened = visibility_policy.visible(visibility_state)
+    gameplay_input.set_ui_blocked(opened)
+    if not opened or input_blocked then
         if visible_last_frame and type(ui.reset_text_inputs) == "function" then ui.reset_text_inputs() end
         visible_last_frame = false
         drag_drop.cancel()
         menu_inventory_guard.release_manual_controls()
-        return
+            return
     end
     visible_last_frame = true
-    local screen_width, screen_height = GuiGetScreenDimensions(gui)
     drag_drop.begin_frame(screen_width, screen_height)
     ensure_layout(screen_width, screen_height)
     local text_entry_active = type(ui.text_input_active) == "function" and ui.text_input_active() == true
-    local pointer_drag_active = pointer.left_down() and (pointer_operation ~= nil
-        or (type(drag_drop.pending) == "function" and drag_drop.pending() == true))
-    -- Hovering keeps gameplay live. A click within the window or keyboard focus owns
-    -- controls only for the interaction, preventing the same click from firing a wand.
-    if (not minimized and text_entry_active) or pointer_click_inside_window(screen_width, screen_height)
-        or pointer_drag_active
-    then
+    -- Ownership includes the release frame. Re-enabling Controls before drag_drop.end_frame
+    -- allowed vanilla InventoryGui to finish the same drag behind MCM and overwrite the
+    -- exact slot chosen in this window.
+    local pointer_drag_active = pointer_operation ~= nil
+        or (type(drag_drop.pending) == "function" and drag_drop.pending() == true)
+    -- Hovering keeps gameplay live. Pointer gestures still take temporary full ownership
+    -- so vanilla cannot finish the same click/drag behind MCM. Text entry is different:
+    -- disabling ControlsComponent while the vanilla inventory is open can close that native
+    -- inventory on the first typed movement key. Keep the component enabled and clear only
+    -- its transient action fields instead.
+    if text_entry_active then
+        menu_inventory_guard.release_manual_controls()
+        if type(menu_inventory_guard.suppress_text_controls) == "function" then
+            menu_inventory_guard.suppress_text_controls(player)
+        end
+    elseif pointer_click_inside_window(screen_width, screen_height) or pointer_drag_active then
         menu_inventory_guard.acquire_manual_controls(player)
     else
         menu_inventory_guard.release_manual_controls()
     end
-    menu_opened = not minimized
+    menu_opened = true
+    background_warmup_unlocked = true
     -- Continue an already-owned window gesture before layout. A new press is not armed
     -- until after tile sources have been drawn, so a spell press at the inner frame edge
     -- gets first refusal and cannot be stolen by move/resize.
@@ -463,15 +539,23 @@ function menu_controller.draw()
     if type(ui.set_panel_bounds) == "function" then
         ui.set_panel_bounds(layout.x, layout.y, layout.width, layout.height)
     end
+    local fixed_frame = type(ui.fixed_panel_frame) == "function"
+    local frame_x, frame_y, measured_width, measured_height
+    if fixed_frame then
+        -- The frame is explicitly sized from layout. Active-tab contents are never allowed
+        -- to resize the user's window; each tab is responsible for scrolling/clipping.
+        frame_x, frame_y, measured_width, measured_height =
+            ui.fixed_panel_frame(layout.x, layout.y, layout.width, layout.height, DEFAULT_FRAME_INSET)
+    end
     GuiLayoutBeginVertical(gui, layout.x, layout.y, true)
-    GuiBeginAutoBox(gui)
-    if type(ui.panel_width_anchor) == "function" then ui.panel_width_anchor(last_panel_width) end
+    if not fixed_frame then
+        GuiBeginAutoBox(gui)
+        if type(ui.panel_width_anchor) == "function" then ui.panel_width_anchor(last_panel_width) end
+    end
     draw_header(native_inventory_open, screen_width, screen_height)
-    if not minimized then draw_tab_bar(last_panel_width) end
+    draw_tab_bar(last_panel_width)
 
-    if minimized then
-        -- The title bar remains as the restore target; gameplay controls are released.
-    elseif player == 0 then
+    if player == 0 then
         ui.white_text(0, 2, ui.tr("$mcm_player_missing", "Player has not spawned yet"))
     else
         local tab = tabs[active_tab]
@@ -479,7 +563,7 @@ function menu_controller.draw()
             local available_height = math.max(96, layout.height - 42)
             local ok, err = pcall(tab.module.draw, player, last_panel_width, available_height, {
                 open_tab=function(id) return open_tab(id, "home") end,
-                close=function() close_menu(native_inventory_open) end,
+                close=function() close_menu() end,
             })
             if not ok then
                 ui.white_text(0, 2, ui.tr("$mcm_tab_runtime_error", "This section could not be drawn"))
@@ -507,11 +591,25 @@ function menu_controller.draw()
     end
 
     if type(ui.end_frame) == "function" then ui.end_frame() end
-    if minimized then drag_drop.cancel() else drag_drop.end_frame() end
+    -- Release the pointer's full Controls ownership on the SAME frame that its click
+    -- focuses an editor; waiting until the next draw leaves the first character exposed.
+    if type(ui.text_input_active) == "function" and ui.text_input_active() == true then
+        menu_inventory_guard.release_manual_controls()
+        if type(menu_inventory_guard.suppress_text_controls) == "function" then
+            menu_inventory_guard.suppress_text_controls(player)
+        end
+        if type(menu_inventory_guard.hold_text_inventory) == "function" then
+            menu_inventory_guard.hold_text_inventory(player, native_inventory_open)
+        end
+    elseif type(menu_inventory_guard.release_text_inventory) == "function" then
+        menu_inventory_guard.release_text_inventory()
+    end
+    drag_drop.end_frame()
 
-    local minimum_height = minimized and 14 or layout.height
-    local frame_x, frame_y, measured_width, measured_height = ui.finish_auto_box(5, layout.width, minimum_height)
-    if not minimized and tonumber(frame_x) ~= nil and tonumber(frame_y) ~= nil
+    if not fixed_frame then
+        frame_x, frame_y, measured_width, measured_height = ui.finish_auto_box(5, layout.width, layout.height)
+    end
+    if tonumber(frame_x) ~= nil and tonumber(frame_y) ~= nil
         and tonumber(measured_width) ~= nil and tonumber(measured_height) ~= nil
     then
         frame_x, frame_y = tonumber(frame_x), tonumber(frame_y)
@@ -530,6 +628,17 @@ function menu_controller.draw()
         end
     end
     GuiLayoutEnd(gui)
+    if layout_reset_pending then
+        layout_reset_pending = false
+        frame_insets = {
+            left=DEFAULT_FRAME_INSET, right=DEFAULT_FRAME_INSET,
+            top=DEFAULT_FRAME_INSET, bottom=DEFAULT_FRAME_INSET,
+        }
+        layout = panel_layout.create(screen_width, screen_height, {}, layout_outsets())
+        last_panel_width = layout.width
+        save_layout()
+        audit("menu.layout_reset", "width=" .. tostring(math.floor(layout.width + 0.5)))
+    end
     local before_x, before_y, before_width, before_height = layout.x, layout.y, layout.width, layout.height
     panel_layout.clamp(layout, screen_width, screen_height, nil, layout_outsets())
     last_panel_width = layout.width
@@ -550,6 +659,18 @@ function menu_controller.draw()
 end
 
 function menu_controller.post_update()
+    if menu_opened and type(ui.text_input_active) == "function" and ui.text_input_active() == true
+        and not input_guard.blocked() then
+        local player = player_locator.get()
+        if type(menu_inventory_guard.suppress_text_controls) == "function" then
+            menu_inventory_guard.suppress_text_controls(player)
+        end
+        if type(menu_inventory_guard.hold_text_inventory) == "function" then
+            menu_inventory_guard.hold_text_inventory(player, menu_inventory_guard.inventory_open(player))
+        end
+    elseif type(menu_inventory_guard.release_text_inventory) == "function" then
+        menu_inventory_guard.release_text_inventory()
+    end
     local selection_snapshot = pending_selection_restore
     pending_selection_restore = nil
     if selection_snapshot ~= nil then menu_inventory_guard.restore_scroll_selection(selection_snapshot) end
@@ -559,11 +680,11 @@ function menu_controller.is_hovered() return panel_hovered end
 function menu_controller.is_open() return menu_opened end
 function menu_controller.layout()
     if layout == nil then return nil end
-    return { x=layout.x, y=layout.y, width=layout.width, height=layout.height, minimized=minimized }
+    return { x=layout.x, y=layout.y, width=layout.width, height=layout.height, minimized=false }
 end
 function menu_controller.open_tab(id)
     local opened = open_tab(id, "external")
-    if opened then manual_open = true end
+    if opened then set_user_visible(true) end
     return opened
 end
 

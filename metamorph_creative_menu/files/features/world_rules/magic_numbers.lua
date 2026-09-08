@@ -5,6 +5,10 @@ local patcher_bridge = dofile("mods/metamorph_creative_menu/files/platform/noita
 local rule_math = dofile("mods/metamorph_creative_menu/files/core/rule_math.lua")
 local recovery = dofile("mods/metamorph_creative_menu/files/features/world_rules/recovery.lua")
 local magic_state = {}
+-- polish08 and earlier implemented Day Speed by owning this Magic Number. Keep it in
+-- recovery discovery only so an upgrade cannot leave a stale DESIGN multiplier behind
+-- and then multiply time_dt a second time with the new safe backend.
+local LEGACY_RECOVERY_KEYS = { "DESIGN_DAY_CYCLE_SPEED" }
 
 local function same_value(a, b)
     if type(a) == "number" or type(b) == "number" then return rule_math.same(a, b) end
@@ -179,6 +183,12 @@ local function recovery_magic_keys(rules)
                     result[#result + 1] = key
                 end
             end
+        end
+    end
+    for _, key in ipairs(LEGACY_RECOVERY_KEYS) do
+        if not seen[key] then
+            seen[key] = true
+            result[#result + 1] = key
         end
     end
     return result

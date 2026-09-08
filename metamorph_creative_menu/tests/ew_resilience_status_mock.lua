@@ -1,6 +1,9 @@
 local root = assert(arg[1], "root required")
 local native_dofile = dofile
 dofile = function(path)
+    if path == "mods/metamorph_creative_menu/files/core/global_text.lua" then
+        return native_dofile(root .. "/files/core/global_text.lua")
+    end
     if path == "mods/metamorph_creative_menu/files/integrations/ew/resilience_patches.lua" then
         return native_dofile(root .. "/files/integrations/ew/resilience_patches.lua")
     end
@@ -14,7 +17,7 @@ local helper_path = "mods/quant.ew/files/system/homunculus/homunculus.lua"
 local mutation_path = "mods/quant.ew/files/system/perk_patches/perk_patches.lua"
 local polymorph_path = "mods/quant.ew/files/system/polymorph/polymorph.lua"
 local contents = {
-    [world_path] = "-- mcm_poly_world_sync_v3\nreturn {}",
+    [world_path] = "-- mcm_poly_world_sync_v5\nreturn {}",
     [material_scene_path] = "-- mcm_material_brush_pixel_scene_v1\nreturn {}",
     [perk_path] = "local global_perks = {} -- mcm_peer_perk_sync_v4\n-- mcm_peer_perk_removal_v1\nreturn {}",
     [helper_path] = "-- mcm_perk_helper_sync_v1\nreturn {}",

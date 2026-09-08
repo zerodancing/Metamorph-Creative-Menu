@@ -91,14 +91,37 @@ for _,name in ipairs({"controls","creatures","effects","items","materials","perk
         name.." tab bypassed the shared adaptive scroll-height system")
 end
 
+-- The real menu frame is a fixed nine-piece rectangle. Tab contents must never be able
+-- to resize it the way GuiEndAutoBoxNinePiece's minimum-only sizing could.
+GUI_OPTION={Layout_NoLayouting=1}
+GuiOptionsAddForNextWidget=function() end
+local fixed_geom=nil
+GuiImageNinePiece=function(_,_,x,y,w,h) fixed_geom={x=x,y=y,w=w,h=h} end
+local old_widget_info=GuiGetPreviousWidgetInfo
+GuiGetPreviousWidgetInfo=function()
+    if fixed_geom then return false,false,false,fixed_geom.x,fixed_geom.y,fixed_geom.w,fixed_geom.h end
+    return old_widget_info()
+end
+local fx,fy,fw,fh=ui.fixed_panel_frame(434,68,196,282,4)
+assert(fx==430 and fy==64 and fw==204 and fh==290,
+    "fixed panel frame did not honor the requested layout rectangle")
+GuiGetPreviousWidgetInfo=old_widget_info
+local menu_handle=assert(io.open(root.."/files/ui/menu_controller.lua","rb"))
+local menu_source=menu_handle:read("*a"); menu_handle:close()
+assert(string.find(menu_source,"ui.fixed_panel_frame",1,true),
+    "menu controller still sizes its visible frame from active-tab content")
 
 METAMORPH_CREATIVE_MENU_PANEL_LAYOUT=nil
 local panel_layout=assert(native_dofile(root.."/files/core/panel_layout.lua"))
 local frame_outsets={left=6,right=6,top=6,bottom=6}
 local compact_default=panel_layout.create(320,240,{},frame_outsets)
-assert(compact_default.x==100 and compact_default.y==28
-    and compact_default.width==210 and compact_default.height==187,
-    "320x240 default was not lower, narrower and taller")
+assert(compact_default.x==114 and compact_default.y==42
+    and compact_default.width==196 and compact_default.height==188,
+    "320x240 default did not preserve the reference panel proportions")
+local reference_default=panel_layout.create(640,360,{},frame_outsets)
+assert(reference_default.x==434 and reference_default.y==68
+    and reference_default.width==196 and reference_default.height==282,
+    "640x360 default no longer matches the user-selected reference position/size")
 assert(compact_default.x-frame_outsets.left>=panel_layout.MARGIN
     and compact_default.x+compact_default.width+frame_outsets.right<=320-panel_layout.MARGIN
     and compact_default.y-frame_outsets.top>=panel_layout.MARGIN
@@ -111,4 +134,4 @@ local edge_saved=panel_layout.create(320,240,{x=110,y=80,width=210,height=187},f
 assert(edge_saved.x==100 and edge_saved.y==43,
     "saved layout was not clamped by the visual frame outset")
 
-io.write("ui_responsive_layout=PASS wrapping=true utf8=true dynamic_rows=true ranked_search=true confirmations=true steppers=true width_anchor=true measured_fill=true all_scroll_tabs=true localized_runtime=true compact_default=true saved_layout_preserved=true frame_outset_clamp=true\n")
+io.write("ui_responsive_layout=PASS wrapping=true utf8=true dynamic_rows=true ranked_search=true confirmations=true steppers=true width_anchor=true measured_fill=true all_scroll_tabs=true localized_runtime=true compact_default=true reference_default=true fixed_frame=true saved_layout_preserved=true frame_outset_clamp=true\n")

@@ -84,9 +84,12 @@ function inventory_service.create_at(player, action_id, index)
     if entity == nil or entity == 0 then return false, create_reason or "create_failed" end
     local record, configure_reason = configure_card(entity, action_id, x, y)
     if record == nil then pcall(EntityKill, entity); return false, configure_reason end
-    local placed, place_reason = inventory_slots.place_exact(player, entity, "inventory_full", x, y)
+    local placed, place_reason, expected = inventory_slots.place_exact(player, entity, "inventory_full", x, y)
     if not placed then pcall(EntityKill, entity); return false, place_reason end
     ew_runtime.force_inventory_sync()
+    spell_service.expect_exact_slots(player, "inventory_create", expected or {
+        {entity=entity, parent=layout.inventory, x=x, y=y},
+    })
     return true, "created", entity
 end
 
@@ -98,14 +101,22 @@ function inventory_service.move(player, source_entry, target_index)
     if x == nil then return false, "slot_out_of_range" end
     if source_entry.index == target_index then return true, "unchanged" end
     local target = layout.by_index[target_index]
-    local ok, move_reason
+    local ok, move_reason, expected
     if target ~= nil then
-        ok, move_reason = inventory_slots.swap_exact(player, source_entry.entity, target.entity)
+        ok, move_reason, expected = inventory_slots.swap_exact(player, source_entry.entity, target.entity)
     else
-        ok, move_reason = inventory_slots.place_exact(player, source_entry.entity, "inventory_full", x, y)
+        ok, move_reason, expected = inventory_slots.place_exact(player, source_entry.entity, "inventory_full", x, y)
     end
     if not ok then return false, move_reason end
     ew_runtime.force_inventory_sync()
+    expected = expected or {{entity=source_entry.entity, parent=layout.inventory, x=x, y=y}}
+    if target ~= nil and #expected == 1 then
+        expected[#expected + 1] = {
+            entity=target.entity, parent=layout.inventory,
+            x=source_entry.x, y=source_entry.y,
+        }
+    end
+    spell_service.expect_exact_slots(player, "inventory_move", expected)
     return true, target ~= nil and "swapped" or "moved"
 end
 

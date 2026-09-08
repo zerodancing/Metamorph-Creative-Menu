@@ -6,7 +6,12 @@ local preview = {}
 
 local MATERIALS_XML = "data/materials.xml"
 local PROBE_ENTITY_PATH = "data/entities/items/pickup/potion_empty.xml"
-local POTION_ICON = "data/ui_gfx/items/potion.png"
+-- This is the actual ItemComponent.ui_sprite used by vanilla potions. The 9x8
+-- data/items_gfx/potion.png image is the small in-world hand sprite and has a different
+-- silhouette; flask_liquid.png is authored for that world sprite and is not an inventory
+-- mask. Vanilla colours this grayscale 16x16 UI sprite with the potion's computed colour.
+local DEFAULT_POTION_UI_ICON = "data/ui_gfx/items/potion.png"
+local DEFAULT_POTION_UI_CAP = "mods/metamorph_creative_menu/files/platform/noita/potion_cap.png"
 local PROBE_VERTICAL_OFFSET = -100000
 local MATERIAL_AMOUNT = 1000
 
@@ -14,6 +19,8 @@ local definitions = nil
 local resolved_texture = {}
 local resolved_tint = {}
 local liquid_colors = {}
+local potion_ui_icon = DEFAULT_POTION_UI_ICON
+local potion_ui_cap = DEFAULT_POTION_UI_CAP
 
 local function valid_entity(entity_id)
     return entity_id ~= nil and entity_id ~= 0 and EntityGetIsAlive(entity_id)
@@ -93,7 +100,7 @@ local function decode_potion_color(packed_color)
     local red = packed_color % 256
     local green = math.floor(packed_color / 256) % 256
     local blue = math.floor(packed_color / 65536) % 256
-    return { red / 255, green / 255, blue / 255, 0.96 }
+    return { red / 255, green / 255, blue / 255, 1 }
 end
 
 local function sample_liquid_color(player_entity_id, material_id)
@@ -108,6 +115,15 @@ local function sample_liquid_color(player_entity_id, material_id)
     local operation_succeeded = pcall(function()
         RemoveMaterialInventoryMaterial(probe_entity_id)
         AddMaterialInventoryMaterial(probe_entity_id, material_id, MATERIAL_AMOUNT)
+        local item_component = EntityGetFirstComponentIncludingDisabled(probe_entity_id, "ItemComponent")
+        if item_component ~= nil and item_component ~= 0 then
+            local icon_ok, actual_icon = pcall(ComponentGetValue2, item_component, "ui_sprite")
+            if icon_ok and type(actual_icon) == "string" and actual_icon ~= "" then
+                -- Respect an intentional potion.xml override from another mod.
+                potion_ui_icon = actual_icon
+                potion_ui_cap = actual_icon == DEFAULT_POTION_UI_ICON and DEFAULT_POTION_UI_CAP or false
+            end
+        end
         color = decode_potion_color(GameGetPotionColorUint(probe_entity_id))
     end)
     if EntityGetIsAlive(probe_entity_id) then EntityKill(probe_entity_id) end
@@ -134,7 +150,8 @@ function preview.tint(material_id)
     return tint or nil
 end
 
-function preview.liquid_icon() return POTION_ICON end
+function preview.liquid_icon() return potion_ui_icon end
+function preview.liquid_cap_icon() return potion_ui_cap or nil end
 
 function preview.liquid_color(material_id)
     local value = liquid_colors[tostring(material_id or "")]
@@ -144,20 +161,33 @@ end
 function preview.sample_liquid_color(player_entity_id, material_id)
     material_id = tostring(material_id or "")
     if liquid_colors[material_id] ~= nil then return preview.liquid_color(material_id) end
-    liquid_colors[material_id] = sample_liquid_color(player_entity_id, material_id) or false
+    local color = sample_liquid_color(player_entity_id, material_id)
+    if color == nil then
+        local authored = preview.tint(material_id)
+        if type(authored) == "table" then
+            color = {
+                tonumber(authored[1]) or 1,
+                tonumber(authored[2]) or 1,
+                tonumber(authored[3]) or 1,
+                1,
+            }
+        end
+    end
+    liquid_colors[material_id] = color or false
     return preview.liquid_color(material_id)
 end
 
 function preview.new_liquid_warmup()
-    return { cursor=1, count=-1, complete=false }
+    return { cursor=1, count=-1, key=nil, complete=false }
 end
 
-function preview.warm_liquid_colors(player_entity_id, entries, state, budget)
+function preview.warm_liquid_colors(player_entity_id, entries, state, budget, key)
     entries = type(entries) == "table" and entries or {}
     state = type(state) == "table" and state or preview.new_liquid_warmup()
     budget = math.max(1, math.floor(tonumber(budget) or 2))
-    if state.count ~= #entries then
-        state.cursor, state.count, state.complete = 1, #entries, false
+    key = tostring(key == nil and #entries or key)
+    if state.count ~= #entries or state.key ~= key then
+        state.cursor, state.count, state.key, state.complete = 1, #entries, key, false
     end
     if state.complete or #entries == 0 then state.complete = true; return true end
 
@@ -187,6 +217,8 @@ end
 
 function preview.reset()
     definitions, resolved_texture, resolved_tint, liquid_colors = nil, {}, {}, {}
+    potion_ui_icon = DEFAULT_POTION_UI_ICON
+    potion_ui_cap = DEFAULT_POTION_UI_CAP
 end
 
 METAMORPH_CREATIVE_MENU_MATERIAL_PREVIEW = preview

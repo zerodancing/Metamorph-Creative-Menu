@@ -1,5 +1,9 @@
 local corpse_service = {}
 
+local entity_tree = dofile("mods/metamorph_creative_menu/files/platform/noita/entity_tree.lua")
+local walk_entity_tree = entity_tree.walk
+local ew_runtime = dofile("mods/metamorph_creative_menu/files/integrations/ew/runtime.lua")
+
 local NETWORK_FORM_TAG = "metamorph_creative_menu_network_form"
 local POLYMORPH_EFFECTS = {
     "POLYMORPH", "POLYMORPH_RANDOM", "POLYMORPH_UNSTABLE", "POLYMORPH_CESSATION",
@@ -7,6 +11,10 @@ local POLYMORPH_EFFECTS = {
 
 local pending_corpse_watch = {}
 local pending_corpse_finalize = {}
+
+local function ew_active()
+    return ew_runtime.enabled() == true
+end
 
 local function diagnostic_event(kind, details)
     if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_EVENT) == "function" then
@@ -27,6 +35,27 @@ local CORPSE_FREEZE_COMPONENTS = {
     "PathFindingComponent", "PathFindingGridMarkerComponent", "AIAttackComponent",
     "BossDragonComponent", "WormPlayerComponent",
 }
+
+local function component_string(component, field)
+    local ok, value = pcall(ComponentGetValue2, component, field)
+    return ok and tostring(value or "") or ""
+end
+
+local function lua_is_pure_death_hook(component)
+    if component_string(component, "script_death") == "" then return false end
+    -- Preserve a component whose only purpose is native death handling. Everything that
+    -- can execute while the body is held for EW/DES adoption must stay frozen.
+    local active_fields = {
+        "script_source_file", "script_damage_received", "script_damage_about_to_be_received",
+        "script_shot", "script_kick", "script_collision_trigger_hit", "script_physics_body_modified",
+        "script_pressure_plate_change", "script_material_area_checker_success",
+        "script_electricity_receiver_electrified", "script_electricity_receiver_switched",
+    }
+    for _, field in ipairs(active_fields) do
+        if component_string(component, field) ~= "" then return false end
+    end
+    return true
+end
 
 local function corpse_health(entity)
     local damage = EntityGetFirstComponentIncludingDisabled(entity, "DamageModelComponent")
@@ -66,16 +95,29 @@ local function disarm_polymorph_restore(entity)
 end
 
 local function freeze_pending_corpse(entity)
-    for _, component_type in ipairs(CORPSE_FREEZE_COMPONENTS) do
-        for _, component in ipairs(EntityGetComponentIncludingDisabled(entity, component_type) or {}) do
-            pcall(EntitySetComponentIsEnabled, entity, component, false)
+    local frame = tonumber(GameGetFrameNum()) or 0
+    walk_entity_tree(entity, function(current)
+        for _, component_type in ipairs(CORPSE_FREEZE_COMPONENTS) do
+            for _, component in ipairs(EntityGetComponentIncludingDisabled(current, component_type) or {}) do
+                pcall(EntitySetComponentIsEnabled, current, component, false)
+            end
         end
-    end
-    local character = EntityGetFirstComponentIncludingDisabled(entity, "CharacterDataComponent")
-    if character ~= nil and character ~= 0 then pcall(ComponentSetValue2, character, "mVelocity", 0, 0) end
-    for _, velocity in ipairs(EntityGetComponentIncludingDisabled(entity, "VelocityComponent") or {}) do
-        pcall(ComponentSetValue2, velocity, "mVelocity", 0, 0)
-    end
+        for _, lua in ipairs(EntityGetComponentIncludingDisabled(current, "LuaComponent") or {}) do
+            if not lua_is_pure_death_hook(lua) then
+                pcall(EntitySetComponentIsEnabled, current, lua, false)
+            end
+        end
+        for _, laser in ipairs(EntityGetComponentIncludingDisabled(current, "LaserEmitterComponent") or {}) do
+            pcall(ComponentSetValue2, laser, "is_emitting", false)
+            pcall(ComponentSetValue2, laser, "emit_until_frame", frame)
+            pcall(EntitySetComponentIsEnabled, current, laser, false)
+        end
+        local character = EntityGetFirstComponentIncludingDisabled(current, "CharacterDataComponent")
+        if character ~= nil and character ~= 0 then pcall(ComponentSetValue2, character, "mVelocity", 0, 0) end
+        for _, velocity in ipairs(EntityGetComponentIncludingDisabled(current, "VelocityComponent") or {}) do
+            pcall(ComponentSetValue2, velocity, "mVelocity", 0, 0)
+        end
+    end)
 end
 
 local function ordinary_corpse_fallback_allowed(source)
@@ -112,12 +154,43 @@ local function spawn_native_corpse_fallback(record, x, y)
     return corpse
 end
 
+local function retire_network_player_form(entity, source_path, reason)
+    -- In EW the old polymorphed body is a player-replica identity, not a normal enemy.
+    -- Re-tagging it as ew_synced created a *second* DES identity during death, which could
+    -- reappear as a low-HP boss.  After the human entity is committed, retire this old
+    -- identity quietly instead.  Never run its boss/worm death scripts here.
+    disarm_polymorph_restore(entity)
+    for _, tag in ipairs(CORPSE_PLAYER_TAGS) do pcall(EntityRemoveTag, entity, tag) end
+    pcall(EntityRemoveTag, entity, "ew_synced")
+    pcall(EntityRemoveTag, entity, "ew_des")
+    pcall(EntitySetTransform, entity, 10000000, 10000000)
+    walk_entity_tree(entity, function(current)
+        for _, component in ipairs(EntityGetAllComponents(current) or {}) do
+            local ok_type, component_type = pcall(ComponentGetTypeName, component)
+            if ok_type and component_type == "LuaComponent" then
+                pcall(EntityRemoveComponent, current, component)
+            else
+                if ok_type and component_type == "DamageModelComponent" then
+                    pcall(ComponentSetValue2, component, "wait_for_kill_flag_on_death", false)
+                    pcall(ComponentSetValue2, component, "kill_now", false)
+                end
+                pcall(EntitySetComponentIsEnabled, current, component, false)
+            end
+        end
+    end)
+    if EntityGetIsAlive(entity) then pcall(EntityKill, entity) end
+    diagnostic_event("FORM NETWORK BODY RETIRED", string.format("entity=%s source=%s reason=%s",
+        tostring(entity), tostring(source_path or ""), tostring(reason or "death")))
+    return true
+end
+
 -- Called only after the human player entity has been committed. Hold the old creature
 -- for exactly one world frame as an inert ew_synced entity so EW/DES can adopt it, then
 -- release Noita's native death/ragdoll path with DamageModel.kill_now. The modding API
 -- wait_for_kill_flag_on_death requires this explicit kill flag to finish native death.
 local function detach(entity, source_path, reason, responsible)
     if entity == nil or entity == 0 or not EntityGetIsAlive(entity) then return false end
+    if ew_active() then return retire_network_player_form(entity, source_path, reason) end
     for _, tag in ipairs(CORPSE_PLAYER_TAGS) do pcall(EntityRemoveTag, entity, tag) end
     pcall(EntityAddTag, entity, "metamorph_creative_menu_form_corpse")
     pcall(EntityAddTag, entity, "metamorph_creative_menu_form_corpse_pending")

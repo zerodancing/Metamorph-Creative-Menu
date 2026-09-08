@@ -4,7 +4,6 @@
         <AnimalAIComponent _enabled="0" sense_creatures="0" attack_melee_enabled="0" attack_ranged_enabled="0"></AnimalAIComponent>
         <PathFindingComponent _enabled="0"></PathFindingComponent>
         <GenomeDataComponent herd_id="player" food_chain_rank="20" is_predator="1"></GenomeDataComponent>
-        <CameraBoundComponent max_count="24" distance="160000"></CameraBoundComponent>
         <CharacterPlatformingComponent run_velocity="72" fly_velocity_x="54" fly_speed_max_up="95" fly_speed_max_down="85"></CharacterPlatformingComponent>
         <ControlsComponent enabled="0"></ControlsComponent>
     </Base>
@@ -46,9 +45,7 @@
 
     <VariableStorageComponent _tags="mcm_companion_next_fire" name="mcm_companion_next_fire" value_int="0"></VariableStorageComponent>
 
-    <LuaComponent
-        _tags="metamorph_creative_menu_companion_ai"
-        script_source_file="mods/metamorph_creative_menu/files/features/companion/ai.lua"
-        execute_every_n_frame="1">
-    </LuaComponent>
+    <!-- Keep the DES authority stable around the owner. MCM-only Lua controllers are
+         attached after EW has captured the initial serialized entity, never in this XML. -->
+    <StreamingKeepAliveComponent></StreamingKeepAliveComponent>
 </Entity>

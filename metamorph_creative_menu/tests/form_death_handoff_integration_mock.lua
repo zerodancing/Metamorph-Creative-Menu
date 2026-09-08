@@ -7,6 +7,7 @@ local runtime_resets = 0
 local corpse_detaches = 0
 local restored_position = nil
 local protected_entity = nil
+local resets_at_death = 0
 local switched_from, switched_to = nil, nil
 
 METAMORPH_CREATIVE_MENU_FORM_MANAGER = nil
@@ -54,6 +55,7 @@ local stubs = {
     ["mods/metamorph_creative_menu/files/features/forms/transform_flash.lua"] = {suppress=function() end, restore=function() end},
     ["mods/metamorph_creative_menu/files/features/forms/corpse_service.lua"] = {
         detach=function(entity, source, reason)
+            assert(runtime_resets > resets_at_death, "runtime reset must restore ownership before corpse final freeze")
             assert(entity == 2, "wrong transformed body detached as corpse")
             assert(source == "data/entities/animals/test.xml", "corpse lost source creature path")
             assert(reason == "death", "death reason changed")
@@ -129,6 +131,7 @@ manager.update()
 assert(manager.session_phase() == "active", "form session did not become active")
 assert(runtime_updates == 1, "form runtime was not activated before death")
 
+resets_at_death = runtime_resets
 local handed_off = manager.handle_form_death(2, "death", 9, 100, 0)
 assert(handed_off == true, "native form death did not restore human")
 assert(current_player == 3, "restored human did not become authoritative player")

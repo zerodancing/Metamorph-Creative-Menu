@@ -17,6 +17,10 @@ local CATALOG_BUDGET_PER_FRAME = 24
 local active_catalog_request = nil
 local liquid_warmup = material_preview.new_liquid_warmup()
 
+local function liquid_cap_icon()
+    return type(material_preview.liquid_cap_icon) == "function" and material_preview.liquid_cap_icon() or nil
+end
+
 local function ensure_catalog(category_id)
     if categories == nil then categories = material_catalog.categories() end
     if type(categories) ~= "table" then return false, false end
@@ -31,7 +35,7 @@ local function ensure_catalog(category_id)
     local ready = material_catalog.step(category_id, ui.translated, CATALOG_BUDGET_PER_FRAME)
     local values = material_catalog.entries_for(category_id)
     if painter.get_material() == nil and type(values) == "table" and values[1] ~= nil then
-        painter.set_material(values[1].id, { solid=values[1].categories and values[1].categories.SOLIDS == true })
+        painter.set_material(values[1].id, { solid=values[1].categories and (values[1].categories.SOLIDS == true or values[1].categories.STATIC == true) })
     end
     return true, ready == true
 end
@@ -56,7 +60,8 @@ function materials_tab.draw(player, panel_width, screen_height)
         ui.white_text(0, 2, ui.tr("$mcm_materials_failed", "Material catalog failed to load"))
         return
     end
-    local catalog_ok, catalog_ready = ensure_catalog(category.id)
+    local catalog_category = search ~= "" and "ALL" or category.id
+    local catalog_ok, catalog_ready = ensure_catalog(catalog_category)
     if not catalog_ok then
         ui.white_text(0, 2, ui.tr("$mcm_materials_failed", "Material catalog failed to load"))
         return
@@ -105,10 +110,12 @@ function materials_tab.draw(player, panel_width, screen_height)
     local controls = ui.tr("$mcm_material_controls_dynamic", "Close inventory then hold {BIND} in the world. Reopen to stop.")
     ui.wrapped_text(0, 0, string.gsub(controls, "{BIND}", "[" .. bindings.label("paint_draw") .. "]"), panel_width - 12)
 
+    local result_category = search ~= "" and "ALL" or category.id
+    if result_category ~= catalog_category then catalog_ready = material_catalog.is_ready(result_category) end
     if not catalog_ready then
         ui.white_text(0, 0, ui.tr("$mcm_material_loading", "Loading materials...") )
     end
-    local values = visible_entries(category.id, search)
+    local values = visible_entries(result_category, search)
     ui.search_status(search, #values)
     local liquid_entries = {}
     for _, entry in ipairs(values) do
@@ -116,7 +123,8 @@ function materials_tab.draw(player, panel_width, screen_height)
             liquid_entries[#liquid_entries + 1] = entry
         end
     end
-    material_preview.warm_liquid_colors(player, liquid_entries, liquid_warmup, 2)
+    material_preview.warm_liquid_colors(player, liquid_entries, liquid_warmup, 2,
+        "materials:" .. tostring(category.id) .. ":" .. tostring(search))
     local grid_h = ui.scroll_height(screen_height, 194)
     local scroll = ui.begin_scroll_viewport("materials.catalog." .. tostring(selected_filter),
         9700 + selected_filter, 0, 0, panel_width - 4, grid_h, {layout="free"})
@@ -134,11 +142,12 @@ function materials_tab.draw(player, panel_width, screen_height)
             entry.display_name, tostring(entry.id) .. "\n" .. tostring(entry.category),
             selected_id == entry.id, {
                 swatch_color=not is_liquid and texture == nil and entry.preview_color or nil,
-                bottle_fill_color=is_liquid and material_preview.liquid_color(entry.id) or nil,
-                icon_tint=tint, target_size=18, max_scale=3.0, padding=1,
+                icon_tint=is_liquid and material_preview.liquid_color(entry.id) or tint,
+                icon_overlay=is_liquid and liquid_cap_icon() or nil,
+                target_size=18, max_scale=3.0, padding=1,
             })
         if clicked then
-            local ok, reason = painter.set_material(entry.id, { solid=entry.categories and entry.categories.SOLIDS == true })
+            local ok, reason = painter.set_material(entry.id, { solid=entry.categories and (entry.categories.SOLIDS == true or entry.categories.STATIC == true) })
             audit("material.select", "id=" .. tostring(entry.id) .. " result=" .. tostring(ok) .. " reason=" .. tostring(reason))
         end
     end

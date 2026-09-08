@@ -37,6 +37,15 @@ local magic = {
     reset_all=function() reset_calls.magic=reset_calls.magic+1; return true end,
     owns=function() return false end, has_overrides=function() return false end,
 }
+local time_dt = {
+    supported=function() return true end,
+    apply_day_multiplier=function() return true,"ok" end,
+    release_day_multiplier=function() return true,"ok" end,
+    reassert=function() return true,"ok" end,
+    has_day_override=function() return false end,
+    has_persisted_recovery=function() return false end,
+    recover_persisted=function() return true end,
+}
 local sync = {
     can_edit=function() return true,"ew_peer" end,
     mark_dirty=function() dirty_calls=dirty_calls+1 end,
@@ -52,6 +61,7 @@ local stubs = {
     ["mods/metamorph_creative_menu/files/features/world_rules/world_state.lua"]=world_state,
     ["mods/metamorph_creative_menu/files/features/world_rules/stains.lua"]=stain,
     ["mods/metamorph_creative_menu/files/features/world_rules/magic_numbers.lua"]=magic,
+    ["mods/metamorph_creative_menu/files/features/world_rules/time_dt.lua"]=time_dt,
 }
 
 dofile = function(path)

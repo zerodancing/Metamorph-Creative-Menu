@@ -13,7 +13,7 @@ local keycode_stub = {
 }
 dofile = function(path)
     if path == "mods/metamorph_creative_menu/files/platform/noita/keycodes.lua" then return keycode_stub end
-    return native_dofile(path)
+    return native_dofile(path:gsub("^mods/metamorph_creative_menu/", root.."/"))
 end
 
 function GameGetFrameNum() return frame_number end
@@ -55,3 +55,15 @@ guard.update()
 assert(guard.resume_serial() == 2, "real-time focus gap did not mark resume")
 assert(guard.blocked() == true, "real-time focus gap did not quarantine actions")
 print("input_guard=PASS alt_tab=true focus_gap=true")
+
+-- A slow first search is not an Alt-Tab. Keyboard focus must survive a long frame.
+local text_guard=native_dofile(root.."/files/platform/noita/text_entry_guard.lua")
+frame_number=100; real_time_seconds=1.11; guard.update()
+local serial=guard.resume_serial()
+text_guard.focus("materials")
+frame_number=101; real_time_seconds=2.2; guard.update()
+assert(guard.resume_serial()==serial and not guard.blocked(),"first-search stall treated as focus loss")
+alt_down=true; frame_number=102; guard.update()
+assert(guard.blocked(),"text focus disabled explicit Alt protection")
+text_guard.clear()
+print("input_guard_search_stall=PASS timing_gap_keeps_focus=true explicit_alt_guard=true")

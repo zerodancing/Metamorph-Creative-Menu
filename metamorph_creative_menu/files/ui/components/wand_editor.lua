@@ -104,7 +104,9 @@ function wand_editor.draw(player, wand, panel_width)
 
     appearance_editor.draw(player, wand, panel_width)
 
-    if last_error ~= nil then
+    -- Mutation reasons are developer diagnostics, not persistent release UI. The normal
+    -- controls already keep/restore the real wand state when a write fails.
+    if METAMORPH_CREATIVE_MENU_DEV_MODE == true and last_error ~= nil then
         ui.wrapped_text(0, 0, ui.tr("$mcm_wand_edit_error", "Could not change wand") .. ": " .. tostring(last_error), panel_width - 12)
     end
     return true

@@ -155,6 +155,9 @@ function service.teleport_position(player, x, y)
     player = local_player(player)
     x, y = tonumber(x), tonumber(y)
     if player == 0 or x == nil or y == nil then return false, "target" end
+    -- A newer command owns the teleport intent even when its destination is already
+    -- streamed. Otherwise the old pending request can fire later and pull us back.
+    pending = nil
     if world_loaded(x, y) then return perform(player, x, y) end
     pending = { player=player, x=x, y=y, started=frame_number() }
     if type(GameSetCameraPos) == "function" then pcall(GameSetCameraPos, x, y) end

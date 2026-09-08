@@ -5,9 +5,11 @@ local panel_layout = {}
 panel_layout.MARGIN = 4
 panel_layout.MIN_WIDTH = 190
 panel_layout.MIN_HEIGHT = 112
-panel_layout.DEFAULT_MIN_WIDTH = 210
+panel_layout.DEFAULT_WIDTH = 196
 panel_layout.DEFAULT_MIN_HEIGHT = 170
+panel_layout.DEFAULT_MAX_HEIGHT = 282
 panel_layout.DEFAULT_Y = 28
+panel_layout.DEFAULT_Y_RATIO = 68 / 360
 
 local function finite_number(value)
     value = tonumber(value)
@@ -33,20 +35,21 @@ end
 function panel_layout.default_width(screen_width)
     screen_width = math.max(1, finite_number(screen_width) or 320)
     local available = math.max(1, screen_width - panel_layout.MARGIN * 2)
-    local responsive = math.min(320, math.floor(screen_width * 0.64))
-    return math.min(available, math.max(math.min(panel_layout.DEFAULT_MIN_WIDTH, available), responsive))
+    -- 196x282 at Noita's 640x360 GUI space matches the user-selected reference layout.
+    -- Keep the default narrow and right-anchored; smaller viewports are clamped below.
+    return math.min(available, panel_layout.DEFAULT_WIDTH)
 end
 
 function panel_layout.default_height(screen_height)
     screen_height = math.max(1, finite_number(screen_height) or 240)
     local available = math.max(1, screen_height - panel_layout.MARGIN * 2)
-    local responsive = math.min(300, math.floor(screen_height * 0.78))
+    local responsive = math.min(panel_layout.DEFAULT_MAX_HEIGHT, math.floor(screen_height * 0.784))
     return math.min(available, math.max(math.min(panel_layout.DEFAULT_MIN_HEIGHT, available), responsive))
 end
 
 function panel_layout.default_y(screen_height)
     screen_height = math.max(1, finite_number(screen_height) or 240)
-    return math.max(panel_layout.DEFAULT_Y, math.floor(screen_height * 0.12))
+    return math.max(panel_layout.DEFAULT_Y, math.floor(screen_height * panel_layout.DEFAULT_Y_RATIO + 0.5))
 end
 
 function panel_layout.clamp(layout, screen_width, screen_height, measured_height, outsets)

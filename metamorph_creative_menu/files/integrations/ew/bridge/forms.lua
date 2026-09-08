@@ -7,6 +7,7 @@ local last_remote_entity = {}
 local remote_articulated_prepared = {}
 local form_pose_sent, form_pose_received = 0, 0
 local profiling_enabled = false
+local MCM_BOSS_DEATH_PRESSURE_KEY = "mcm_ew_boss_death_pressure_until_v1"
 
 local NETWORK_SOURCE_NAME = "metamorph_creative_menu_network_source"
 
@@ -51,6 +52,45 @@ local function publish_remote_prepare_metrics(entity, kind, started_ms, visited,
     end
 end
 
+
+
+local function boss_death_pressure_active()
+    if type(GlobalsGetValue) ~= "function" or type(GameGetFrameNum) ~= "function" then return false end
+    local until_frame = tonumber(GlobalsGetValue(MCM_BOSS_DEATH_PRESSURE_KEY, "-1")) or -1
+    return until_frame >= (tonumber(GameGetFrameNum()) or 0)
+end
+
+local function des_gid(entity)
+    for _, component in ipairs(EntityGetComponentIncludingDisabled(entity, "VariableStorageComponent") or {}) do
+        local ok_name, name = pcall(ComponentGetValue2, component, "name")
+        if ok_name and tostring(name or "") == "ew_gid_lid" then
+            local ok_gid, gid = pcall(ComponentGetValue2, component, "value_string")
+            if ok_gid and tostring(gid or "") ~= "" then return tostring(gid) end
+        end
+    end
+    return nil
+end
+
+local function enforce_local_form_des_exclusion(entity)
+    if entity == nil or entity == 0 or not EntityGetIsAlive(entity) then return end
+    if not EntityHasTag(entity, "polymorphed_player")
+        or not EntityHasTag(entity, "metamorph_creative_menu_network_form")
+    then return end
+    -- EW 1.6.3 already excludes polymorphed_player in native DES. Keep the explicit tag
+    -- as a belt-and-suspenders guard, but do not call ewext.notrack(): notrack only affects
+    -- first discovery and is not an authority-retirement primitive.
+    pcall(EntityAddTag, entity, "ew_no_enemy_sync")
+    local gid = des_gid(entity)
+    if gid ~= nil and type(GlobalsSetValue) == "function" then
+        -- This should never happen on a healthy player-form. Keep it observable so a
+        -- live test can prove/disprove the dual-identity hypothesis without log spam.
+        pcall(GlobalsSetValue, "mcm_form_dual_des_gid_v1", gid)
+        pcall(GlobalsSetValue, "mcm_form_dual_des_entity_v1", tostring(entity))
+        if type(GameGetFrameNum) == "function" then
+            pcall(GlobalsSetValue, "mcm_form_dual_des_frame_v1", tostring(GameGetFrameNum()))
+        end
+    end
+end
 
 local function finite_number(value)
     return type(value) == "number" and value == value and math.abs(value) < 100000000
@@ -302,7 +342,11 @@ local function send_form_pose(frame)
     if character_data ~= nil and character_data ~= 0 and platforming ~= nil and platforming ~= 0 then return end
 
     local motion_kind, motion_x, motion_y, motion_speed = motion_state(entity)
-    local interval = 3 -- latest-pose stream ~20 Hz; articulated root correction is budgeted below
+    -- Articulated boss/worm forms simulate motion locally on the receiving peer.  10 Hz
+    -- direction snapshots are enough for correction and halve MCM RPC pressure compared
+    -- with the old 20 Hz stream. Non-articulated fallback forms keep 20 Hz.
+    local interval = (motion_kind == 3 or motion_kind == 5) and 6 or 3
+    if boss_death_pressure_active() then return end
     if frame - last_pose_send_frame < interval then return end
     local x, y, rotation, scale_x, scale_y = EntityGetTransform(entity)
     if not finite_number(x) or not finite_number(y) then return end
@@ -322,7 +366,12 @@ local function send_form_pose(frame)
         phys_info, motion_kind, motion_x, motion_y, motion_speed)
 end
 
-function forms_bridge.update(frame) send_form_pose(frame) end
+function forms_bridge.update(frame)
+    local data = ctx.my_player
+    local entity = data ~= nil and tonumber(data.entity) or 0
+    if entity ~= 0 then enforce_local_form_des_exclusion(entity) end
+    send_form_pose(frame)
+end
 function forms_bridge.metrics() return form_pose_sent, form_pose_received end
 function forms_bridge.set_profiling_enabled(enabled) profiling_enabled = enabled == true end
 return forms_bridge

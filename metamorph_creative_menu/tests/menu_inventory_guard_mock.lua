@@ -28,7 +28,7 @@ function EntityGetFirstComponentIncludingDisabled(entity_id, component_type)
     if entity_id == 1 and component_type == "Inventory2Component" then return 22 end
     return nil
 end
-function EntityGetComponentIsEnabled(player_entity_id, component_id) return true end
+function ComponentGetIsEnabled(component_id) return true end
 function ComponentGetValue2(component_id, field_name)
     if component_id == 20 and field_name == "enabled" then return controls_enabled end
     if component_id == 21 and field_name == "mActive" then return true end
@@ -48,6 +48,12 @@ METAMORPH_CREATIVE_MENU_MENU_INVENTORY_GUARD = nil
 local guard = assert(native_dofile(root .. "/files/platform/noita/menu_inventory_guard.lua"))
 assert(guard.controls_disabled(1) == false, "enabled controls reported disabled")
 assert(guard.inventory_open(1) == true, "InventoryGuiComponent open state was ignored")
+assert(guard.suppress_text_controls(1)==true and controls_enabled==true,
+    'text entry disabled ControlsComponent instead of suppressing transient actions')
+assert(component_writes.mButtonDownDown==false and component_writes.mButtonFrameDown==-1
+    and component_writes.mButtonDownInventory==false and component_writes.mButtonFrameInventory==-1
+    and component_writes.mButtonDownFire==false and component_writes.mButtonFrameFire==-1,
+    'text entry did not suppress movement/inventory/fire action fields')
 local snapshot = assert(guard.capture_scroll_selection(1))
 assert(snapshot.active_item_entity_id == 10 and snapshot.actual_active_item_entity_id == 11, "selection snapshot incorrect")
 assert(component_writes.mButtonFrameChangeItemR == -1 and component_writes.mButtonCountChangeItemL == 0, "wheel input was not suppressed")
@@ -56,6 +62,9 @@ assert(bridge_calls == 1, "NoitaPatcher held-item restore was not used")
 assert(component_writes.mActiveItem == 10 and component_writes.mActualActiveItem == 11 and component_writes.mForceRefresh == true, "inventory ids/refresh not restored")
 assert(guard.acquire_manual_controls(1)==true and controls_enabled==false and guard.manual_controls_owned(),
     'manual menu did not suppress gameplay controls')
+assert(component_writes.mButtonDownLeftClick==false and component_writes.mButtonDownRightClick==false
+    and component_writes.mButtonFrameLeftClick==-1 and component_writes.mButtonFrameRightClick==-1,
+    'manual menu did not suppress the vanilla click fields behind MCM')
 assert(guard.release_manual_controls()==true and controls_enabled==true and not guard.manual_controls_owned(),
     'manual menu did not restore its controls baseline')
 controls_enabled=false
@@ -63,4 +72,4 @@ assert(guard.acquire_manual_controls(1)==true)
 controls_enabled=true -- a later external owner re-enabled controls
 assert(guard.release_manual_controls()==true and controls_enabled==true,
     'manual menu overwrote a later external controls decision')
-print("menu_inventory_guard=PASS capture_restore=true manual_controls=true compare_and_swap=true")
+print("menu_inventory_guard=PASS capture_restore=true manual_controls=true text_controls=true pointer_fields=true compare_and_swap=true")

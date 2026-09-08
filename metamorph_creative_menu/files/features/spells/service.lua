@@ -1,9 +1,14 @@
+if type(METAMORPH_CREATIVE_MENU_SPELL_SERVICE) == "table" then
+    return METAMORPH_CREATIVE_MENU_SPELL_SERVICE
+end
+
 local spell_service = {}
 local ew_runtime = dofile("mods/metamorph_creative_menu/files/integrations/ew/runtime.lua")
 local ew_world_items = dofile("mods/metamorph_creative_menu/files/integrations/ew/world_items.lua")
 local wand_api = dofile("mods/metamorph_creative_menu/files/platform/noita/wand.lua")
 local inventory_slots = dofile("mods/metamorph_creative_menu/files/platform/noita/inventory_slots.lua")
 local spell_factory = dofile("mods/metamorph_creative_menu/files/features/spells/factory.lua")
+local slot_settler = dofile("mods/metamorph_creative_menu/files/features/spells/slot_settler.lua")
 
 local function valid_component(component_id)
     return component_id ~= nil and component_id ~= 0
@@ -147,31 +152,6 @@ function spell_service.capacity(wand_entity_id, highest_slot, permanent_action_c
     return math.max(math.floor(deck_capacity), (highest_slot or -1) + 1, 1)
 end
 
-local function capture_mana_state(wand_entity_id)
-    if not alive(wand_entity_id) then return nil end
-    local ability_component = EntityGetFirstComponentIncludingDisabled(wand_entity_id, "AbilityComponent")
-    if not valid_component(ability_component) then return nil end
-    local mana_state = { ability = ability_component }
-    for _, field_name in ipairs({ "mana", "mana_max", "mana_charge_speed" }) do
-        local read_succeeded, value = pcall(ComponentGetValue2, ability_component, field_name)
-        if read_succeeded and value ~= nil then mana_state[field_name] = value end
-    end
-    return mana_state
-end
-
-local function restore_mana_state(mana_state)
-    if type(mana_state) ~= "table" or not valid_component(mana_state.ability) then return end
-    for _, field_name in ipairs({ "mana", "mana_max", "mana_charge_speed" }) do
-        local original_value = mana_state[field_name]
-        if original_value ~= nil then
-            local read_succeeded, current_value = pcall(ComponentGetValue2, mana_state.ability, field_name)
-            if read_succeeded and current_value ~= original_value then
-                pcall(ComponentSetValue2, mana_state.ability, field_name, original_value)
-            end
-        end
-    end
-end
-
 local function refresh_wand_and_inventory(player_entity_id, wand_entity_id)
     local inventory_component = EntityGetFirstComponentIncludingDisabled(player_entity_id, "Inventory2Component")
     if valid_component(inventory_component) then
@@ -179,15 +159,24 @@ local function refresh_wand_and_inventory(player_entity_id, wand_entity_id)
         -- vanilla inventory code repairs it.
         pcall(ComponentSetValue2, inventory_component, "mForceRefresh", true)
     end
-    local mana_state = capture_mana_state(wand_entity_id)
-    if wand_entity_id ~= nil and wand_entity_id ~= 0 then pcall(GameRegenItemActionsInContainer, wand_entity_id) end
-    pcall(GameRegenItemActionsInPlayer, player_entity_id)
-    restore_mana_state(mana_state)
+    -- GameRegenItemActionsInContainer/Player are gameplay APIs for regenerating action
+    -- cards (not UI refresh calls). Invoking them after a drag lets Noita recreate or
+    -- renormalize the cards we just positioned, which is why an exact drop could land in
+    -- an adjacent slot. Child/ItemComponent mutations are already live; mForceRefresh is
+    -- the only vanilla inventory refresh required here.
     ew_runtime.force_inventory_sync()
 end
 
 function spell_service.refresh(player_entity_id, wand_entity_id)
     refresh_wand_and_inventory(player_entity_id, wand_entity_id)
+end
+
+function spell_service.expect_exact_slots(player_entity_id, label, specs)
+    return slot_settler.schedule(player_entity_id, label, specs, ew_runtime.force_inventory_sync)
+end
+
+function spell_service.settle_slots()
+    return slot_settler.update()
 end
 
 local function configure_action_entity(entity_id, action_id, slot_index)
@@ -286,6 +275,9 @@ function spell_service.replace(player_entity_id, wand_entity_id, slot_index, act
 
     EntitySetComponentsWithTagEnabled(created_entity_id, "enabled_in_world", false)
     refresh_wand_and_inventory(player_entity_id, wand_entity_id)
+    spell_service.expect_exact_slots(player_entity_id, "replace", {
+        {entity=created_entity_id, parent=wand_entity_id, x=slot_index, y=0},
+    })
     return true, "replaced"
 end
 
@@ -466,14 +458,42 @@ function spell_service.move(player_entity_id, wand_entity_id, existing_entry, ta
     local normalized, changes, reason = normalize_slots(entries)
     if not normalized then return false, reason end
     local function fail(message)
+        -- Restore the two directly edited cards as well as any normalization journal.
+        -- Without this, failure after the temporary write could strand the source at a
+        -- negative coordinate and make it disappear from both MCM and vanilla UI.
+        if target_entry ~= nil and target_entry.entity ~= existing_entry.entity then
+            pcall(ComponentSetValue2, target_entry.item_component, "inventory_slot", -1, -1)
+            pcall(ComponentSetValue2, existing_entry.item_component, "inventory_slot",
+                existing_entry.actual_slot, existing_entry.actual_slot_y or 0)
+            pcall(ComponentSetValue2, target_entry.item_component, "inventory_slot",
+                target_entry.actual_slot, target_entry.actual_slot_y or 0)
+        else
+            pcall(ComponentSetValue2, existing_entry.item_component, "inventory_slot",
+                existing_entry.actual_slot, existing_entry.actual_slot_y or 0)
+        end
         rollback_slot_changes(changes)
         return false, message
     end
     if target_entry ~= nil and target_entry.entity ~= existing_entry.entity then
-        if not set_slot(target_entry.item_component, existing_entry.slot, 0) then return fail("target_slot_failed") end
+        -- Never expose two live cards at the same coordinate, even transiently. Some
+        -- engine builds resolve that collision immediately and move one card to an
+        -- adjacent slot before the second write arrives.
+        if not set_slot(existing_entry.item_component, -1, -1) then
+            return fail("source_temp_slot_failed")
+        end
+        if not set_slot(target_entry.item_component, existing_entry.slot, 0) then
+            return fail("target_slot_failed")
+        end
     end
     if not set_slot(existing_entry.item_component, target_slot, 0) then return fail("source_slot_failed") end
     refresh_wand_and_inventory(player_entity_id, wand_entity_id)
+    local expected = {{entity=existing_entry.entity, parent=wand_entity_id, x=target_slot, y=0}}
+    if target_entry ~= nil and target_entry.entity ~= existing_entry.entity then
+        expected[#expected + 1] = {
+            entity=target_entry.entity, parent=wand_entity_id, x=existing_entry.slot, y=0,
+        }
+    end
+    spell_service.expect_exact_slots(player_entity_id, "wand_move", expected)
     return true, target_entry ~= nil and "swapped" or "moved"
 end
 
@@ -533,9 +553,23 @@ function spell_service.adopt_inventory(player_entity_id, wand_entity_id, source_
     end
     pcall(ComponentSetValue2, source_entry.item_component, "permanently_attached", false)
     pcall(ComponentSetValue2, source_entry.item_component, "has_been_picked_by_player", true)
+    if target_entry ~= nil and alive(target_entry.entity) then
+        -- Vacate the destination before attaching the incoming card. Attaching first
+        -- creates a short-lived duplicate wand coordinate which Noita may resolve to the
+        -- previous/next slot on the same update.
+        if not detach_verified(target_entry.entity) then
+            inventory_slots.place_exact(player_entity_id, source_entry.entity, "inventory_full", source_x, source_y)
+            rollback_slot_changes(slot_changes)
+            return false, "target_detach_failed"
+        end
+        pcall(ComponentSetValue2, target_entry.item_component, "permanently_attached", false)
+        pcall(ComponentSetValue2, target_entry.item_component, "has_been_picked_by_player", true)
+    end
+
     if not set_slot(source_entry.item_component, target_slot, 0) or not attach_verified(wand_entity_id, source_entry.entity) then
         pcall(EntityRemoveFromParent, source_entry.entity)
         inventory_slots.place_exact(player_entity_id, source_entry.entity, "inventory_full", source_x, source_y)
+        if target_entry ~= nil and alive(target_entry.entity) then restore_wand_entry(wand_entity_id, target_entry) end
         rollback_slot_changes(slot_changes)
         return false, "source_attach_failed"
     end
@@ -543,25 +577,28 @@ function spell_service.adopt_inventory(player_entity_id, wand_entity_id, source_
     EntitySetComponentsWithTagEnabled(source_entry.entity, "enabled_in_inventory", false)
 
     if target_entry ~= nil and alive(target_entry.entity) then
-        if not detach_verified(target_entry.entity) then
-            pcall(EntityRemoveFromParent, source_entry.entity)
-            inventory_slots.place_exact(player_entity_id, source_entry.entity, "inventory_full", source_x, source_y)
-            rollback_slot_changes(slot_changes)
-            return false, "target_detach_failed"
-        end
-        pcall(ComponentSetValue2, target_entry.item_component, "permanently_attached", false)
-        pcall(ComponentSetValue2, target_entry.item_component, "has_been_picked_by_player", true)
-        local placed, place_reason = inventory_slots.place_exact(player_entity_id, target_entry.entity, "inventory_full", source_x, source_y)
+        local placed, place_reason, inventory_expected = inventory_slots.place_exact(player_entity_id, target_entry.entity, "inventory_full", source_x, source_y)
         if not placed then
-            restore_wand_entry(wand_entity_id, target_entry)
             pcall(EntityRemoveFromParent, source_entry.entity)
             inventory_slots.place_exact(player_entity_id, source_entry.entity, "inventory_full", source_x, source_y)
+            restore_wand_entry(wand_entity_id, target_entry)
             rollback_slot_changes(slot_changes)
             return false, place_reason or "target_inventory_failed"
         end
     end
 
     refresh_wand_and_inventory(player_entity_id, wand_entity_id)
+    local expected = {{entity=source_entry.entity, parent=wand_entity_id, x=target_slot, y=0}}
+    if target_entry ~= nil then
+        if type(inventory_expected) == "table" and #inventory_expected > 0 then
+            for _, spec in ipairs(inventory_expected) do expected[#expected + 1] = spec end
+        elseif alive(target_entry.entity) then
+            expected[#expected + 1] = {
+                entity=target_entry.entity, parent=source_parent, x=source_x, y=source_y,
+            }
+        end
+    end
+    spell_service.expect_exact_slots(player_entity_id, "inventory_to_wand", expected)
     return true, target_entry ~= nil and "swapped_inventory" or "moved_from_inventory"
 end
 
@@ -585,13 +622,16 @@ function spell_service.export_to_inventory_slot(player_entity_id, wand_entity_id
     end
     pcall(ComponentSetValue2, source_entry.item_component, "permanently_attached", false)
     pcall(ComponentSetValue2, source_entry.item_component, "has_been_picked_by_player", true)
-    local placed, place_reason = inventory_slots.place_exact(player_entity_id, source_entry.entity, "inventory_full", x, y)
+    local placed, place_reason, inventory_expected = inventory_slots.place_exact(player_entity_id, source_entry.entity, "inventory_full", x, y)
     if not placed then
         restore_wand_entry(wand_entity_id, source_entry)
         rollback_slot_changes(slot_changes)
         return false, place_reason or "inventory_failed"
     end
     refresh_wand_and_inventory(player_entity_id, wand_entity_id)
+    spell_service.expect_exact_slots(player_entity_id, "wand_to_inventory", inventory_expected or {
+        {entity=source_entry.entity, parent=layout.inventory, x=x, y=y},
+    })
     return true, "inventory_slot"
 end
 
@@ -627,4 +667,5 @@ function spell_service.move_to_inventory(player_entity_id, wand_entity_id, exist
     return true, "inventory"
 end
 
+METAMORPH_CREATIVE_MENU_SPELL_SERVICE = spell_service
 return spell_service

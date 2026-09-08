@@ -82,6 +82,7 @@ GuiOptionsAdd=function() end
 GuiLayoutBeginHorizontal=function() end
 GuiLayoutBeginVertical=function() end
 GuiLayoutAddHorizontalSpacing=function() end
+GuiLayoutAddVerticalSpacing=function() end
 GuiLayoutBeginLayer=function() end
 GuiLayoutEndLayer=function() end
 GuiLayoutEnd=function() end

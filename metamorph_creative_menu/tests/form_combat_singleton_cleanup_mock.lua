@@ -23,6 +23,8 @@ dofile = function(path)
     if path == "mods/metamorph_creative_menu/files/platform/noita/entity_tree.lua" then return entity_tree end
     if path == "mods/metamorph_creative_menu/files/features/forms/component_ops.lua" then return component_ops end
     if path == "mods/metamorph_creative_menu/files/features/forms/entity_tree_cache.lua" then return tree_cache end
+    local prefix = "mods/metamorph_creative_menu/"
+    if string.sub(path, 1, #prefix) == prefix then return native_dofile(root .. "/" .. string.sub(path, #prefix + 1)) end
     return native_dofile(path)
 end
 

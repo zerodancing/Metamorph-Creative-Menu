@@ -17,6 +17,7 @@ local HIDDEN_EXACT_PATHS = {
     ["data/entities/animals/drone.xml"] = true,
     ["data/entities/animals/_test_walk.xml"] = true,
     ["data/entities/animals/mimic_physics.xml"] = true,
+    ["data/entities/animals/ending_placeholder/boss_dragon_endcrystal.xml"] = true,
 }
 
 function menu_visibility.visible(path)

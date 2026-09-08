@@ -5,6 +5,7 @@ local weather_service = {}
 local definitions = dofile("mods/metamorph_creative_menu/files/features/weather/definitions.lua")
 local weather_sync = dofile("mods/metamorph_creative_menu/files/integrations/ew/weather_sync.lua")
 local runtime_effects = dofile("mods/metamorph_creative_menu/files/features/weather/runtime_effects.lua")
+local time_dt_owner = dofile("mods/metamorph_creative_menu/files/features/world_rules/time_dt.lua")
 
 local state = {
     active = false,
@@ -19,7 +20,6 @@ local state = {
     rain_stop_guard_until = 0,
     last_lightning_update_frame = -1,
     last_full_update_frame = -1,
-    original_time_dt = nil,
     remote = false,
 }
 
@@ -43,7 +43,6 @@ local function clear_state()
     state.rain_stop_guard_until = 0
     state.last_lightning_update_frame = -1
     state.last_full_update_frame = -1
-    state.original_time_dt = nil
 end
 
 local function write_value(component, field_name, value)
@@ -93,13 +92,19 @@ local function write_assignments_verified(component, assignments)
 end
 
 local function begin_override(component)
-    if not state.active and state.original_time_dt == nil then
-        local ok, value = read_value(component, "time_dt")
-        if ok then state.original_time_dt = tonumber(value) end
-    end
     state.active = true
     state.remote = false
     pcall(ComponentSetValue2, component, "intro_weather", false)
+end
+
+local function write_time_and_freeze(component, value)
+    local was_frozen = time_dt_owner.is_weather_frozen()
+    local locked, lock_reason = time_dt_owner.set_weather_frozen(true)
+    if not locked then return false, lock_reason or "time_dt_lock" end
+    local wrote, reason = write_assignments_verified(component, {{field="time", value=value}})
+    if wrote then return true, "ok" end
+    if not was_frozen then time_dt_owner.set_weather_frozen(false) end
+    return false, reason
 end
 
 local function clamp_field(field, value)
@@ -148,9 +153,7 @@ function weather_service.set_time_preset(preset_name)
     if component == nil then return false, "world" end
     local was_active = state.active == true
     begin_override(component)
-    local wrote, reason = write_assignments_verified(component, {
-        {field="time", value=value}, {field="time_dt", value=0},
-    })
+    local wrote, reason = write_time_and_freeze(component, value)
     if not wrote then
         if not was_active then clear_state() end
         return false, reason
@@ -175,15 +178,16 @@ function weather_service.set(field, value)
     if field.id == "lightning" and value <= 0 then
         assignments[#assignments + 1] = {field="lightning_count", value=0}
     elseif field.field == "time" then
-        assignments[#assignments + 1] = {field="time", value=value}
-        assignments[#assignments + 1] = {field="time_dt", value=0}
+        -- time/time_dt are one logical operation; time_dt ownership is shared with Day Speed.
     elseif field.id ~= "rainfall" and field.id ~= "lightning" then
         assignments[#assignments + 1] = {field=field.field, value=value}
         if type(field.target) == "string" and field.target ~= "" then
             assignments[#assignments + 1] = {field=field.target, value=value}
         end
     end
-    local wrote, reason = write_assignments_verified(component, assignments)
+    local wrote, reason
+    if field.field == "time" then wrote, reason = write_time_and_freeze(component, value)
+    else wrote, reason = write_assignments_verified(component, assignments) end
     if not wrote then
         if not was_active then clear_state() end
         return false, reason
@@ -250,8 +254,8 @@ function weather_service.release()
     if not allowed then return false, "edit_denied" end
     local component = world_component()
     if component == nil then return false, "world" end
-    if state.original_time_dt ~= nil then
-        local restored, reason = write_assignments_verified(component, {{field="time_dt", value=state.original_time_dt}})
+    if time_dt_owner.is_weather_frozen() then
+        local restored, reason = time_dt_owner.set_weather_frozen(false)
         if not restored then return false, reason end
     end
     clear_state()
@@ -266,13 +270,17 @@ function weather_service.update()
     local first_update_this_frame = state.last_full_update_frame ~= frame
     if first_update_this_frame then
         state.last_full_update_frame = frame
-        weather_sync.consume(state, world_component, clear_state)
+        weather_sync.consume(state, world_component, clear_state, time_dt_owner)
         -- A consumed RELEASE resets the state table, including the frame marker.
         state.last_full_update_frame = frame
     end
     if not state.active then return end
     local allowed = weather_service.can_edit()
     if not allowed and not state.remote then
+        if time_dt_owner.is_weather_frozen() then
+            local released = time_dt_owner.set_weather_frozen(false)
+            if not released then return end
+        end
         clear_state()
         return
     end
@@ -282,14 +290,12 @@ function weather_service.update()
     pcall(ComponentSetValue2, component, "intro_weather", false)
     if state.time ~= nil then
         write_value(component, "time", state.time)
-        write_value(component, "time_dt", 0)
+        time_dt_owner.set_weather_frozen(true)
     end
     for field_name, value in pairs(state.values) do write_value(component, field_name, value) end
 
-    if (tonumber(state.rain_stop_guard_until) or 0) >= frame and (tonumber(state.rainfall) or 0) <= 0 then
-        write_value(component, "rain", 0)
-        write_value(component, "rain_target", 0)
-    end
+    -- `rain`/`rain_target` are cloud-cover controls, not the editor's synthetic
+    -- precipitation amount. Rainfall=0 (notably CLOUDY) must not zero cloudiness.
     -- init.lua calls update both before and after the engine tick: world fields must be
     -- reasserted twice, but network mailbox work and particle/lightning simulation only
     -- belong to the first call of a frame.

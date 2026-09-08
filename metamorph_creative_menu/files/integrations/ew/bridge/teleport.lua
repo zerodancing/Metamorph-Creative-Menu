@@ -9,9 +9,24 @@ local OUTBOX_DEST_X = "mcm_teleport_bring_outbox_dest_x_v1"
 local OUTBOX_DEST_Y = "mcm_teleport_bring_outbox_dest_y_v1"
 local OUTBOX_ACK = "mcm_teleport_bring_outbox_ack_v1"
 local MAX_STREAM_FRAMES = 300
+local MAX_DRAIN_PER_FRAME = 16
+local MAX_SEQUENCE_GAP = 4096
 
 local rpc, common
-local last_sequence = tonumber(GlobalsGetValue(OUTBOX_ACK, "0")) or 0
+local last_invalid_sequence = nil
+
+local function parse_sequence(value)
+    local sequence = tonumber(value)
+    if type(sequence) ~= "number" or sequence ~= sequence
+        or sequence == math.huge or sequence == -math.huge
+        or sequence < 0 or math.floor(sequence) ~= sequence
+    then
+        return nil
+    end
+    return sequence
+end
+
+local last_sequence = parse_sequence(GlobalsGetValue(OUTBOX_ACK, "0")) or 0
 local pending = nil
 
 local function frame_number()
@@ -84,9 +99,37 @@ local function read_value(base, sequence, fallback)
     return value
 end
 
+local function clear_processed(current)
+    GlobalsSetValue(OUTBOX_PEER .. "_" .. tostring(current), "")
+    GlobalsSetValue(OUTBOX_TARGET_X .. "_" .. tostring(current), "")
+    GlobalsSetValue(OUTBOX_TARGET_Y .. "_" .. tostring(current), "")
+    GlobalsSetValue(OUTBOX_DEST_X .. "_" .. tostring(current), "")
+    GlobalsSetValue(OUTBOX_DEST_Y .. "_" .. tostring(current), "")
+end
+
 local function drain_outbox()
-    local sequence = tonumber(GlobalsGetValue(OUTBOX_SEQ, "0")) or 0
-    while last_sequence < sequence do
+    local raw_sequence = GlobalsGetValue(OUTBOX_SEQ, "0")
+    local sequence = parse_sequence(raw_sequence)
+    if sequence == nil then
+        raw_sequence = tostring(raw_sequence)
+        if raw_sequence ~= last_invalid_sequence then
+            last_invalid_sequence = raw_sequence
+            common.report_error("teleport_bring_sequence", "invalid=" .. raw_sequence)
+        end
+        return
+    end
+    last_invalid_sequence = nil
+    if sequence <= last_sequence then return end
+    if sequence - last_sequence > MAX_SEQUENCE_GAP then
+        common.report_error("teleport_bring_gap",
+            "last=" .. tostring(last_sequence) .. ";published=" .. tostring(sequence))
+        last_sequence = sequence
+        GlobalsSetValue(OUTBOX_ACK, tostring(last_sequence))
+        return
+    end
+
+    local drain_until = math.min(sequence, last_sequence + MAX_DRAIN_PER_FRAME)
+    while last_sequence < drain_until do
         local current = last_sequence + 1
         local peer_id = read_value(OUTBOX_PEER, current, "")
         local target_x = tonumber(read_value(OUTBOX_TARGET_X, current, ""))
@@ -104,11 +147,7 @@ local function drain_outbox()
                 if not ok then common.report_error("teleport_bring_send", failure); break end
             end
         end
-        GlobalsSetValue(OUTBOX_PEER .. "_" .. tostring(current), "")
-        GlobalsSetValue(OUTBOX_TARGET_X .. "_" .. tostring(current), "")
-        GlobalsSetValue(OUTBOX_TARGET_Y .. "_" .. tostring(current), "")
-        GlobalsSetValue(OUTBOX_DEST_X .. "_" .. tostring(current), "")
-        GlobalsSetValue(OUTBOX_DEST_Y .. "_" .. tostring(current), "")
+        clear_processed(current)
         last_sequence = current
         GlobalsSetValue(OUTBOX_ACK, tostring(last_sequence))
     end

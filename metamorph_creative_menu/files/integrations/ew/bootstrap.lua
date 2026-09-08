@@ -12,10 +12,25 @@ local form_death_intercept_ok, form_death_intercept_reason = form_death_intercep
 if not form_death_intercept_ok then
     common.report_error("form_death_intercept.install", form_death_intercept_reason)
 end
+local boss_global_demote = dofile("mods/metamorph_creative_menu/files/integrations/ew/boss_global_demote.lua")
+local boss_global_demote_ok, boss_global_demote_reason = boss_global_demote.install()
+if not boss_global_demote_ok then
+    common.report_error("boss_global_demote.install", boss_global_demote_reason)
+end
+local kolmi_lifecycle = dofile("mods/metamorph_creative_menu/files/integrations/ew/kolmi_lifecycle.lua")
+local kolmi_lifecycle_ok, kolmi_lifecycle_reason = kolmi_lifecycle.install()
+if not kolmi_lifecycle_ok then
+    common.report_error("kolmi_lifecycle.install", kolmi_lifecycle_reason)
+end
+local boss_lifecycle = dofile("mods/metamorph_creative_menu/files/integrations/ew/boss_lifecycle.lua")
+local boss_lifecycle_ok, boss_lifecycle_reason = boss_lifecycle.install()
+if not boss_lifecycle_ok then
+    common.report_error("boss_lifecycle.install", boss_lifecycle_reason)
+end
 local perk_runtime_guard = dofile("mods/metamorph_creative_menu/files/integrations/ew/perk_runtime_guard.lua")
 local perk_guard_ok, perk_guard_reason = perk_runtime_guard.install()
 if not perk_guard_ok then
-    GlobalsSetValue("mcm_peer_perk_runtime_guard_v1", "failed:" .. tostring(perk_guard_reason))
+    GlobalsSetValue("mcm_peer_perk_runtime_guard_v1", common.encode_diagnostic("failed:" .. tostring(perk_guard_reason)))
 end
 local world_rules = dofile("mods/metamorph_creative_menu/files/integrations/ew/bridge/world_rules.lua")
 local dev_mode = tonumber(dofile("mods/metamorph_creative_menu/dev_mode.lua")) == 1
@@ -28,6 +43,7 @@ local perks = dofile("mods/metamorph_creative_menu/files/integrations/ew/bridge/
 local weather = dofile("mods/metamorph_creative_menu/files/integrations/ew/bridge/weather.lua")
 local possession = dofile("mods/metamorph_creative_menu/files/integrations/ew/bridge/possession.lua")
 local items = dofile("mods/metamorph_creative_menu/files/integrations/ew/bridge/items.lua")
+local creative_perks = dofile("mods/metamorph_creative_menu/files/integrations/ew/bridge/creative_perks.lua")
 local materials = dofile("mods/metamorph_creative_menu/files/integrations/ew/bridge/materials.lua")
 local teleport = dofile("mods/metamorph_creative_menu/files/integrations/ew/bridge/teleport.lua")
 if type(forms.set_profiling_enabled) == "function" then forms.set_profiling_enabled(dev_mode) end
@@ -50,6 +66,7 @@ materials.register(rpc, common)
 -- remains byte-for-byte compatible with earlier MCM peers.
 teleport.register(ew_api, common)
 items.init(common)
+creative_perks.init(common)
 
 local function publish_identity()
     GlobalsSetValue("mcm_world_rules_rpc_ready_v1", "1")
@@ -89,6 +106,7 @@ function ew_bootstrap.on_world_update()
     if frame <= 1 or frame % 120 == 0 then protected_update("identity.update", publish_identity) end
     protected_update("world_rules.update", world_rules.update)
     protected_update("items.update", items.update)
+    protected_update("creative_perks.update", creative_perks.update)
     protected_update("materials.update", materials.update)
     protected_update("teleport.update", teleport.update)
     protected_update("companion.update", companion.update)

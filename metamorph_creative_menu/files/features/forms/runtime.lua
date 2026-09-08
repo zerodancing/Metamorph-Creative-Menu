@@ -13,19 +13,24 @@ local worm_adapter = dofile("mods/metamorph_creative_menu/files/features/forms/a
 local physics_adapter = dofile("mods/metamorph_creative_menu/files/features/forms/adapters/physics.lua")
 local form_combat = dofile("mods/metamorph_creative_menu/files/features/forms/combat.lua")
 local boss_dragon_adapter = dofile("mods/metamorph_creative_menu/files/features/forms/adapters/boss_dragon.lua")
+local scripted_attacks = dofile("mods/metamorph_creative_menu/files/features/forms/scripted_attacks.lua")
+local manual_actions = dofile("mods/metamorph_creative_menu/files/features/forms/adapters/manual_actions.lua")
+local projectile_forms = dofile("mods/metamorph_creative_menu/files/features/forms/projectile_forms/controller.lua")
+local static_weapon_presentation = dofile("mods/metamorph_creative_menu/files/features/forms/adapters/static_weapon_presentation.lua")
+local held_wand_forms = dofile("mods/metamorph_creative_menu/files/features/forms/held_wand_forms/controller.lua")
 
 local applied_entity = 0
 local applied_started = -1
 local active_family = ""
 local root_lifecycle_is_temporary = false
-local native_tank_mode = false
 
 local ensure_controls = component_ops.ensure_controls
 local add_death_guard = component_ops.add_death_guard
 
 local setup_manual_barrels = form_combat.setup_manual_barrels
 local configure_non_ai_player = form_combat.configure_non_ai_player
-local update_secondary_attacks = form_combat.update_secondary_attacks
+local configure_ranged_player = form_combat.configure_ranged_player
+local update_ranged_attacks = form_combat.update_ranged_attacks
 local update_manual_aim = form_combat.update_manual_aim
 local update_manual_lasers = form_combat.update_manual_lasers
 
@@ -40,7 +45,6 @@ local claim_root_lifecycle = form_family.claim_root_lifecycle
 local runtime_family = form_family.detect
 
 
-local is_tank_path = form_family.is_native_tank_path
 
 local stabilize_special_ghost_lifecycle = ghost_adapter.stabilize_lifecycle
 local configure_ghost_player = ghost_adapter.configure
@@ -48,13 +52,13 @@ local update_ghost_player = ghost_adapter.update
 
 local function configure_character_player(entity)
     configure_non_ai_player(entity)
-    if not native_tank_mode then setup_manual_barrels(entity) end
+    setup_manual_barrels(entity)
 end
 
-local function configure_fish_player(entity)
+local function configure_fish_player(entity, profile)
     configure_non_ai_player(entity)
     setup_manual_barrels(entity)
-    fish_adapter.configure(entity)
+    fish_adapter.configure(entity, profile)
 end
 
 local update_fish_player = fish_adapter.update
@@ -85,9 +89,13 @@ function form_runtime.reset()
     worm_adapter.reset()
     physics_adapter.reset()
     form_combat.reset()
+    scripted_attacks.reset()
+    manual_actions.reset()
+    projectile_forms.reset()
+    static_weapon_presentation.reset()
+    held_wand_forms.reset()
     boss_dragon_adapter.reset()
     root_lifecycle_is_temporary = false
-    native_tank_mode = false
 end
 
 function form_runtime.apply(entity, session)
@@ -101,26 +109,7 @@ function form_runtime.apply(entity, session)
 
     local profile_path = session.requested_target or session.target
     local profile = session.profile or profile_api.get(profile_path)
-    native_tank_mode = is_tank_path(profile_path)
     root_lifecycle_is_temporary = claim_root_lifecycle(entity)
-
-    -- Tanks were the most over-adapted forms in earlier builds: custom barrel pivots,
-    -- manual aiming, manual secondary fire and movement/profile rewrites all competed
-    -- with Noita's own polymorph controller. For tanks, deliberately do *less*: keep
-    -- the native polymorph body and controls intact, adding only lifecycle/vision/UI
-    -- support needed by every playable form. This is a passthrough, not a tank emulator.
-    if native_tank_mode then
-        ensure_controls(entity)
-        ensure_form_vision(entity)
-        sync_damage_ui(entity)
-        prime_transform_damage_ui(entity)
-        if session.allow_death_handoff == true then add_death_guard(entity) end
-        active_family = "tank_native"
-        applied_entity = entity
-        applied_started = tonumber(session.started) or GameGetFrameNum()
-        return true
-    end
-
     if session.compatibility_mode == "canonical_damage_overlay" or session.compatibility_mode == "canonical_crash_fallback" then
         apply_damage_overlay(entity, profile)
     end
@@ -134,9 +123,22 @@ function form_runtime.apply(entity, session)
         add_death_guard(entity)
     end
 
-    active_family = runtime_family(entity)
+    -- Projectile-shaped forms (currently Boss Pit wands) are not creatures with an AI
+    -- body at all. Give them a dedicated controller instead of forcing projectile
+    -- lifecycle/rendering through character/physics adapters.
+    local projectile_owned = projectile_forms.configure(entity, profile_path, profile)
+    if not projectile_owned then
+        -- Snapshot manual melee/physics-projectile capabilities before family
+        -- adapters disable native AnimalAI. Normal ranged attacks stay in form_combat.
+        manual_actions.configure(entity, profile_path, profile)
+    end
+
+    active_family = projectile_owned and "projectile_form" or runtime_family(entity)
     if active_family == "ghost_native" then
         configure_ghost_player(entity)
+        if not held_wand_forms.configure(entity, profile_path) then
+            configure_ranged_player(entity)
+        end
     elseif active_family == "boss_dragon" then
         configure_boss_dragon(entity)
     elseif active_family == "ik_physics" then
@@ -144,12 +146,21 @@ function form_runtime.apply(entity, session)
     elseif active_family == "physics" then
         configure_physics_player(entity, profile, false)
     elseif active_family == "worm_native" then
+        configure_ranged_player(entity)
         configure_worm_player(entity)
     elseif active_family == "fish" then
-        configure_fish_player(entity)
+        configure_fish_player(entity, profile)
     elseif active_family == "character" then
         configure_character_player(entity)
     end
+
+    if not projectile_owned then static_weapon_presentation.configure(entity) end
+
+    -- Some vanilla creatures implement part or all of their firing in Lua rather than
+    -- AnimalAI/AIAttack. Snapshot/disable only those known attack scripts and replay
+    -- their authored projectile patterns under player fire input. Component-authored
+    -- attacks remain active through form_combat, so mixed creatures keep both layers.
+    if not projectile_owned then scripted_attacks.configure(entity, profile_path) end
 
     applied_entity = entity
     applied_started = tonumber(session.started) or GameGetFrameNum()
@@ -185,37 +196,46 @@ function form_runtime.update(entity, session)
     if applied_started >= 0 and now - applied_started <= 8 then
         prime_transform_damage_ui(entity)
     end
-    if active_family == "tank_native" then
-        update_secondary_attacks(entity)
-        return
-    end
     -- apply() performs one defensive lifecycle scan for every form. Repeating that
     -- whole-tree Ghost/Lua scan every frame is only necessary for native ghost forms.
     if active_family == "ghost_native" then
         stabilize_special_ghost_lifecycle(entity)
         update_ghost_player(entity)
+        held_wand_forms.update(entity)
     elseif active_family == "boss_dragon" then
         update_boss_dragon(entity)
     elseif active_family == "ik_physics" then
         update_physics_player(entity, profile, true)
-        update_manual_aim(entity)
     elseif active_family == "physics" then
         update_physics_player(entity, profile, false)
-        update_manual_aim(entity)
     elseif active_family == "worm_native" then
         update_worm_player(entity)
     elseif active_family == "fish" then
         update_fish_player(entity)
-        update_manual_aim(entity)
-    elseif active_family == "character" then
-        if not native_tank_mode then update_manual_aim(entity) end
+    elseif active_family == "projectile_form" then
+        projectile_forms.update(entity)
+        return
     end
-    if active_family ~= "worm_native" and active_family ~= "boss_dragon" then
-        if not native_tank_mode then update_manual_lasers(entity) end
-        if not native_tank_mode and not form_combat.tree_has_laser(entity) then
-            update_secondary_attacks(entity)
-        end
+
+    static_weapon_presentation.update(entity)
+
+    -- Player-only actions (melee/physics-projectile control) are evaluated after the
+    -- family movement adapter. An owned input surface is then withheld from both ranged replay
+    -- layers, preventing one RMB/LMB press from triggering two attacks.
+    if not held_wand_forms.active() then manual_actions.update(entity) end
+    local allow_primary = not manual_actions.owns_primary() and not held_wand_forms.owns_primary()
+    local allow_secondary = not manual_actions.owns_secondary()
+
+    -- BossDragonComponent has its own authored projectile interface and dedicated
+    -- adapter. Wand ghosts are another explicit ownership boundary: their real carried
+    -- procedural wand is fired by a short native AnimalAI attack state, so the generic
+    -- descriptor replay must not reacquire the fallback orb_pink attack underneath it.
+    if active_family ~= "boss_dragon" and not held_wand_forms.active() then
+        if form_combat.manual_ranged_owned() then update_manual_aim(entity) end
+        if not scripted_attacks.manages_lasers() then update_manual_lasers(entity, allow_secondary, allow_primary) end
+        update_ranged_attacks(entity, allow_secondary, allow_primary)
     end
+    scripted_attacks.update(entity, allow_secondary, allow_primary)
 end
 
 function form_runtime.family()

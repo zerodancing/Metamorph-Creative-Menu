@@ -81,9 +81,11 @@ function recovery.read(scope, id)
     if phase ~= "captured" and phase ~= "owned" and phase ~= "partial" then
         phase = last_ok and "owned" or "captured"
     end
+    local last_value = nil
+    if last_ok then last_value = last end
     return {
         original = original,
-        last = last_ok and last or nil,
+        last = last_value,
         phase = phase,
         meta = GlobalsGetValue(value_key(scope, id, "meta"), ""),
     }

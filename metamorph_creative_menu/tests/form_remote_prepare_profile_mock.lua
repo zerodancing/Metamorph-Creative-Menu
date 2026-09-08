@@ -86,3 +86,4 @@ local first_time_calls = time_calls
 rpc.sync_form_pose(11, 101, 200, 0, 1, 1, false, 5, 1, 0, 2)
 assert(time_calls == first_time_calls, "cached pose path still pays profiling timer cost")
 print("form_remote_prepare_profile=PASS first_prepare_only=true cached_hotpath_unchanged=true")
+function ComponentGetIsEnabled() return true end

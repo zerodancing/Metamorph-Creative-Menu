@@ -7,6 +7,11 @@ end
 
 function retirement.retire_without_death_side_effects(entity)
     if not valid_entity(entity) then return false end
+    -- Targeting can return the DamageModel-bearing child of a multipart boss. Replace
+    -- the whole local creature tree, while EW retirement separately addresses whichever
+    -- entity owns the DES identity. Otherwise limbs/controllers can survive possession.
+    local root = entity_tree.root(entity)
+    if valid_entity(root) then entity = root end
 
     -- Possession is replacement, not murder. Normal EntityKill may run arbitrary
     -- death/explosion/drop scripts on the copied mob. Disable the whole tree first so

@@ -19,6 +19,7 @@ local search_keycodes = nil
 local search_repeat = { key = nil, started = -1, last = -1 }
 local text_input_reset_generation = 0
 local text_input_seen_generation = {}
+local text_capture_gui = nil
 local panel_bounds = nil
 local draw_colored_rect = nil
 local confirmations = {}
@@ -39,6 +40,7 @@ function ui_runtime.begin_frame()
     hovered = false
     panel_bounds = nil
     text_focus_seen = false
+    if text_capture_gui ~= nil and type(GuiStartFrame) == "function" then GuiStartFrame(text_capture_gui) end
     scroll_model.begin_frame()
 end
 
@@ -217,6 +219,24 @@ function ui_runtime.panel_width_anchor(width)
     GuiLayoutBeginHorizontal(gui, 0, 0, true)
     GuiLayoutAddHorizontalSpacing(gui, math.max(1, (tonumber(width) or 240) - 10))
     GuiLayoutEnd(gui)
+end
+
+-- Draw the menu frame at an explicit rectangle instead of asking AutoBox to size itself
+-- from the active tab. AutoBox has only minimum-size arguments, so a wide/tall child can
+-- enlarge the visible window for one tab and then shrink it on the next. A fixed nine-piece
+-- frame keeps the user's chosen layout authoritative while tabs manage their own scrolling.
+function ui_runtime.fixed_panel_frame(x, y, width, height, inset)
+    inset = math.max(0, tonumber(inset) or 4)
+    x, y = tonumber(x) or 0, tonumber(y) or 0
+    width, height = math.max(1, tonumber(width) or 1), math.max(1, tonumber(height) or 1)
+    GuiOptionsAddForNextWidget(gui, GUI_OPTION.Layout_NoLayouting)
+    GuiZSetForNextWidget(gui, ui_runtime.BACKGROUND_Z)
+    GuiImageNinePiece(gui, ui_runtime.next_id(), x - inset, y - inset,
+        width + inset * 2, height + inset * 2, 1)
+    local _, _, is_hovered, actual_x, actual_y, actual_w, actual_h = GuiGetPreviousWidgetInfo(gui)
+    ui_runtime.mark_hovered(is_hovered)
+    return tonumber(actual_x) or (x - inset), tonumber(actual_y) or (y - inset),
+        tonumber(actual_w) or (width + inset * 2), tonumber(actual_h) or (height + inset * 2)
 end
 
 -- Draw translated text buttons in width-aware rows. Fixed "four buttons per row"
@@ -434,6 +454,74 @@ local function stable_text_input_id(focus_key)
     return 1000000 + hash
 end
 
+-- GuiTextInput is officially intended for mod-settings UI and can lose native keyboard
+-- focus when another widget in the same Gui becomes mouse-focused. Keep MCM's logical focus
+-- independent from the pointer and use a tiny, separate Gui only as a character collector
+-- while the pointer is away from the visible field. Because this collector has its own Gui
+-- context it cannot steal focus from, scroll, or relayout the MCM page when hovering buttons.
+local function stable_text_capture_id(focus_key)
+    local visible = stable_text_input_id(focus_key)
+    return 1100000000 + (visible % 900000000)
+end
+
+local function filter_captured_text(value, allowed_characters)
+    value = tostring(value or "")
+    allowed_characters = tostring(allowed_characters or "")
+    if allowed_characters == "" then return value end
+    local result = {}
+    for character in string.gmatch(value, "[\1-\127\194-\244][\128-\191]*") do
+        if string.find(allowed_characters, character, 1, true) ~= nil then
+            result[#result + 1] = character
+        end
+    end
+    return table.concat(result)
+end
+
+local function utf8_take(value, maximum)
+    value = tostring(value or "")
+    maximum = math.max(0, math.floor(tonumber(maximum) or 0))
+    if maximum == 0 then return "" end
+    local result, count = {}, 0
+    for character in string.gmatch(value, "[\1-\127\194-\244][\128-\191]*") do
+        if count >= maximum then break end
+        count = count + 1
+        result[#result + 1] = character
+    end
+    return table.concat(result)
+end
+
+local function ensure_text_capture_gui()
+    if text_capture_gui == nil and type(GuiCreate) == "function" then
+        local ok, created = pcall(GuiCreate)
+        if ok then text_capture_gui = created end
+        if text_capture_gui ~= nil and type(GuiStartFrame) == "function" then pcall(GuiStartFrame, text_capture_gui) end
+    end
+    return text_capture_gui
+end
+
+local function capture_text_away_from_field(focus_key, max_length, allowed_characters)
+    local capture_gui = ensure_text_capture_gui()
+    if capture_gui == nil or type(GuiTextInput) ~= "function" or type(GuiGetScreenDimensions) ~= "function" then return "" end
+    local ok_dims, screen_width, screen_height = pcall(GuiGetScreenDimensions, capture_gui)
+    if not ok_dims then return "" end
+    local mouse_x, mouse_y = pointer.gui_position(screen_width, screen_height)
+    if tonumber(mouse_x) == nil or tonumber(mouse_y) == nil then return "" end
+
+    if type(GuiOptionsAddForNextWidget) == "function" and type(GUI_OPTION) == "table" then
+        if GUI_OPTION.Layout_NoLayouting ~= nil then
+            pcall(GuiOptionsAddForNextWidget, capture_gui, GUI_OPTION.Layout_NoLayouting)
+        end
+        if GUI_OPTION.ForceFocusable ~= nil then
+            pcall(GuiOptionsAddForNextWidget, capture_gui, GUI_OPTION.ForceFocusable)
+        end
+    end
+    if type(GuiZSetForNextWidget) == "function" then pcall(GuiZSetForNextWidget, capture_gui, -100000) end
+    local ok, captured = pcall(GuiTextInput, capture_gui, stable_text_capture_id(focus_key),
+        mouse_x, mouse_y - 6, " ", 0, math.max(2, tonumber(max_length) or 64) + 1, "")
+    if not ok or type(captured) ~= "string" or captured == " " then return "" end
+    return filter_captured_text(string.sub(captured, 2), allowed_characters)
+end
+
 local function draw_text_input_placeholder(placeholder, actual_x, actual_y)
     placeholder = tostring(placeholder or "")
     if placeholder == "" or tonumber(actual_x) == nil or tonumber(actual_y) == nil then return end
@@ -470,6 +558,10 @@ function ui_runtime.text_input(value, width, max_length, focus_key, options)
 
     GuiColorSetForNextWidget(gui, 1, 1, 1, 1)
     GuiZSetForNextWidget(gui, -103)
+    if type(GUI_OPTION) == "table" and GUI_OPTION.ForceFocusable ~= nil
+        and type(GuiOptionsAddForNextWidget) == "function" then
+        GuiOptionsAddForNextWidget(gui, GUI_OPTION.ForceFocusable)
+    end
     local widget_id = stable_text_input_id(focus_key)
     local ok, native_value = pcall(GuiTextInput, gui, widget_id, 0, 0, value,
         field_width, math.max(1, tonumber(max_length) or 64), tostring(options.allowed_characters or ""))
@@ -493,8 +585,16 @@ function ui_runtime.text_input(value, width, max_length, focus_key, options)
     end
 
     local new_value = value
-    if active and ok and ui_runtime.actions_allowed() and type(native_value) == "string" then
-        new_value = native_value
+    if active and ui_runtime.actions_allowed() then
+        if is_hovered == true and ok and type(native_value) == "string" then
+            -- While hovering, let the real widget own caret/editing exactly as before.
+            new_value = native_value
+        elseif is_hovered ~= true then
+            local captured = capture_text_away_from_field(focus_key, max_length, options.allowed_characters)
+            if captured ~= "" then
+                new_value = utf8_take(value .. captured, math.max(1, tonumber(max_length) or 64))
+            end
+        end
     end
     if value == "" and not active then
         draw_text_input_placeholder(options.placeholder, actual_x, actual_y)
@@ -511,18 +611,24 @@ function ui_runtime.text_input(value, width, max_length, focus_key, options)
         end
     end
     if keys.backspace ~= nil and active then
+        local ok_just, just_down = pcall(InputIsKeyJustDown, keys.backspace)
         local ok_down, down = pcall(InputIsKeyDown, keys.backspace)
         if ok_down and down == true then
-            if search_repeat.key ~= focus_key then
+            local ctrl = false
+            for _, key in ipairs({keys.ctrl_l, keys.ctrl_r}) do
+                if key ~= nil then
+                    local ok_ctrl, down_ctrl = pcall(InputIsKeyDown, key)
+                    ctrl = ctrl or (ok_ctrl and down_ctrl == true)
+                end
+            end
+            -- The hidden off-hover capture cannot edit the visible buffer itself, so handle
+            -- the first backspace edge here. Hovered fields keep native caret semantics.
+            if is_hovered ~= true and ok_just and just_down == true then
+                new_value = ctrl and utf8_pop_word(new_value) or utf8_pop(new_value)
+                search_repeat.key, search_repeat.started, search_repeat.last = focus_key, frame, frame
+            elseif search_repeat.key ~= focus_key then
                 search_repeat.key, search_repeat.started, search_repeat.last = focus_key, frame, frame
             elseif new_value == value and frame - search_repeat.started >= 18 and frame - search_repeat.last >= 3 then
-                local ctrl = false
-                for _, key in ipairs({keys.ctrl_l, keys.ctrl_r}) do
-                    if key ~= nil then
-                        local ok_ctrl, down_ctrl = pcall(InputIsKeyDown, key)
-                        ctrl = ctrl or (ok_ctrl and down_ctrl == true)
-                    end
-                end
                 new_value = ctrl and utf8_pop_word(new_value) or utf8_pop(new_value)
                 search_repeat.last = frame
             end
@@ -554,9 +660,15 @@ function ui_runtime.search_input(value, width, max_length, focus_key)
         clear_on_reset=true, escape_clears=true,
         placeholder=ui_runtime.tr("$mcm_search_placeholder", "Search..."),
     })
-    if new_value ~= "" and ui_runtime.button(0, 0, "X") then
-        new_value = ""
-        clear_text_focus()
+    if new_value ~= "" then
+        if ui_runtime.button(0, 0, "X") then
+            new_value = ""
+            clear_text_focus()
+        end
+    else
+        -- Reserve the clear button's ID before the first character too. Otherwise
+        -- every following button inherits a different native identity on first input.
+        ui_runtime.next_id()
     end
     GuiLayoutEnd(gui)
     return new_value
@@ -626,23 +738,46 @@ function ui_runtime.search_status(query, count)
     end
 end
 
-function ui_runtime.resolve(path)
+function ui_runtime.asset(path)
+    if type(path) == "table" and type(path.path) == "string" then return path end
     if type(path) ~= "string" or path == "" then return nil end
-    local asset = asset_api.resolve(path)
-    return asset_api.path(asset)
+    return asset_api.resolve(path)
+end
+
+function ui_runtime.resolve(path)
+    return asset_api.path(ui_runtime.asset(path))
+end
+
+function ui_runtime.entity_asset(path, role)
+    return asset_api.resolve_entity(path, role)
 end
 
 function ui_runtime.entity_icon(path, role)
-    local asset = asset_api.resolve_entity(path, role)
-    return asset_api.path(asset)
+    return asset_api.path(ui_runtime.entity_asset(path, role))
 end
 
-function ui_runtime.dimensions(path) return asset_api.dimensions(path) end
+function ui_runtime.dimensions(path)
+    if type(asset_api.dimensions) == "function" then return asset_api.dimensions(path) end
+    return 1, 1
+end
+
+local function draw_asset_image(asset, id, x, y, alpha, scale_x, scale_y)
+    if type(asset) ~= "table" then asset = ui_runtime.asset(asset) end
+    if type(asset) ~= "table" or type(asset.path) ~= "string" or asset.path == "" then return false end
+    local animation_name = tostring(asset.animation_name or "")
+    if animation_name ~= "" then
+        GuiImage(gui, id, x, y, asset.path, alpha, scale_x, scale_y, 0,
+            tonumber(asset.playback_mode) or 1, animation_name)
+    else
+        GuiImage(gui, id, x, y, asset.path, alpha, scale_x, scale_y)
+    end
+    return true
+end
 
 local SOLID_TEXTURE = "data/ui_gfx/health_slider_front.png"
 
 draw_colored_rect = function(x, y, width, height, color, z)
-    if type(color) ~= "table" or width <= 0 or height <= 0 then return end
+    if type(GuiImage) ~= "function" or type(color) ~= "table" or width <= 0 or height <= 0 then return end
     local r = math.max(0, math.min(1, tonumber(color[1]) or 1))
     local g = math.max(0, math.min(1, tonumber(color[2]) or 1))
     local b = math.max(0, math.min(1, tonumber(color[3]) or 1))
@@ -690,16 +825,6 @@ local function draw_marker(actual_x, actual_y, actual_w, actual_h, marker)
         math.max(1, actual_w - 4), 2, marker, -107)
 end
 
-local function draw_bottle_fill(actual_x, actual_y, actual_w, actual_h, color)
-    if type(color) ~= "table" then return end
-    -- The vanilla inventory bottle is a grayscale silhouette. A small colour patch
-    -- drawn over its lower bulb reads as the liquid while leaving the bright glass
-    -- rim visible. Keeping the patch inside the silhouette avoids a square swatch
-    -- floating outside the bottle at unusual UI scales.
-    draw_colored_rect(actual_x + actual_w * 0.36, actual_y + actual_h * 0.58,
-        actual_w * 0.28, actual_h * 0.25, color, -106)
-end
-
 local function draw_material_swatch(actual_x, actual_y, actual_w, actual_h, color)
     if type(color) ~= "table" then return end
     draw_colored_rect(actual_x + 2, actual_y + 2,
@@ -710,6 +835,23 @@ local function draw_material_swatch(actual_x, actual_y, actual_w, actual_h, colo
         math.max(1, actual_w - 6), 2,
         { math.min(1, (color[1] or 0) + 0.18), math.min(1, (color[2] or 0) + 0.18),
           math.min(1, (color[3] or 0) + 0.18), color[4] or 0.96 }, -106)
+end
+
+local function draw_icon_overlay(rendered_icon, overlay_path, z, alpha)
+    if type(rendered_icon) ~= "table" or type(overlay_path) ~= "string" or overlay_path == "" then return end
+    local overlay = ui_runtime.asset(overlay_path)
+    local overlay_w, overlay_h = ui_runtime.dimensions(overlay)
+    if type(overlay) ~= "table" or overlay_w == nil or overlay_h == nil then return end
+    local scale = tonumber(rendered_icon.scale)
+    if scale == nil or scale <= 0 then return end
+    local rendered_w, rendered_h = overlay_w * scale, overlay_h * scale
+    GuiOptionsAddForNextWidget(gui, GUI_OPTION.Layout_NoLayouting)
+    GuiColorSetForNextWidget(gui, 1, 1, 1, 1)
+    GuiZSetForNextWidget(gui, z)
+    draw_asset_image(overlay, ui_runtime.next_id(),
+        rendered_icon.x + (rendered_icon.width - rendered_w) * 0.5,
+        rendered_icon.y + (rendered_icon.height - rendered_h) * 0.5,
+        tonumber(alpha) or 1, scale, scale)
 end
 
 function ui_runtime.tile(x, y, background, icon, fallback_icon, title, description, selected, options)
@@ -730,9 +872,11 @@ function ui_runtime.tile(x, y, background, icon, fallback_icon, title, descripti
     actual_h = tonumber(actual_h) or 18
 
     draw_material_swatch(actual_x, actual_y, actual_w, actual_h, options.swatch_color)
-    local draw_icon = ui_runtime.resolve(icon) or ui_runtime.resolve(fallback_icon)
+    local draw_icon = ui_runtime.asset(icon) or ui_runtime.asset(fallback_icon)
     local icon_w, icon_h = ui_runtime.dimensions(draw_icon)
-    if type(draw_icon) == "string" and draw_icon ~= "" and icon_w ~= nil and icon_h ~= nil then
+    local rendered_icon = nil
+    if type(draw_icon) == "table" and type(draw_icon.path) == "string" and draw_icon.path ~= ""
+        and icon_w ~= nil and icon_h ~= nil then
         local padding = math.max(0, tonumber(options.padding) or 1)
         local target = tonumber(options.target_size) or math.min(actual_w, actual_h)
         local max_scale = tonumber(options.max_scale) or 2.0
@@ -752,11 +896,13 @@ function ui_runtime.tile(x, y, background, icon, fallback_icon, title, descripti
                     tonumber(tint[3]) or 1, tonumber(tint[4]) or 1)
             end
             GuiZSetForNextWidget(gui, -105)
-            GuiImage(gui, ui_runtime.next_id(), actual_x + (actual_w - rendered_w) * 0.5,
-                actual_y + (actual_h - rendered_h) * 0.5, draw_icon, 1, scale, scale)
+            local rendered_x = actual_x + (actual_w - rendered_w) * 0.5
+            local rendered_y = actual_y + (actual_h - rendered_h) * 0.5
+            draw_asset_image(draw_icon, ui_runtime.next_id(), rendered_x, rendered_y, 1, scale, scale)
+            rendered_icon = {x=rendered_x, y=rendered_y, width=rendered_w, height=rendered_h, scale=scale}
         end
     end
-    draw_bottle_fill(actual_x, actual_y, actual_w, actual_h, options.bottle_fill_color)
+    draw_icon_overlay(rendered_icon, options.icon_overlay, -106, 1)
     draw_marker(actual_x, actual_y, actual_w, actual_h, options.marker_color)
     clear_search_focus_on_action(clicked == true or right_clicked == true)
     return clicked == true, right_clicked == true, is_hovered == true, actual_x, actual_y, actual_w, actual_h
@@ -771,20 +917,26 @@ function ui_runtime.drag_ghost(background, icon, x, y, options)
     GuiColorSetForNextWidget(gui, 1, 1, 1, 0.78)
     GuiZSetForNextWidget(gui, -120)
     GuiImage(gui, ui_runtime.next_id(), x + 5, y + 5, background, 0.78, 1, 1)
-    local draw_icon = ui_runtime.resolve(icon)
+    local draw_icon = ui_runtime.asset(icon)
     local icon_w, icon_h = ui_runtime.dimensions(draw_icon)
+    local rendered_icon = nil
     if draw_icon ~= nil and icon_w ~= nil and icon_h ~= nil and icon_w > 0 and icon_h > 0 then
         local scale = math.min(16 / icon_w, 16 / icon_h, 2)
         GuiOptionsAddForNextWidget(gui, GUI_OPTION.Layout_NoLayouting)
-        GuiColorSetForNextWidget(gui, 1, 1, 1, 0.9)
+        local tint = options.icon_tint
+        if type(tint) == "table" then
+            GuiColorSetForNextWidget(gui, tonumber(tint[1]) or 1, tonumber(tint[2]) or 1,
+                tonumber(tint[3]) or 1, (tonumber(tint[4]) or 1) * 0.9)
+        else
+            GuiColorSetForNextWidget(gui, 1, 1, 1, 0.9)
+        end
         GuiZSetForNextWidget(gui, -121)
-        GuiImage(gui, ui_runtime.next_id(), x + 6 + (16 - icon_w * scale) * 0.5, y + 6 + (16 - icon_h * scale) * 0.5,
-            draw_icon, 0.9, scale, scale)
+        local rendered_x = x + 6 + (16 - icon_w * scale) * 0.5
+        local rendered_y = y + 6 + (16 - icon_h * scale) * 0.5
+        draw_asset_image(draw_icon, ui_runtime.next_id(), rendered_x, rendered_y, 0.9, scale, scale)
+        rendered_icon = {x=rendered_x, y=rendered_y, width=icon_w * scale, height=icon_h * scale, scale=scale}
     end
-    if type(options.bottle_fill_color) == "table" then
-        draw_colored_rect(x + 5 + 18 * 0.36, y + 5 + 18 * 0.58,
-            18 * 0.28, 18 * 0.25, options.bottle_fill_color, -122)
-    end
+    draw_icon_overlay(rendered_icon, options.icon_overlay, -122, 0.9)
 end
 
 function ui_runtime.finish_auto_box(padding, minimum_width, minimum_height)

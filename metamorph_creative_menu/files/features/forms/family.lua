@@ -59,9 +59,4 @@ function form_family.detect(entity)
     return "unknown"
 end
 
-function form_family.is_native_tank_path(entity_path)
-    local entity_id = string.match(string.lower(tostring(entity_path or "")), "([^/]+)%.xml$") or ""
-    return entity_id == "tank" or string.match(entity_id, "^tank_") ~= nil
-end
-
 return form_family

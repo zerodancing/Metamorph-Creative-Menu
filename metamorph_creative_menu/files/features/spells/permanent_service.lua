@@ -163,6 +163,11 @@ end
 
 function permanent_service.promote(player, wand, entry)
     if type(entry) ~= "table" or not alive(entry.entity) then return false, "missing_action" end
+    -- Be idempotent against a stale UI entry being submitted twice in one release frame.
+    -- A second capacity increment for an already-permanent card creates a phantom ordinary
+    -- wand slot even though there is still only one actual Always Cast entity.
+    local ok_permanent, already_permanent = pcall(ComponentGetValue2, entry.item_component, "permanently_attached")
+    if ok_permanent and already_permanent == true then return false, "already_permanent" end
     local ability, raw, reason = raw_capacity(wand)
     if ability == nil then return false, reason end
     local old_x, old_y = entry.actual_slot or entry.slot or 0, entry.actual_slot_y or 0
@@ -268,13 +273,24 @@ function permanent_service.export_to_inventory_slot(player, wand, entry, x, y)
 
     if not detach(entry.entity) then return false, "detach_failed" end
     set_bool(entry.item_component, "permanently_attached", false)
-    local placed, place_reason = inventory_slots.place_exact(player, entry.entity, "inventory_full", x, y)
-    if not placed then restore_permanent(wand, entry); return false, place_reason end
+    -- Capacity is the only fallible wand mutation that must happen around this transfer.
+    -- Commit it before exact placement because the full-build exact path may deliberately
+    -- rehydrate the spell into a new entity id; after a successful placement there must be
+    -- no caller-side failure that tries to resurrect the now-retired old id.
     if not write_capacity(ability, raw - 1) then
         restore_permanent(wand, entry)
         return false, "capacity_write_failed"
     end
+    local placed, place_reason, inventory_expected = inventory_slots.place_exact(player, entry.entity, "inventory_full", x, y)
+    if not placed then
+        write_capacity(ability, raw)
+        if alive(entry.entity) then restore_permanent(wand, entry) end
+        return false, place_reason
+    end
     finish(player, wand)
+    spell_service.expect_exact_slots(player, "permanent_to_inventory", inventory_expected or {
+        {entity=entry.entity, parent=layout.inventory, x=x, y=y},
+    })
     return true, "inventory_slot"
 end
 
@@ -296,13 +312,16 @@ function permanent_service.swap_with_inventory(player, wand, permanent_entry, in
         return false, "permanent_detach_failed"
     end
     set_bool(permanent_entry.item_component, "permanently_attached", false)
-    local placed, place_reason = inventory_slots.place_exact(player, permanent_entry.entity, "inventory_full", x, y)
+    local placed, place_reason, inventory_expected = inventory_slots.place_exact(player, permanent_entry.entity, "inventory_full", x, y)
     if not placed then
         restore_permanent(wand, permanent_entry)
         restore_inventory(player, inventory_entry, x, y)
         return false, place_reason or "inventory_place_failed"
     end
     finish(player, wand)
+    spell_service.expect_exact_slots(player, "permanent_inventory_swap", inventory_expected or {
+        {entity=permanent_entry.entity, parent=EntityGetParent(permanent_entry.entity), x=x, y=y},
+    })
     return true, "swapped_inventory_permanent"
 end
 

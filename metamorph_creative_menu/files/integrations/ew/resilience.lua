@@ -1,5 +1,7 @@
 local ew_resilience = {}
 
+local global_text = dofile("mods/metamorph_creative_menu/files/core/global_text.lua")
+
 local SEEDED_RANDOM_FILES = {
     "data/scripts/gun/procedural/wand_petri.lua",
     "data/scripts/gun/procedural/chargegun.lua",
@@ -45,6 +47,8 @@ local DEV_MODE = tonumber(dofile("mods/metamorph_creative_menu/dev_mode.lua")) =
 -- while the implementation now lives in the dedicated pure patch module.
 ew_resilience.patch_crosscall_source = resilience_patches.patch_crosscall_source
 ew_resilience.patch_wand_pickup_killself_source = resilience_patches.patch_wand_pickup_killself_source
+ew_resilience.patch_kolmi_boss_update_source = resilience_patches.patch_kolmi_boss_update_source
+ew_resilience.patch_kolmi_spawn_source = resilience_patches.patch_kolmi_spawn_source
 ew_resilience.patch_seed_source = resilience_patches.patch_seed_source
 ew_resilience.patch_detour_source = resilience_patches.patch_detour_source
 ew_resilience.patch_world_sync_source = resilience_patches.patch_world_sync_source
@@ -77,7 +81,7 @@ local CRITICAL_PATCHES = {
     },
     world_sync = {
         path = "mods/quant.ew/files/system/world_sync/world_sync.lua",
-        marker = "mcm_poly_world_sync_v3",
+        marker = "mcm_poly_world_sync_v5",
         patcher = function(content) return ew_resilience.patch_world_sync_source(content, DEV_MODE) end,
         global_key = "mcm_compat_world_sync_patch_v1",
     },
@@ -122,7 +126,7 @@ local function publish_patch_status(name, status)
     critical_patch_status[name] = status
     local spec = CRITICAL_PATCHES[name]
     if spec ~= nil and type(GlobalsSetValue) == "function" then
-        pcall(GlobalsSetValue, spec.global_key, tostring(status))
+        pcall(GlobalsSetValue, spec.global_key, global_text.encode_diagnostic(status))
     end
     return status
 end
@@ -179,7 +183,7 @@ local function patch_polymorph_profile_file()
     local path = "mods/quant.ew/files/system/polymorph/polymorph.lua"
     local function finish(status)
         if type(GlobalsSetValue) == "function" then
-            pcall(GlobalsSetValue, "mcm_compat_poly_profile_patch_v1", tostring(status))
+            pcall(GlobalsSetValue, "mcm_compat_poly_profile_patch_v1", global_text.encode_diagnostic(status))
         end
         return status
     end
@@ -269,6 +273,17 @@ local function patch_crosscall_files()
     return count
 end
 
+local function patch_kolmi_files()
+    local count = 0
+    count = count + patch_file(
+        "mods/quant.ew/files/system/kolmi/append/boss_update.lua",
+        ew_resilience.patch_kolmi_boss_update_source)
+    count = count + patch_file(
+        "mods/quant.ew/files/system/kolmi/append/spawn_kolmi.lua",
+        ew_resilience.patch_kolmi_spawn_source)
+    return count
+end
+
 function ew_resilience.pre_init()
     if not enabled() then
         publish_patch_status("form_death", "disabled")
@@ -293,6 +308,7 @@ function ew_resilience.pre_init()
     patch_peer_perk_isolation_file()
     patch_perk_helper_sync_file()
     apply_verified_patch("perk_mutations")
+    patch_kolmi_files()
     return patch_seed_files(), patch_crosscall_files()
 end
 
@@ -324,6 +340,7 @@ function ew_resilience.post_init()
     patch_peer_perk_isolation_file()
     patch_perk_helper_sync_file()
     apply_verified_patch("perk_mutations")
+    patch_kolmi_files()
     surface_critical_patch_failures()
     return seeds, detours, crosscalls
 end

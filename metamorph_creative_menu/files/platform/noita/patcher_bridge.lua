@@ -8,6 +8,7 @@ local last_explicit_attempt_frame = -100000
 local last_bootstrap_frame = -100000
 local retry_frames = 60
 local BUNDLED_PATCHER_PATH = "mods/metamorph_creative_menu/NoitaPatcher/load.lua"
+local EW_PATCHER_PATH = "mods/quant.ew/NoitaPatcher/load.lua"
 
 local function valid_bridge(value, capability)
     if type(value) ~= "table" then return false end
@@ -49,10 +50,17 @@ local function maybe_bootstrap(options)
     if frame - last_bootstrap_frame < retry_frames then return end
     last_bootstrap_frame = frame
 
-    -- Prefer an already-published NoitaPatcher bridge (including EW's instance).
-    -- When none exists, explicit MCM features bootstrap the bundled local copy.
-    -- This keeps singleplayer independent from the presence of quant.ew.
-    pcall(dofile_once, BUNDLED_PATCHER_PATH)
+    -- When Entangled Worlds is active, bootstrap the *same physical NoitaPatcher copy*
+    -- that EW owns. Loading MCM's byte-identical DLL from a second mod path creates a
+    -- second native module instance on some runtimes; CrossCallAdd registrations then
+    -- live in different registries. Kolmisilma's EW append calls those registrations
+    -- from an entity Lua VM, so a split registry can abort the whole boss coroutine.
+    -- Singleplayer (or an EW install without its bundled patcher) keeps the local copy.
+    local bootstrap_path = BUNDLED_PATCHER_PATH
+    if active and type(ModDoesFileExist) == "function" and ModDoesFileExist(EW_PATCHER_PATH) == true then
+        bootstrap_path = EW_PATCHER_PATH
+    end
+    pcall(dofile_once, bootstrap_path)
 end
 
 function patcher_bridge.bootstrap_available()

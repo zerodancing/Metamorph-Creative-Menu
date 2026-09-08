@@ -35,8 +35,7 @@ local rules = {
     { id="joint_strength", label="$mcm_rule_joint_strength", description="$mcm_rule_joint_strength_desc", kind="magic_multiplier",
       magic_keys={"PHYSICS_JOINT_MAX_FORCE_MULTIPLIER"},
       choices={ native_choice, {value=0.25,label="0.25x"}, {value=0.5,label="0.5x"}, {value=1,label="1x"}, {value=2,label="2x"}, {value=4,label="4x"} } },
-    { id="day_speed", label="$mcm_rule_day_speed", description="$mcm_rule_day_speed_desc", kind="magic_multiplier",
-      magic_keys={"DESIGN_DAY_CYCLE_SPEED"},
+    { id="day_speed", label="$mcm_rule_day_speed", description="$mcm_rule_day_speed_desc", kind="time_dt_multiplier",
       choices={ native_choice, {value=0,label="0x"}, {value=0.25,label="0.25x"}, {value=0.5,label="0.5x"}, {value=1,label="1x"}, {value=2,label="2x"}, {value=4,label="4x"}, {value=10,label="10x"} } },
 }
 

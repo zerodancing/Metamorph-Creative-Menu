@@ -27,7 +27,7 @@ local ICON_ALIASES = {
     scorpion_watchtower="scorpion", fireskull_weak="fireskull",
     slimeshooter_nontoxic="slimeshooter", fungus_tiny="fungus",
     wand_ghost_charmed="wand_ghost", wand_ghost_with_sampo="wand_ghost",
-    darkghost="wraith", apparition="playerghost",
+    darkghost="wraith", apparition="playerghost", lukki_creepy="lukki_creepy_long",
 }
 
 

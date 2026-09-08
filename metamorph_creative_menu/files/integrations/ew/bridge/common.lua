@@ -1,3 +1,4 @@
+local global_text = dofile("mods/metamorph_creative_menu/files/core/global_text.lua")
 local bridge_common = {}
 
 local ERROR_SEQ = "mcm_world_rules_rpc_error_seq_v1"
@@ -12,8 +13,10 @@ end
 function bridge_common.report_error(code, detail)
     error_sequence = error_sequence + 1
     GlobalsSetValue(ERROR_SEQ, tostring(error_sequence))
-    GlobalsSetValue(ERROR_VALUE, bridge_common.clean(code) .. ":" .. bridge_common.clean(detail))
+    GlobalsSetValue(ERROR_VALUE, global_text.encode_diagnostic(tostring(code or "") .. ":" .. tostring(detail or "")))
 end
+
+bridge_common.encode_diagnostic = global_text.encode_diagnostic
 
 function bridge_common.finite_number(value)
     return type(value) == "number" and value == value and math.abs(value) < 100000000

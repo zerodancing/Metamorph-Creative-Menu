@@ -16,6 +16,10 @@ local liquid_warmup = material_preview.new_liquid_warmup()
 local search_cache_key = nil
 local search_cache_value = nil
 
+local function liquid_cap_icon()
+    return type(material_preview.liquid_cap_icon) == "function" and material_preview.liquid_cap_icon() or nil
+end
+
 local FALLBACK = {
     CONTAINERS = "data/ui_gfx/items/potion.png",
     STONES = "data/ui_gfx/items/waterstone.png",
@@ -50,12 +54,28 @@ local function icon(item)
     local explicit = tostring(item.icon or "")
     local meaningful_explicit = explicit ~= "" and explicit ~= ui.EMPTY_SLOT
         and explicit ~= "data/ui_gfx/inventory/inventory_box.png"
-    local resolved = meaningful_explicit and ui.resolve(explicit) or nil
-    if resolved == nil then resolved = ui.entity_icon(item.path, "item") end
-    if resolved == nil and explicit ~= "" then resolved = ui.resolve(explicit) end
-    if resolved == nil then resolved = ui.resolve(FALLBACK[item.category]) end
-    resolved = resolved or ui.EMPTY_SLOT
-    icon_cache[item.path] = resolved
+    local resolve_asset = type(ui.asset) == "function" and ui.asset or ui.resolve
+    local resolve_entity = type(ui.entity_asset) == "function" and ui.entity_asset or ui.entity_icon
+    local resolved = meaningful_explicit and resolve_asset(explicit) or nil
+    local used_fallback = false
+    if resolved == nil or (type(resolved) == "table" and resolved.kind == "placeholder") then
+        resolved = resolve_entity(item.path, "item") or resolved
+    end
+    if resolved == nil and explicit ~= "" then resolved = resolve_asset(explicit) end
+    if resolved == nil or (type(resolved) == "table" and resolved.kind == "placeholder") then
+        resolved = resolve_asset(FALLBACK[item.category])
+        used_fallback = true
+    end
+    if resolved == nil then
+        resolved = resolve_asset(ui.EMPTY_SLOT)
+        used_fallback = true
+    end
+    -- External VFS resources can legitimately appear after this tab's first render.
+    -- Cache only a proven item-specific descriptor; a placeholder/category fallback is
+    -- returned for this frame but retried later instead of becoming permanent.
+    if not used_fallback and type(resolved) == "table" and resolved.kind ~= "placeholder" then
+        icon_cache[item.path] = resolved
+    end
     return resolved
 end
 
@@ -146,14 +166,24 @@ local function handle_completed_drag(player, screen_width, screen_height)
     end
 end
 
-local function search_values(index, query, values, is_liquid)
+local function is_liquid_entry(entry)
+    return type(entry) == "table" and entry.kind == "liquid"
+end
+
+local function search_values(index, query, values)
     query = tostring(query or "")
     if query == "" then return values end
-    local key = tostring(index) .. "\31" .. query .. "\31" .. (is_liquid and "L" or "I")
+    local key = tostring(index) .. "\31" .. query
     if key == search_cache_key and search_cache_value ~= nil then return search_cache_value end
     local result = ui.rank_entries(query, values, function(entry)
-        local description = is_liquid and tostring(entry.id) or tostring(entry.display_description or "")
-        return {entry.name, entry.description, entry.display_name, entry.id, entry.path, description}
+        if is_liquid_entry(entry) then
+            local aliases = type(ui.search_aliases) == "function"
+                and ui.search_aliases(entry.ui_name_key, entry.id) or {}
+            local fields = {entry.display_name, entry.id, entry.ui_name_key}
+            for _, alias in ipairs(aliases) do fields[#fields + 1] = alias end
+            return fields
+        end
+        return {entry.name, entry.description, entry.display_name, entry.id, entry.path, entry.display_description}
     end, function(entry) return entry.id or entry.path end)
     search_cache_key, search_cache_value = key, result
     return result
@@ -176,15 +206,22 @@ function items_tab.draw(player, panel_width, screen_height)
     local filter = filters[selected_filter]
     local values = filter[4] == "LIQUIDS" and item_catalog.liquids(ui.translated) or entries_for(selected_filter)
 
+    local results = search_values(selected_filter, search, values)
+
     -- Both ITEMS and MATERIALS use this same bounded probe/cache. A real filled flask
     -- is the engine-authoritative preview for liquids; two new materials per frame keep
-    -- catalogue opening independent of the number of installed materials.
-    if filter[4] == "LIQUIDS" then
-        material_preview.warm_liquid_colors(player, values, liquid_warmup, 2)
+    -- catalogue opening independent of the number of installed materials. Only warm the
+    -- liquid entries that survived search so ALL does not eagerly probe the entire material
+    -- catalogue when the user is looking for one specific item.
+    local liquid_entries = {}
+    for _, entry in ipairs(results) do
+        if is_liquid_entry(entry) then liquid_entries[#liquid_entries + 1] = entry end
+    end
+    if #liquid_entries > 0 then
+        material_preview.warm_liquid_colors(player, liquid_entries, liquid_warmup, 2,
+            "items:" .. tostring(selected_filter) .. ":" .. tostring(search))
     end
 
-    local is_liquid = filter[4] == "LIQUIDS"
-    local results = search_values(selected_filter, search, values, is_liquid)
     ui.search_status(search, #results)
     ui.wrapped_text(0, 0, ui.tr("$mcm_item_controls", "LMB: SPAWN  DRAG: DROP  RMB: TAKE"), math.max(24, panel_width - 8))
     local grid_h = ui.scroll_height(screen_height, 160)
@@ -193,6 +230,7 @@ function items_tab.draw(player, panel_width, screen_height)
     local columns = ui.columns(scroll.content_width, ui.ICON_STEP, {reserve_scrollbar=false})
     local visible = 0
     for _, entry in ipairs(results) do
+        local is_liquid = is_liquid_entry(entry)
         local description = is_liquid and tostring(entry.id) or tostring(entry.display_description or "")
         local i = visible; visible = visible + 1
         local entry_icon = is_liquid and material_preview.liquid_icon() or icon(entry)
@@ -201,7 +239,8 @@ function items_tab.draw(player, panel_width, screen_height)
             ui.scroll_y(scroll, math.floor(i / columns) * ui.ICON_STEP),
             ui.EMPTY_SLOT, entry_icon, ui.EMPTY_SLOT, entry.display_name, description, false,
             { target_size=18, max_scale=3.0,
-              bottle_fill_color=is_liquid and material_preview.liquid_color(entry.id) or nil })
+              icon_tint=is_liquid and material_preview.liquid_color(entry.id) or nil,
+              icon_overlay=is_liquid and liquid_cap_icon() or nil })
         local bounds = drag_bounds(tile_x, tile_y, tile_w, tile_h)
         if bounds ~= nil then
             drag_drop.source("items.catalog." .. (is_liquid and ("liquid." .. tostring(entry.id)) or tostring(entry.path)), {
@@ -209,7 +248,8 @@ function items_tab.draw(player, panel_width, screen_height)
                 material_id=is_liquid and entry.id or nil, path=not is_liquid and entry.path or nil,
                 category=not is_liquid and entry.category or nil, display_name=entry.display_name,
                 background=ui.EMPTY_SLOT, icon=entry_icon,
-                bottle_fill_color=is_liquid and material_preview.liquid_color(entry.id) or nil,
+                liquid_color=is_liquid and material_preview.liquid_color(entry.id) or nil,
+                icon_overlay=is_liquid and liquid_cap_icon() or nil,
             }, bounds, {x=scroll.x, y=scroll.y, width=scroll.width, height=scroll.height})
         end
         if right then
@@ -242,7 +282,8 @@ function items_tab.draw(player, panel_width, screen_height)
         local payload = drag_drop.payload()
         local mouse_x, mouse_y = drag_drop.mouse_position()
         if type(payload) == "table" and (payload.kind == "catalog_item" or payload.kind == "catalog_liquid") then
-            ui.drag_ghost(payload.background, payload.icon, mouse_x, mouse_y, {bottle_fill_color=payload.bottle_fill_color})
+            ui.drag_ghost(payload.background, payload.icon, mouse_x, mouse_y,
+                {icon_tint=payload.liquid_color, icon_overlay=payload.icon_overlay})
         end
     end
     GuiLayoutEnd(ui.gui())

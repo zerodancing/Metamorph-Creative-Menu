@@ -1,6 +1,7 @@
 if type(METAMORPH_CREATIVE_MENU_WAND_PRESETS) == "table" then return METAMORPH_CREATIVE_MENU_WAND_PRESETS end
 
 local presets = {}
+local utf8_text = dofile("mods/metamorph_creative_menu/files/core/utf8_text.lua")
 local codec = dofile("mods/metamorph_creative_menu/files/core/wand_blueprint_codec.lua")
 local blueprints = dofile("mods/metamorph_creative_menu/files/features/wands/blueprints.lua")
 local inventory_slots = dofile("mods/metamorph_creative_menu/files/platform/noita/inventory_slots.lua")
@@ -13,12 +14,19 @@ local MAX_PRESETS = 64
 local BASE_WAND = "data/entities/items/starting_wand.xml"
 local cache = nil
 
+local function deep_copy(value)
+    if type(value) ~= "table" then return value end
+    local copy = {}
+    for key, nested in pairs(value) do copy[key] = deep_copy(nested) end
+    return copy
+end
+
 local function clean_name(value)
     value = tostring(value or "")
     value = string.gsub(value, "^%s+", "")
     value = string.gsub(value, "%s+$", "")
     value = string.gsub(value, "[%c]", " ")
-    if #value > 80 then value = string.sub(value, 1, 80) end
+    value = utf8_text.truncate_bytes(value, 80)
     return value
 end
 
@@ -54,9 +62,9 @@ local function load_cache()
     return cache
 end
 
-local function persist()
+local function persist(list)
     local lines = {"MCM_PRESETS_V1"}
-    for _, preset in ipairs(load_cache()) do
+    for _, preset in ipairs(list) do
         lines[#lines + 1] = codec.escape(preset.name) .. "\t" .. codec.escape(codec.encode(preset.blueprint))
     end
     if type(ModSettingSet) ~= "function" then return false, "settings_unavailable" end
@@ -65,9 +73,7 @@ local function persist()
 end
 
 function presets.all()
-    local copy = {}
-    for index, preset in ipairs(load_cache()) do copy[index] = {name=preset.name,blueprint=preset.blueprint} end
-    return copy
+    return deep_copy(load_cache())
 end
 
 function presets.save(name, wand)
@@ -75,7 +81,7 @@ function presets.save(name, wand)
     if name == "" then return false, "name_required" end
     local blueprint, reason = blueprints.capture(wand)
     if blueprint == nil then return false, reason end
-    local list = load_cache()
+    local list = deep_copy(load_cache())
     local target = nil
     for index, preset in ipairs(list) do if string.lower(preset.name) == string.lower(name) then target = index; break end end
     if target == nil then
@@ -84,7 +90,9 @@ function presets.save(name, wand)
     else
         list[target] = {name=name,blueprint=blueprint}
     end
-    return persist()
+    local ok, persist_reason = persist(list)
+    if ok then cache = list end
+    return ok, persist_reason
 end
 
 function presets.load(index, player, wand)
@@ -140,10 +148,12 @@ end
 
 function presets.delete(index)
     index = math.floor(tonumber(index) or 0)
-    local list = load_cache()
+    local list = deep_copy(load_cache())
     if list[index] == nil then return false, "missing_preset" end
     table.remove(list, index)
-    return persist()
+    local ok, persist_reason = persist(list)
+    if ok then cache = list end
+    return ok, persist_reason
 end
 
 

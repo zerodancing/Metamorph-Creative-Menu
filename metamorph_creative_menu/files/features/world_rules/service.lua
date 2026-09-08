@@ -11,6 +11,7 @@ local physics_adapter = dofile("mods/metamorph_creative_menu/files/features/worl
 local world_state_adapter = dofile("mods/metamorph_creative_menu/files/features/world_rules/world_state.lua")
 local stain_adapter = dofile("mods/metamorph_creative_menu/files/features/world_rules/stains.lua")
 local magic_number_adapter = dofile("mods/metamorph_creative_menu/files/features/world_rules/magic_numbers.lua")
+local time_dt_owner = dofile("mods/metamorph_creative_menu/files/features/world_rules/time_dt.lua")
 
 -- Live physics rules only need to cover the active neighbourhood. The old 4608x3072
 -- query plus a 2304-radius entity scan every 8 frames scaled badly in long EW runs.
@@ -43,6 +44,7 @@ local function startup_recovery_pending()
     return (type(world_state_adapter.has_persisted_recovery) == "function" and world_state_adapter.has_persisted_recovery(RULES))
         or (type(magic_number_adapter.has_persisted_recovery) == "function" and magic_number_adapter.has_persisted_recovery(RULES))
         or (type(physics_adapter.has_persisted_local_recovery) == "function" and physics_adapter.has_persisted_local_recovery())
+        or (type(time_dt_owner.has_persisted_recovery) == "function" and time_dt_owner.has_persisted_recovery())
 end
 
 local function recover_stale_saved_overrides()
@@ -57,7 +59,8 @@ local function recover_stale_saved_overrides()
     local magic_ok = type(magic_number_adapter.recover_persisted) ~= "function" or magic_number_adapter.recover_persisted(RULES)
     local local_ok = type(physics_adapter.recover_persisted_local) ~= "function"
         or physics_adapter.recover_persisted_local(player_locator.get())
-    if not (world_ok and magic_ok and local_ok) then return false end
+    local time_ok = type(time_dt_owner.recover_persisted) ~= "function" or time_dt_owner.recover_persisted()
+    if not (world_ok and magic_ok and local_ok and time_ok) then return false end
     if startup_recovery_pending() then return false end
     state.startup_recovery_done = true
     state.selected = {}
@@ -105,6 +108,8 @@ local function reassert_nonphysics_rules()
         if choice ~= nil and choice.native ~= true then
             if rule.kind == "magic_multiplier" then
                 magic_number_adapter.apply(rule.magic_keys, tonumber(choice.value) or 1)
+            elseif rule.kind == "time_dt_multiplier" then
+                time_dt_owner.apply_day_multiplier(tonumber(choice.value) or 1)
             elseif rule.kind == "infinite_spells" or rule.kind == "field" then
                 world_state_adapter.apply(rule, choice)
             end
@@ -177,6 +182,7 @@ function world_rule_service.supported(rule)
     end
     if rule.kind == "stain_drop" then return stain_adapter.supported() end
     if rule.kind == "magic_multiplier" then return magic_number_adapter.supported() end
+    if rule.kind == "time_dt_multiplier" then return time_dt_owner.supported() end
     return world_state_adapter.supported(rule)
 end
 
@@ -217,6 +223,14 @@ local function apply_rule_index(rule, index)
         else applied = magic_number_adapter.apply(rule.magic_keys, tonumber(choice.value) or 1) end
         if applied then state.selected[rule.id] = choice.native == true and nil or index end
         return applied, applied and "ok" or "magic_write_readback"
+    end
+
+    if rule.kind == "time_dt_multiplier" then
+        local applied, reason
+        if choice.native == true then applied, reason = time_dt_owner.release_day_multiplier()
+        else applied, reason = time_dt_owner.apply_day_multiplier(tonumber(choice.value) or 1) end
+        if applied then state.selected[rule.id] = choice.native == true and nil or index end
+        return applied, reason or (applied and "ok" or "time_dt_write_readback")
     end
 
     local applied, reason = world_state_adapter.apply(rule, choice)
@@ -310,6 +324,8 @@ function world_rule_service.reset()
     if not physics_adapter.reset_all() then all_restored = false end
     if not stain_adapter.restore_all() then all_restored = false end
     if not magic_number_adapter.reset_all() then all_restored = false end
+    local time_restored = time_dt_owner.release_day_multiplier()
+    if time_restored ~= true then all_restored = false end
 
     for _, rule in ipairs(RULES) do
         local restored = false
@@ -319,6 +335,8 @@ function world_rule_service.reset()
             restored = not stain_adapter.has_overrides()
         elseif rule.kind == "magic_multiplier" then
             restored = not magic_number_adapter.owns(rule.magic_keys)
+        elseif rule.kind == "time_dt_multiplier" then
+            restored = not time_dt_owner.has_day_override()
         elseif rule.kind == "physics_gravity" then
             restored = type(physics_adapter.has_gravity_overrides) ~= "function" or not physics_adapter.has_gravity_overrides()
         elseif rule.kind == "physics_damping" then
@@ -345,6 +363,7 @@ function world_rule_service.post_update()
         local player = player_locator.get()
         physics_adapter.reassert_local(player, factor, GameGetFrameNum())
     end
+    if time_dt_owner.has_day_override() then time_dt_owner.reassert() end
 end
 
 function world_rule_service.recovery_status()
@@ -361,6 +380,7 @@ function world_rule_service.has_overrides()
         or physics_adapter.has_overrides()
         or stain_adapter.has_overrides()
         or magic_number_adapter.has_overrides()
+        or time_dt_owner.has_day_override()
 end
 
 METAMORPH_CREATIVE_MENU_WORLD_RULE_SERVICE = world_rule_service

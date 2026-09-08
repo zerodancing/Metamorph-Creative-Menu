@@ -6,7 +6,9 @@ local search_engine = {}
 -- translated labels, English aliases, technical ids and paths without coupling core to
 -- Noita's localization APIs.
 local QUERY_CACHE_LIMIT = 64
+local FIELD_CACHE_LIMIT = 4096
 local query_cache, query_cache_order = {}, {}
+local field_cache, field_cache_order = {}, {}
 
 local function utf8_decode(value)
     value = tostring(value or "")
@@ -122,6 +124,44 @@ local function words(value)
     return result
 end
 
+local function field_cache_key(fields)
+    local parts = {}
+    for index, value in ipairs(fields) do
+        value = tostring(value or "")
+        parts[#parts + 1] = tostring(#value) .. ":" .. value
+    end
+    return table.concat(parts, "\31")
+end
+
+local function prepare_fields(fields)
+    fields = type(fields) == "table" and fields or {fields}
+    local key = field_cache_key(fields)
+    local cached = field_cache[key]
+    if cached ~= nil then return cached end
+    local normalized_fields, field_words = {}, {}
+    for _, value in ipairs(fields) do
+        local normalized = search_engine.normalize(value)
+        if normalized ~= "" then
+            normalized_fields[#normalized_fields + 1] = normalized
+            for _, word in ipairs(words(normalized)) do field_words[#field_words + 1] = word end
+        end
+    end
+    local joined = table.concat(normalized_fields, " ")
+    local prepared = {
+        normalized_fields=normalized_fields,
+        field_words=field_words,
+        joined=joined,
+        joined_compact=string.gsub(joined, "%s+", ""),
+    }
+    field_cache[key] = prepared
+    field_cache_order[#field_cache_order + 1] = key
+    if #field_cache_order > FIELD_CACHE_LIMIT then
+        local oldest = table.remove(field_cache_order, 1)
+        field_cache[oldest] = nil
+    end
+    return prepared
+end
+
 local function cache_query(key, compiled)
     if query_cache[key] ~= nil then return end
     query_cache[key] = compiled
@@ -209,18 +249,12 @@ end
 
 function search_engine.score(query, fields)
     local compiled = type(query) == "table" and query or search_engine.compile_query(query)
-    fields = type(fields) == "table" and fields or {fields}
-    local normalized_fields, field_words = {}, {}
-    for _, value in ipairs(fields) do
-        local normalized = search_engine.normalize(value)
-        if normalized ~= "" then
-            normalized_fields[#normalized_fields + 1] = normalized
-            for _, word in ipairs(words(normalized)) do field_words[#field_words + 1] = word end
-        end
-    end
     if #compiled.positive == 0 and #compiled.negative == 0 then return 0 end
-    local joined = table.concat(normalized_fields, " ")
-    local joined_compact = string.gsub(joined, "%s+", "")
+    local prepared = prepare_fields(fields)
+    local normalized_fields = prepared.normalized_fields
+    local field_words = prepared.field_words
+    local joined = prepared.joined
+    local joined_compact = prepared.joined_compact
     for _, token in ipairs(compiled.negative) do
         if token ~= "" and (string.find(joined, token, 1, true) ~= nil
             or string.find(joined_compact, string.gsub(token, "%s+", ""), 1, true) ~= nil)

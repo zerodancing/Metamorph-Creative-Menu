@@ -7,6 +7,7 @@ local similar_visible_path="data/entities/animals/drone_physics.xml"
 local hidden_projectile="data/entities/animals/boss_wizard/meteor.xml"
 local hidden_boss_limbs="data/entities/animals/boss_limbs/boss_limbs_physics.xml"
 local ordinary_path="data/entities/animals/sheep.xml"
+local hidden_endcrystal="data/entities/animals/ending_placeholder/boss_dragon_endcrystal.xml"
 
 local creature_service={
   catalog_version=function() return 1 end,
@@ -16,6 +17,7 @@ local creature_service={
     {path=hidden_projectile,id="meteor",display_name="Meteor",category="OTHER"},
     {path=hidden_boss_limbs,id="boss_limbs_physics",display_name="Boss limbs physics",category="OTHER"},
     {path=ordinary_path,id="sheep",display_name="Sheep",category="ANIMALS"},
+    {path=hidden_endcrystal,id="boss_dragon_endcrystal",display_name="Dragon placeholder",category="BOSSES"},
   } end,
   warmup_step=function() return true,false end,
 }
@@ -34,13 +36,14 @@ assert(visibility.visible(hidden_projectile)==false,"second exact reviewed path 
 assert(visibility.visible(hidden_boss_limbs)==false,"boss limbs physics must be hidden only from MOBS picker")
 assert(visibility.visible(similar_visible_path)==true,"menu exclusion must be exact-path only")
 assert(visibility.visible(ordinary_path)==true,"ordinary creature was accidentally hidden")
-assert(#visibility.hidden_paths()==11,"exact MOBS hidden set changed unexpectedly")
+assert(visibility.visible(hidden_endcrystal)==false,"ending-placeholder dragon duplicate must be hidden from MOBS")
+assert(#visibility.hidden_paths()==12,"exact MOBS hidden set changed unexpectedly")
 
 local catalog=assert(loadfile(root.."/files/features/creatures/ui_catalog.lua"))()
 local values=assert(catalog.collect())
 local seen={}
 for _,entry in ipairs(values) do seen[entry.path]=true end
-assert(not seen[hidden_path] and not seen[hidden_projectile] and not seen[hidden_boss_limbs],"reviewed non-playable forms leaked into MOBS picker")
+assert(not seen[hidden_path] and not seen[hidden_projectile] and not seen[hidden_boss_limbs] and not seen[hidden_endcrystal],"reviewed non-playable forms leaked into MOBS picker")
 assert(seen[similar_visible_path] and seen[ordinary_path],"menu-only filter removed unrelated creatures")
 assert(seen["metamorph_creative_menu://player"],"player menu entry was lost")
-print("creature_menu_visibility=PASS hidden_exact=11 unrelated_preserved=true ui_only=true")
+print("creature_menu_visibility=PASS hidden_exact=12 unrelated_preserved=true ui_only=true")

@@ -1,7 +1,7 @@
 dofile("data/scripts/lib/mod_settings.lua")
 
 local mod_id = "metamorph_creative_menu"
-mod_settings_version = 5
+mod_settings_version = 6
 
 -- Mod settings use a separate Lua context on some Noita builds. Register translations
 -- here as well as from init.lua so newly added action names never fall back to English.
@@ -60,6 +60,23 @@ for _, section in ipairs(registry.sections()) do
     }
     settings_by_section[section.id] = category.settings
     mod_settings[#mod_settings + 1] = category
+end
+
+local interface_settings = settings_by_section.interface
+if interface_settings ~= nil then
+    interface_settings[#interface_settings + 1] = {
+        id = "inventory_open_policy",
+        ui_name = tr("$mcm_setting_inventory_open_policy", "Inventory opening behavior"),
+        ui_description = tr("$mcm_setting_inventory_open_policy_desc",
+            "Choose whether the creative menu opens with the native inventory."),
+        value_default = "always_open",
+        values = {
+            {"always_open", tr("$mcm_setting_inventory_always_open", "Always Open")},
+            {"always_closed", tr("$mcm_setting_inventory_always_closed", "Always Closed")},
+            {"remember", tr("$mcm_setting_inventory_remember", "Remember Last State")},
+        },
+        scope = MOD_SETTING_SCOPE_RUNTIME,
+    }
 end
 for _, action in ipairs(registry.actions()) do
     local section_settings = settings_by_section[action.section]
