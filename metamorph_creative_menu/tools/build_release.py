@@ -31,6 +31,10 @@ REQUIRED_FILES = {
     "translations.csv",
     "NoitaPatcher/load.lua",
     "NoitaPatcher/noitapatcher.dll",
+    "mcm_native_gameover.dll",
+    "mcm_native_gameover.lib",
+    "native_src/mcm_native_gameover.c",
+    "files/platform/noita/native_gameover_patch.lua",
     "files/diagnostics/service.lua",
     "files/qa/controller.lua",
     "tests/run_all.py",
@@ -75,6 +79,12 @@ def validate(root: Path, files: list[Path]) -> None:
     dev_mode = (root / "dev_mode.lua").read_text(encoding="utf-8")
     if re.search(r"\bdev_mode\s*=\s*0\b", dev_mode) is None or re.search(r"\breturn\s+dev_mode\b", dev_mode) is None:
         raise RuntimeError("dev_mode.lua is not locked to the release default")
+    build = (root / "BUILD.txt").read_text(encoding="utf-8").strip()
+    if "3.0.0" not in build or "release" not in build.lower() or "test" in build.lower():
+        raise RuntimeError("BUILD.txt is not finalized as the 3.0.0 release")
+    mod_xml = (root / "mod.xml").read_text(encoding="utf-8")
+    if "v3.0.0" not in mod_xml or "TEST 36" in mod_xml:
+        raise RuntimeError("mod.xml still contains test-build metadata")
 
 
 def build(root: Path, output: Path) -> tuple[int, int]:

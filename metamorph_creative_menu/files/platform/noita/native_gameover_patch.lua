@@ -6,7 +6,7 @@ end
 --
 -- Native ownership deliberately lives in the DLL rather than LuaJIT FFI:
 --   * the DLL owns the request byte and localization-key storage for its whole lifetime;
---   * it validates and patches the exact profiled noita.exe code sites;
+--   * it resolves the running PE32 layout and locates stock Game Over code adaptively;
 --   * the stock hidden Save Replay button builder becomes MCM's fourth stock button;
 --   * its click handler only raises an MCM-owned request byte;
 --   * Game Over is released only from the normal OnWorldPreUpdate recovery path.
@@ -16,15 +16,11 @@ end
 local native_gameover_patch = {}
 
 local PROFILE = {
-    name = "noita_808d2a0ab51e_gameover_native_dll_r9",
-    exe_sha256 = "808d2a0ab51ea0b46e9ad2aeb3327a4b0ce3feae04f32ba26326bf585b5779bd",
-    replay_gate_va = 0x006e62a7,
-    replay_label_va = 0x006e62e1,
-    replay_click_va = 0x006e6393,
-    gameover_update_call_va = 0x006b2bce,
-    gameover_trigger_va = 0x006b8519,
-    gameover_dispatch_va = 0x006b2b54,
-    world_preupdate_dispatch_va = 0x006b321b,
+    name = "adaptive_noita_pe32_gameover_native_r10",
+    mode = "pe32_import_resolution_and_signature_scan",
+    compatibility = "stock Noita x86 Game Over / Save Replay semantics",
+    fixed_exe_hash = false,
+    fixed_virtual_addresses = false,
 }
 
 local MODULE_NAME = "mcm_native_gameover"
@@ -172,7 +168,7 @@ function native_gameover_patch.status()
         install_reason = state.install_reason,
         native_reason = native_reason,
         profile = PROFILE.name,
-        backend = "native_x86_lua_c_module",
+        backend = "native_x86_lua_c_module_adaptive",
         revive_request_pending = native_gameover_patch.has_revive_request(),
         stock_button_builder = "save_replay_slot",
         network_disabled = ew_active(),

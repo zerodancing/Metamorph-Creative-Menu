@@ -16,6 +16,29 @@ the tests, and correct this document.
 The mod bundles NoitaPatcher and a local Base64 codec. NoitaPatcher is a native
 extension, so the complete mod requires Unsafe mods / unrestricted API permission.
 
+3.0.0 release highlights
+------------------------
+
+Version 3.0.0 is a major behavior and interface update rather than a packaging-only
+release. The creative panel is now a persistent resizable window with shared measured
+layouts, localized catalogue search and assignable controls. Spells gained transactional
+drag-and-drop, Always Cast handling, wand editing and persistent presets. Items, mobs and
+perks gained consistent world/inventory drag behavior; perk bulk actions use bounded jobs.
+The Materials tab now searches the complete engine material catalogue and paints through
+bounded chunk-aware queues, including the documented Entangled Worlds synchronization
+path. Forms and possession gained stricter transition/rollback handling, scripted/held-wand
+attack support and safer return-to-human behavior. EW integration received ownership,
+retirement and boss/Kolmi lifecycle fixes intended to avoid duplicate network authorities.
+
+Single-player death recovery is also new in 3.0.0. The stock Game Over menu receives an
+MCM "I didn't die" action backed by a small x86 Lua C module. The module no longer pins
+one noita.exe SHA-256, image base, virtual address or Lua/Win32 IAT slot: it parses the
+running PE32 image, resolves imports by name and locates the stock Save Replay/Game Over
+structures through bounded signatures anchored by vanilla strings. Address shifts and
+ASLR therefore do not require a new build. If a future Noita update rewrites those stock
+semantics so the scanner cannot prove a safe match, this optional recovery action fails
+closed instead of writing to an uncertain executable location.
+
 Installation and upgrade
 ------------------------
 
@@ -262,6 +285,28 @@ the dead form. EW keeps its exact normal death behavior for untagged or unverifi
 restores. The older source patch remains a secondary compatibility guard and is tested
 independently from optional polymorph profiling. This recovery is engine-sensitive and
 cannot guarantee survival from every third-party kill script or process crash.
+
+Single-player Game Over recovery
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In single-player, MCM keeps a rolling player backup and installs an additional action in
+the stock Game Over menu. Activating "I didn't die" only raises an MCM-owned native request
+byte from the UI click handler. The normal OnWorldPreUpdate path then restores or acquires
+a live player, makes that entity authoritative, clears the engine Game Over flag and runs
+best-effort cleanup for the Game Over audio/music/UI state. The recovered player receives
+a temporary protection window. The button does not synthesize a death, patch pause state
+or perform player restoration inside the Game Over UI call stack.
+
+The native bridge is adaptive across 32-bit Noita executable layouts: it discovers the
+Save Replay builder, Game Over trigger, GameMode global, audio handles and relevant object
+offsets from the running stock code instead of using release-specific absolute addresses.
+Compatibility is therefore based on recognizable stock semantics, not on one executable
+hash. A Noita build that changes those semantics beyond the scanner's bounded signatures
+will report the native action unavailable and leave the rest of Creative Menu running.
+
+This post-Game-Over recovery is deliberately disabled while Entangled Worlds is active,
+because EW owns the multiplayer health/notplayer/Game Over lifecycle. Form-death
+return-to-human is a separate path and remains available where documented.
 
 Possession
 ~~~~~~~~~~

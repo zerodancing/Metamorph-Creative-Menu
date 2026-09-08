@@ -17,45 +17,55 @@ assert 'GameTriggerGameOver' not in service
 assert 'GameDestroyInventoryItems' not in service
 assert 'SetPauseState' not in service
 
-# R9 native ownership lives in a real x86 Lua C module, never in LuaJIT pointers.
+# Native ownership lives in a real x86 Lua C module, never in LuaJIT pointers.
 assert native_dll.is_file(), 'native Game Over DLL missing'
 dll=native_dll.read_bytes()
 assert dll[:2] == b'MZ', 'native bridge is not a PE DLL'
 assert b'luaopen_mcm_native_gameover' in dll, 'Lua C-module export missing'
-assert 'native_x86_lua_c_module' in patch
+assert 'native_x86_lua_c_module_adaptive' in patch
 assert 'require, MODULE_NAME' in patch
 assert 'MODULE_NAME = "mcm_native_gameover"' in patch
-assert 'require("ffi")' not in patch and 'ffi.' not in patch, 'Lua executable-memory FFI patch survived R9'
+assert 'require("ffi")' not in patch and 'ffi.' not in patch, 'Lua executable-memory FFI patch survived'
 assert 'write_bytes' not in patch, 'Lua still owns executable-memory writes'
+assert 'fixed_exe_hash = false' in patch and 'fixed_virtual_addresses = false' in patch
+assert '808d2a0ab51e' not in patch, 'Lua facade still pins one noita.exe hash'
 
-# C module owns the exact stock fourth button builder and request byte.
+# R10 resolves the running PE/import table and discovers stock Game Over semantics.
 for token in [
-    '#define REPLAY_GATE                   0x006e62a7u',
-    '#define REPLAY_LABEL                  0x006e62e1u',
-    '#define REPLAY_CLICK                  0x006e6393u',
-    '#define GAMEOVER_UPDATE_CALL          0x006b2bceu',
-    '#define WORLD_PREUPDATE_DISPATCH      0x006b321bu',
+    'parse_image_layout',
+    'resolve_import("lua_createtable")',
+    'resolve_import("VirtualProtect")',
+    'find_ascii_in_image("$menugameover_savereplay")',
+    'find_ascii_in_image("event_cues/game_over/create")',
+    'locate_replay_sites',
+    'locate_gameover_core',
+    'locate_gameover_init_globals',
+    'locate_audio_cleanup',
+    'resolve_adaptive_profile',
     'static volatile u8 g_revive_request = 0;',
     'static const char g_label[] = "$mcm_death_not_dead";',
-    'PATCH_REPLAY_GATE',
-    'click_patch[0] = 0xc6;',
-    'encode_u32(click_patch + 2, (u32)&g_revive_request);',
-    'write_bytes(REPLAY_GATE, PATCH_REPLAY_GATE, 5)',
-    '#define UI_MENU_MUSIC_HANDLE          0x01207624u',
-    '#define UI_GAMEOVER_STATS_HANDLE      0x01207628u',
-    '#define MUSIC_DEATH_LATCH_OFFSET      0xddu',
+    'encode_u32(gate_patch + 1u, g_profile.replay_label - (g_profile.replay_gate + 5u));',
+    'encode_u32(click_patch + 2u, (u32)&g_revive_request);',
+    'write_bytes(g_profile.replay_gate, gate_patch, 5u)',
     'stop_tracked_gameover_audio_handle',
     'cleanup_post_revive_runtime',
     'table_function(L, "cleanup_post_revive", lua_cleanup_post_revive);',
 ]:
     assert token in native_src, token
+
+# Old build-specific addresses/signatures must not return as compatibility policy.
+for forbidden in [
+    '#define NOITA_BASE', '#define REPLAY_GATE', '#define REPLAY_LABEL', '#define REPLAY_CLICK',
+    '#define GAME_MODE_POINTER', '#define IAT_LUA_CREATETABLE', '#define UI_MENU_MUSIC_HANDLE',
+    '0x006e62a7', '0x006e62e1', '0x006e6393', '0x01204bc0', '0x00f077a4',
+]:
+    assert forbidden not in native_src, forbidden
 assert 'pause' not in native_src.lower(), 'native bridge must not own pause-state'
 assert 'OnPlayerDied' not in native_src
-assert 'process_image_base' in native_src and 'profiled_image_layout_is_safe' in native_src
 luaopen=native_src.index('__declspec(dllexport) int __cdecl luaopen_mcm_native_gameover')
-preflight=native_src.index('if (!pe_profile_is_stock()) return 0;', luaopen)
-first_lua=native_src.index('l_createtable()(L, 0, 8);', luaopen)
-assert preflight < first_lua, 'native DLL touches profiled Lua IAT before executable validation'
+preflight=native_src.index('if (!resolve_runtime_imports()) return 0;', luaopen)
+first_lua=native_src.index('g_lua_createtable(L, 0, 8);', luaopen)
+assert preflight < first_lua, 'native DLL calls Lua before PE/import preflight'
 assert 'disabled_in_entangled_worlds' in patch and 'disabled_in_entangled_worlds' in service
 
 # Recovery ordering remains: player authority first, Game Over release second.
@@ -80,4 +90,4 @@ row=next((r for r in rows if r and r[0]=='mcm_death_not_dead'),None)
 assert row is not None and len(row)>=12
 assert all(str(value).strip() for value in row[1:12])
 assert 'native Game Over button patch: installed' in service
-print('death_recovery_native_contract=PASS death_hook=false native_dll=true lua_ffi=false button_builder=stock_save_replay authority_before_release=true post_cleanup=true locales=11')
+print('death_recovery_native_contract=PASS death_hook=false native_dll=true lua_ffi=false adaptive_pe32=true fixed_va=false authority_before_release=true post_cleanup=true locales=11')

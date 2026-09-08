@@ -207,8 +207,8 @@ local function handle_revive_request()
     if ew_active() then return false, "disabled_in_entangled_worlds" end
     if not native_gameover.has_revive_request() then return false, "idle" end
 
-    -- This function runs from OnWorldPreUpdate. On the profiled executable that callback
-    -- is dispatched after the complete stock Game Over UI update has already returned.
+    -- This function runs from OnWorldPreUpdate, outside the Game Over button click stack.
+    -- The native bridge only raises a request byte; all engine-state recovery stays here.
     -- First restore/attach the player; only then release the engine Game Over state.
     local bridge = bridge_with("SetPlayerEntity")
     if bridge == nil then return false, "patcher_unavailable" end

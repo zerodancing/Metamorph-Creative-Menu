@@ -1,3 +1,17 @@
+3.0.0 - RELEASE
+=================
+
+- Finalized public 3.0.0 metadata and release packaging from the TEST 36 code line.
+- Reworked `mcm_native_gameover.dll` from a single-build address profile into an adaptive
+  PE32 scanner. Lua/Win32 imports are resolved by name and Game Over/Save Replay state is
+  derived from bounded stock-code signatures rather than fixed executable VAs or hashes.
+- Kept native recovery fail-closed: if a future Noita executable no longer exposes the
+  recognized stock semantics, only the optional single-player Game Over recovery is
+  unavailable; no uncertain executable address is patched.
+- Expanded README coverage for the 3.0.0 feature set and native recovery behavior.
+- Removed internal TEST 31/32/35/36 working-note documents from the public archive while
+  retaining the complete automated `tests/` tree.
+
 TEST 36 - COMPLETE MATERIAL SEARCH / TEXT FOCUS
 
 - Material search now spans ALL categories. water_static remains correctly classified as STATIC and can be found/selected for painting from the default LIQUIDS view. Clearing search restores the selected category.
