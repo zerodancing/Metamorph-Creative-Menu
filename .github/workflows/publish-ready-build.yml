@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Import full MCM archive"]
+    types: [completed]
 
 permissions:
   contents: write
@@ -14,11 +17,13 @@ concurrency:
 
 jobs:
   publish:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: main
 
       - name: Validate release links and mod entrypoints
         shell: bash
@@ -26,6 +31,7 @@ jobs:
           grep -Fq 'releases/download/latest-build/Metamorph-Creative-Menu.zip' README.md
           test -f metamorph_creative_menu/mod.xml
           test -f metamorph_creative_menu/init.lua
+          test "$(tr -d '\r\n ' < metamorph_creative_menu/VERSION.txt)" = '3.0.0'
 
       - name: Package playable mod
         shell: bash
@@ -36,6 +42,7 @@ jobs:
                'metamorph_creative_menu/README.txt'
           unzip -l Metamorph-Creative-Menu.zip | grep -q 'metamorph_creative_menu/mod.xml'
           unzip -l Metamorph-Creative-Menu.zip | grep -q 'metamorph_creative_menu/init.lua'
+          unzip -p Metamorph-Creative-Menu.zip metamorph_creative_menu/VERSION.txt | tr -d '\r\n ' | grep -qx '3.0.0'
 
       - name: Publish stable download URL
         env:
