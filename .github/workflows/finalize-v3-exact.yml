@@ -1,0 +1,85 @@
+name: Finalize exact MCM 3.0.0 staging
+
+on:
+  push:
+    branches: [mcm-v3-import]
+    paths:
+      - '.mcm-zpatch2/READY'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-exact-mcm-v3
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and verify exact runner v2 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(tr -d '\r\n ' < metamorph_creative_menu/VERSION.txt)" = '2.0.0'
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -cf /tmp/mcm-old.tar metamorph_creative_menu
+          echo '30e7fda0b1dfa1ca1b8681b6068c5311043c26d87e7600d149323444bf98ffa4  /tmp/mcm-old.tar' | sha256sum -c -
+
+      - name: Decode and apply verified v3 delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find .mcm-zpatch2 -maxdepth 1 -name 'd*.b64' -type f | wc -l)" -eq 16
+          cat .mcm-zpatch2/d*.b64 | base64 -d > /tmp/mcm.delta.zst
+          echo '065e7420fe70fb4eddcd86905504f6e2898aef9f8226753efc5e53489325606f  /tmp/mcm.delta.zst' | sha256sum -c -
+          command -v zstd >/dev/null
+          zstd -d --patch-from=/tmp/mcm-old.tar /tmp/mcm.delta.zst -o /tmp/mcm-new.tar
+          echo 'd1170a841516a9b97fab36c68035bab7c3015c25c12abc1bc33aa89e63656c41  /tmp/mcm-new.tar' | sha256sum -c -
+          rm -rf metamorph_creative_menu
+          tar -xf /tmp/mcm-new.tar
+
+          test "$(tr -d '\r\n ' < metamorph_creative_menu/VERSION.txt)" = '3.0.0'
+          grep -Fq 'v3.0.0' metamorph_creative_menu/mod.xml
+          test "$(find metamorph_creative_menu -type f | wc -l)" -eq 518
+          ! grep -RniE 'test_?34|test 34' metamorph_creative_menu --exclude-dir=.git
+          test ! -e metamorph_creative_menu/files/integrations/ew/companion_request.lua
+          test ! -e metamorph_creative_menu/tests/companion_request_mock.lua
+          test ! -e metamorph_creative_menu/BOSS_FIX_TEST32_RU.md
+          test ! -e metamorph_creative_menu/KOLMI_FIX_TEST31_RU.md
+
+      - name: Refresh public version markers
+        shell: python
+        run: |
+          from pathlib import Path
+          for path in Path('.').glob('README*.md'):
+              text = path.read_text(encoding='utf-8')
+              path.write_text(text.replace('2.0.0', '3.0.0'), encoding='utf-8')
+
+      - name: Remove all temporary staging transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .mcm-import .mcm-final .mcm-patch .mcm-zpatch .mcm-zpatch2
+          rm -f .github/workflows/finalize-v3-exact.yml
+          rm -f .github/workflows/finalize-v3-zpatch.yml
+          rm -f .github/workflows/export-zpatch-base.yml
+          rm -f .github/workflows/export-staging-base.yml
+          rm -f .github/workflows/import-chunked-v3.yml
+          rm -f .github/workflows/import-binary-v3.yml
+          rm -f .github/workflows/apply-v3-release-patch.yml
+
+      - name: Commit clean v3 staging tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet && { echo 'No staged changes'; exit 1; }
+          git commit -m 'Stage Metamorph Creative Menu 3.0.0 release tree'
+          git push origin HEAD:mcm-v3-import
