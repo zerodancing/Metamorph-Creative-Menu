@@ -1,19 +1,7 @@
--- TEST 27: non-global DES boss classification, including creative Kolmisilma.
---
--- TEST 18-20 established the actual resurrection cause: entities classified by EW as
--- is_global=true can take !alive -> ReleaseAuthority before Lua death notification has
--- retired the GID. The proxy retains FullEntityData and may return the same GID forever.
---
--- TEST 21 tightens the fix in three ways:
---   * Bosses whose DamageModel has wait_for_kill_flag_on_death=true are NOT demoted.
---     Noita deliberately keeps those deaths alive for a scripted kill handshake; EW has
---     dedicated support for that path. Kolmisilma/boss_centipede and boss_limbs use it.
---   * StreamingKeepAliveComponent and BossDragonComponent keep their original component
---     IDs. They are only disabled until native track_entity has classified the root.
---     BossHealthBarComponent must still be removed because EW queries it including disabled.
---   * A temporary disabled CameraBoundComponent forces EW's initial EntitySpawnInfo to use
---     Filename instead of a serialization captured while BossHealthBar is hidden. This keeps
---     full authored boss XML available for remote replicas / later authority transfers.
+-- Prevent EW from retaining a dead global boss authority record after the entity dies.
+-- Delayed-kill bosses keep EW's stock lifecycle unless they are an MCM-created Kolmisilma.
+-- Component IDs are preserved while the entity is hidden from the initial classification,
+-- and a temporary CameraBoundComponent keeps the authored filename available for replicas.
 local demote = {}
 
 local STATUS = "mcm21_boss_global_demote_v1"
@@ -134,13 +122,10 @@ local function is_local_untracked_boss(entity)
         or component(entity, "BossDragonComponent") ~= nil
     if not bossish then return false end
 
-    -- Delayed-kill bosses normally keep EW's stock global lifecycle.  Creative
-    -- Kolmisilma is the deliberate exception: TEST 25 proved her authored combat only
-    -- failed because of the split NoitaPatcher CrossCall registry, not because the
-    -- healthbar was recreated during first tracking.  Her post-death clone is the same
-    -- global ReleaseAuthority failure already fixed for Maggot/Alchemist/Dragon, so
-    -- classify only the MCM-created encounter as non-global before its stock Sampo
-    -- activation starts. Natural Kolmi and boss_limbs remain untouched.
+    -- Delayed-kill bosses normally keep EW's stock global lifecycle. MCM-created
+    -- Kolmisilma is the exception because it must avoid the same retained-authority
+    -- path as other global bosses while preserving the authored Sampo encounter flow.
+    -- Natural Kolmisilma and boss limbs remain untouched.
     if wait_for_kill_handshake(entity) then
         if has_tag(entity, "boss_centipede") and has_tag(entity, CREATIVE_KOLMI_TAG) then
             bump(CREATIVE_KOLMI_DEMOTED)
@@ -459,15 +444,17 @@ function demote.install()
     return true, "installed"
 end
 
--- Deterministic mock hooks only.
-demote.prepare_new_entities_for_test = prepare_new_entities
-demote.prepare_native_gap_entities_before_update_for_test = prepare_native_gap_entities_before_update
-demote.restore_after_native_update_for_test = restore_after_native_update
-demote.pending_count_for_test = function()
-    local n = 0
-    for _ in pairs(pending) do n = n + 1 end
-    return n
+if rawget(_G, "METAMORPH_CREATIVE_MENU_TESTING") == true then
+    demote._test = {
+        prepare_new_entities = prepare_new_entities,
+        prepare_native_gap_entities_before_update = prepare_native_gap_entities_before_update,
+        restore_after_native_update = restore_after_native_update,
+        pending_count = function()
+            local n = 0
+            for _ in pairs(pending) do n = n + 1 end
+            return n
+        end,
+        last_seen_entity_id = function() return last_seen_entity_id end,
+    }
 end
-demote.last_seen_entity_id_for_test = function() return last_seen_entity_id end
-
 return demote
