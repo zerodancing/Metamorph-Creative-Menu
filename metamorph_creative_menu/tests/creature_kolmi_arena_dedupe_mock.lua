@@ -26,7 +26,7 @@ add_comp(natural,"VariableStorageComponent",{name="ew_gid_lid",value_string="123
 add_comp(natural,"DamageModelComponent",{wait_for_kill_flag_on_death=true,kill_now=false})
 add_comp(natural,"LuaComponent",{script_death="death.lua",script_damage_received="damage.lua",script_damage_about_to_be_received="about.lua"})
 
--- Real menu VM: ewext exists only in EW's VM. TEST 30 silently killed the global
+-- Real menu VM: ewext exists only in EW's VM. An earlier implementation silently killed the global
 -- arena boss here without ever queuing DeleteEntity. Keep this regression realistic.
 ewext=nil
 function GlobalsGetValue(k,d) return globals[k] or d end
