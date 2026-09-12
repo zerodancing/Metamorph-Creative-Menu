@@ -1,0 +1,178 @@
+--- metamorph_creative_menu/files/ui/tabs/materials.lua
++++ metamorph_creative_menu/files/ui/tabs/materials.lua
+@@ -1,7 +1,6 @@
+ local materials_tab = {}
+ 
+ local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
+-local audit = ui.audit
+ local material_catalog = dofile("mods/metamorph_creative_menu/files/features/materials/catalog.lua")
+ local painter = dofile("mods/metamorph_creative_menu/files/features/materials/painter.lua")
+ local bindings = dofile("mods/metamorph_creative_menu/files/platform/noita/action_bindings.lua")
+@@ -90,14 +89,14 @@
+     if painter.is_enabled() then
+         if ui.button(0, 0, ui.tr("$mcm_material_paint_cancel", "CANCEL PAINT"), true) then
+             painter.set_enabled(false)
+-            audit("material.paint_mode", "enabled=false")
++
+         end
+         local armed = ui.tr("$mcm_material_paint_armed_dynamic", "ARMED - close inventory; hold {BIND}")
+         ui.wrapped_text(0, 1, string.gsub(armed, "{BIND}", "[" .. bindings.label("paint_draw") .. "]"), panel_width - 12)
+     else
+         if ui.button(0, 0, ui.tr("$mcm_material_paint_start", "START PAINTING")) then
+             local ok, reason = painter.set_enabled(true)
+-            audit("material.paint_mode", "enabled=" .. tostring(ok) .. " material=" .. tostring(painter.get_material()) .. " reason=" .. tostring(reason))
++
+             if not ok and type(GamePrint) == "function" then
+                 local message = ui.tr("$mcm_material_backend_failed", "Material brush unavailable")
+                 pcall(GamePrint, "[MCM] " .. message .. ": " .. tostring(reason or "backend"))
+@@ -145,7 +144,7 @@
+             })
+         if clicked then
+             local ok, reason = painter.set_material(entry.id, { solid=entry.categories and (entry.categories.SOLIDS == true or entry.categories.STATIC == true) })
+-            audit("material.select", "id=" .. tostring(entry.id) .. " result=" .. tostring(ok) .. " reason=" .. tostring(reason))
++
+         end
+     end
+     ui.end_scroll_viewport(scroll, math.ceil(#values / columns) * ui.ICON_STEP)
+--- metamorph_creative_menu/files/ui/tabs/perks.lua
++++ metamorph_creative_menu/files/ui/tabs/perks.lua
+@@ -1,7 +1,6 @@
+ local perks_tab = {}
+ 
+ local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
+-local audit = ui.audit
+ local perk_service = dofile("mods/metamorph_creative_menu/files/features/perks/service.lua")
+ local perk_catalog = dofile("mods/metamorph_creative_menu/files/features/perks/catalog.lua")
+ local drag_drop = dofile("mods/metamorph_creative_menu/files/ui/drag_drop.lua")
+@@ -113,7 +112,7 @@
+ 
+     if result.click == true then
+         local ok, reason = apply_or_spawn(player, payload.data or {id=payload.id}, false)
+-        audit("perk.spawn", "id=" .. tostring(payload.id) .. " result=" .. tostring(ok) .. " reason=" .. tostring(reason))
++
+         if reason == "busy" then report_busy() elseif not ok then report_spawn_failure(payload.display_name) end
+         return
+     end
+@@ -122,19 +121,18 @@
+     local release_x, release_y = tonumber(result.release_x), tonumber(result.release_y)
+     local menu_bounds = type(ui.panel_bounds) == "function" and ui.panel_bounds() or nil
+     if release_x == nil or release_y == nil or point_inside(menu_bounds, release_x, release_y) then
+-        audit("perk.drag.cancel", "id=" .. tostring(payload.id) .. " reason=in_menu")
++
+         return
+     end
+     local world_x, world_y = tonumber(result.world_x), tonumber(result.world_y)
+     if world_x == nil or world_y == nil then
+-        audit("perk.drag.world", "id=" .. tostring(payload.id) .. " result=false reason=position")
++
+         report_spawn_failure(payload.display_name)
+         return
+     end
+     if active_job() ~= nil then report_busy(); return end
+     local ok, reason = perk_service.spawn_at(payload.data or {id=payload.id}, world_x, world_y)
+-    audit("perk.drag.world", "id=" .. tostring(payload.id) .. " result=" .. tostring(ok)
+-        .. " reason=" .. tostring(reason) .. " x=" .. tostring(world_x) .. " y=" .. tostring(world_y))
++
+     if not ok then report_spawn_failure(payload.display_name) end
+ end
+ 
+@@ -264,7 +262,7 @@
+                     local ok, reason
+                     if perk.removable_state then ok, reason = non_perk_states.remove_one(player, perk.id)
+                     else ok, reason = perk_service.remove_one(player, perk.data) end
+-                    audit("perk.remove_one", "id="..tostring(perk.id).." result="..tostring(ok).." reason="..tostring(reason).." scope=peer_local")
++
+                     if not ok then GamePrint(ui.tr("$mcm_perk_remove_failed", "Could not safely remove perk") .. ": " .. perk.name) end
+                 end
+             elseif can_remove and right_command and count > 0 then
+@@ -274,7 +272,7 @@
+                     local queued, reason
+                     if perk.removable_state then queued, reason = non_perk_states.remove(player, perk.id)
+                     else queued, reason = perk_service.start_remove_all_job(player, perk.data) end
+-                    audit("perk.remove_all.queue", "id="..tostring(perk.id).." queued="..tostring(queued).." reason="..tostring(reason).." scope=peer_local")
++
+                     if not queued then GamePrint(ui.tr("$mcm_perk_remove_failed", "Could not safely remove perk") .. ": " .. tostring(reason)) end
+                 end
+             end
+@@ -282,7 +280,7 @@
+ 
+             if right_command then
+                 local ok, reason=apply_or_spawn(player, perk, true)
+-                audit("perk.take", "id="..tostring(perk.id).." amount="..tostring(take_amount).." result="..tostring(ok).." reason="..tostring(reason))
++
+                 if reason == "busy" then report_busy() end
+             end
+         end
+--- metamorph_creative_menu/files/ui/tabs/spells.lua
++++ metamorph_creative_menu/files/ui/tabs/spells.lua
+@@ -1,7 +1,6 @@
+ local spells_tab = {}
+ 
+ local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
+-local audit = ui.audit
+ local spell_service = dofile("mods/metamorph_creative_menu/files/features/spells/service.lua")
+ local spell_catalog = dofile("mods/metamorph_creative_menu/files/features/spells/catalog.lua")
+ local horizontal_strip = dofile("mods/metamorph_creative_menu/files/ui/widgets/horizontal_strip.lua")
+@@ -117,7 +116,7 @@
+ end
+ 
+ local function record_result(scope, ok, reason)
+-    audit(scope, "result=" .. tostring(ok) .. " reason=" .. tostring(reason or ""))
++
+     return ok, reason
+ end
+ 
+@@ -269,7 +268,7 @@
+             end,
+             function(payload)
+                 if payload.kind == "catalog_spell" then
+-                    audit("spell.drag.discard_template", "action=" .. tostring(payload.action_id or ""))
++
+                     return true, "discarded_template"
+                 elseif payload.kind == "inventory_spell" then
+                     local layout = inventory_layout or select(1, spell_inventory_service.contents(player))
+--- metamorph_creative_menu/files/ui/tabs/weather.lua
++++ metamorph_creative_menu/files/ui/tabs/weather.lua
+@@ -1,24 +1,13 @@
+ local weather_tab = {}
+ local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
+-local audit = ui.audit
+ local weather_service = dofile("mods/metamorph_creative_menu/files/features/weather/service.lua")
+ local advanced=false
+ 
+ local function time(name)
+-    local ok,reason=weather_service.set_time_preset(name)
+-    audit("weather.time", "preset="..tostring(name).." result="..tostring(ok).." reason="..tostring(reason))
++    weather_service.set_time_preset(name)
+ end
+ local function preset(name)
+-    local ok,reason=weather_service.apply_preset(name)
+-    local detail=""
+-    if type(weather_service.debug_state)=="function" then
+-        local good,state=pcall(weather_service.debug_state)
+-        if good and type(state)=="table" then
+-            detail=" rainfall="..tostring(state.rainfall).." rain="..tostring(state.rain).." rain_target="..tostring(state.rain_target)
+-                .." last_emit="..tostring(state.last_rain_emit_frame).." stop_guard_until="..tostring(state.rain_stop_guard_until)
+-        end
+-    end
+-    audit("weather.preset", "preset="..tostring(name).." result="..tostring(ok).." reason="..tostring(reason)..detail)
++    weather_service.apply_preset(name)
+ end
+ local function tile(icon,key,fallback,fn)
+     local clicked=ui.tile(0,0,ui.EMPTY_SLOT,icon,ui.EMPTY_SLOT,ui.tr(key,fallback),nil,false,{target_size=18,max_scale=2.5})
+@@ -63,13 +52,13 @@
+         if weather_service.is_locked() then actions[#actions+1]={label=ui.tr("$mcm_weather_release","RELEASE")} end
+         local clicked=ui.button_grid(actions,math.max(32,panel_width-10))
+         if clicked==1 then advanced=true
+-        elseif clicked==2 and weather_service.is_locked() then local ok=weather_service.release(); audit("weather.release", "result="..tostring(ok)) end
++        elseif clicked==2 and weather_service.is_locked() then weather_service.release() end
+     else
+         local actions={{label=ui.tr("$mcm_weather_back","BACK")}}
+         if weather_service.is_locked() then actions[#actions+1]={label=ui.tr("$mcm_weather_release","RELEASE")} end
+         local clicked=ui.button_grid(actions,math.max(32,panel_width-10))
+         if clicked==1 then advanced=false
+-        elseif clicked==2 and weather_service.is_locked() then local ok=weather_service.release(); audit("weather.release", "result="..tostring(ok)) end
++        elseif clicked==2 and weather_service.is_locked() then weather_service.release() end
+         local scroll_height=ui.scroll_height(screen_height,72)
+         local scroll=ui.begin_scroll_viewport("weather.advanced",12100,0,0,panel_width-4,scroll_height)
+         for _,field in ipairs(weather_service.fields()) do
