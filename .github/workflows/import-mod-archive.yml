@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - 'Metamorph-Creative-Menu-v*.zip'
+      - 'Metamorph-Creative-Menu-v*.ZIP'
+      - 'tools/import_source_archive.py'
+      - '.github/workflows/import-mod-archive.yml'
   workflow_dispatch:
 
 permissions:
@@ -22,7 +25,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Import source archive
+        id: import
+        run: python tools/import_source_archive.py
+
       - name: Install Lua test runtime
+        if: steps.import.outputs.changed == 'true'
         shell: bash
         run: |
           if ! command -v texlua >/dev/null 2>&1; then
@@ -30,120 +38,24 @@ jobs:
             sudo apt-get install -y texlive-binaries
           fi
 
-      - name: Import source archive
-        id: import
-        shell: python
-        run: |
-          import os
-          import re
-          import shutil
-          import zipfile
-          from pathlib import Path, PurePosixPath
-
-          archive_pattern = re.compile(
-              r'^Metamorph-Creative-Menu-v[0-9]+(?:[._-][0-9A-Za-z]+)*\.zip$',
-              re.IGNORECASE,
-          )
-          archives = sorted(
-              path for path in Path('.').glob('Metamorph-Creative-Menu-v*.zip')
-              if archive_pattern.fullmatch(path.name) and '-modworkshop' not in path.name.lower()
-          )
-
-          if not archives:
-              print('No full source archive found; nothing to import.')
-              with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
-                  fh.write('changed=false\n')
-              raise SystemExit(0)
-          if len(archives) != 1:
-              raise SystemExit(
-                  'Expected exactly one full source archive, found: '
-                  + ', '.join(path.name for path in archives)
-              )
-
-          archive = archives[0]
-          with zipfile.ZipFile(archive) as zf:
-              members = zf.infolist()
-              for member in members:
-                  path = PurePosixPath(member.filename)
-                  if path.is_absolute() or '..' in path.parts:
-                      raise SystemExit(f'Unsafe archive path: {member.filename}')
-
-              roots = {
-                  PurePosixPath(member.filename).parts[0]
-                  for member in members
-                  if PurePosixPath(member.filename).parts
-              }
-              if roots != {'metamorph_creative_menu'}:
-                  raise SystemExit(f'Unexpected archive root: {sorted(roots)}')
-
-              target = Path('metamorph_creative_menu')
-              if target.exists():
-                  shutil.rmtree(target)
-              zf.extractall('.')
-
-          required = [
-              Path('metamorph_creative_menu/VERSION.txt'),
-              Path('metamorph_creative_menu/mod.xml'),
-              Path('metamorph_creative_menu/init.lua'),
-              Path('metamorph_creative_menu/dev_mode.lua'),
-              Path('metamorph_creative_menu/tests/run_all.py'),
-              Path('metamorph_creative_menu/files/qa/controller.lua'),
-              Path('metamorph_creative_menu/files/diagnostics/service.lua'),
-              Path('metamorph_creative_menu/native_src/mcm_native_gameover.c'),
-              Path('metamorph_creative_menu/native_src/README.md'),
-              Path('metamorph_creative_menu/native_src/build_msvc.bat'),
-              Path('metamorph_creative_menu/mcm_native_gameover.dll'),
-              Path('metamorph_creative_menu/mcm_native_gameover.lib'),
-              Path('metamorph_creative_menu/tools/build_release.py'),
-              Path('metamorph_creative_menu/NoitaPatcher/noitapatcher.dll'),
-          ]
-          missing = [str(path) for path in required if not path.is_file()]
-          if missing:
-              raise SystemExit('Missing required source files: ' + ', '.join(missing))
-
-          release_patches = sorted(Path('metamorph_creative_menu/tools/player_release').glob('*.patch'))
-          if not release_patches:
-              raise SystemExit('Missing player release cleanup patches')
-
-          version = Path('metamorph_creative_menu/VERSION.txt').read_text(encoding='utf-8').strip()
-          if not re.fullmatch(r'[0-9]+(?:\.[0-9]+){0,2}', version):
-              raise SystemExit(f'Invalid VERSION.txt: {version!r}')
-
-          archive_major = re.search(r'-v([0-9]+)', archive.name, re.IGNORECASE).group(1)
-          source_major = version.split('.', 1)[0]
-          if archive_major != source_major:
-              raise SystemExit(
-                  f'Archive name says v{archive_major}, but VERSION.txt says {version}'
-              )
-
-          archive.unlink()
-          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
-              fh.write('changed=true\n')
-              fh.write(f'version={version}\n')
-
       - name: Check source hygiene
         if: steps.import.outputs.changed == 'true'
-        shell: bash
         run: python tools/check_source_hygiene.py .
 
       - name: Run regression suite
         if: steps.import.outputs.changed == 'true'
-        shell: bash
         run: python metamorph_creative_menu/tests/run_all.py metamorph_creative_menu
 
       - name: Verify full source archive build
         if: steps.import.outputs.changed == 'true'
-        shell: bash
         run: python metamorph_creative_menu/tools/build_release.py /tmp/Metamorph-Creative-Menu-source-check.zip
 
       - name: Verify player package build
         if: steps.import.outputs.changed == 'true'
-        shell: bash
         run: python tools/build_user_release.py metamorph_creative_menu /tmp/Metamorph-Creative-Menu-player-check.zip
 
       - name: Validate player package
         if: steps.import.outputs.changed == 'true'
-        shell: bash
         run: python tools/validate_user_release.py /tmp/Metamorph-Creative-Menu-player-check.zip
 
       - name: Commit imported source
