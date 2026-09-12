@@ -27,6 +27,18 @@ From the mod root:
 
 `run_all.py` automatically discovers all `*_contract.py` and `*_mock.lua` files, so a new test does not need to be added to a manual runner list.
 
+Repository CI layers
+--------------------
+
+The repository uses separate checks for separate failure domains:
+
+- `Check repository tooling` compiles the repository-level Python tools and runs their contract tests.
+- `Check full source` runs source hygiene, the complete regression suite and the deterministic full-source archive build for development-tree changes.
+- `Publish ready-to-install build` runs only for changes that can affect the player package. It rebuilds and validates the cleaned player archive before updating the stable release asset.
+- `Import full MCM source archive` validates a manually uploaded full-source archive before it is allowed to replace the checked-in development tree.
+
+Keeping source CI separate from publishing means QA, tests, native-source documentation and other development-only changes are still verified without needlessly replacing the player release asset.
+
 Behavior coverage
 -----------------
 
