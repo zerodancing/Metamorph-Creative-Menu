@@ -5,6 +5,9 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
+import subprocess
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -254,8 +257,49 @@ def clean_lua(relative: str, text: str) -> str:
         if namespace is None:
             raise RuntimeError("EW protocol namespace not found")
         text = 'return {\n    NAMESPACE = "' + namespace.group(1) + '",\n}\n'
-
     return strip_lua_comments(text)
+
+
+def write_stage(source: Path, stage_root: Path) -> None:
+    target = stage_root / ROOT_NAME
+    target.mkdir(parents=True, exist_ok=True)
+    for path in sorted(source.rglob("*"), key=lambda item: item.relative_to(source).as_posix()):
+        if not path.is_file() or path.is_symlink():
+            continue
+        relative = path.relative_to(source)
+        if is_excluded(relative):
+            continue
+        data = path.read_bytes()
+        if relative.suffix.lower() == ".lua":
+            data = clean_lua(relative.as_posix(), data.decode("utf-8")).encode("utf-8")
+        destination = target / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(data)
+
+    (target / "README.txt").write_text("Creator: zerodancing\n", encoding="utf-8")
+
+
+def apply_release_patches(source: Path, stage_root: Path) -> None:
+    patch_dir = source / "tools" / "player_release"
+    patch_files = sorted(patch_dir.glob("*.patch")) if patch_dir.is_dir() else []
+    if not patch_files:
+        raise RuntimeError("tools/player_release/*.patch is missing from the development source")
+    executable = shutil.which("patch")
+    if executable is None:
+        raise RuntimeError("the 'patch' utility is required to build the player release")
+    for patch_file in patch_files:
+        result = subprocess.run(
+            [executable, "-p0", "--batch", "--forward", "--fuzz=0", "-i", str(patch_file.resolve())],
+            cwd=stage_root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"player release patch {patch_file.name} no longer matches the source:\n"
+                + result.stdout.strip()
+            )
 
 
 def build(source: Path, output: Path) -> tuple[int, int]:
@@ -266,42 +310,34 @@ def build(source: Path, output: Path) -> tuple[int, int]:
     if missing:
         raise RuntimeError("missing runtime files: " + ", ".join(missing))
 
-    entries: list[tuple[str, bytes]] = []
-    for path in sorted(source.rglob("*"), key=lambda item: item.relative_to(source).as_posix()):
-        if not path.is_file() or path.is_symlink():
-            continue
-        relative = path.relative_to(source)
-        if is_excluded(relative):
-            continue
-        data = path.read_bytes()
-        if relative.suffix.lower() == ".lua":
-            text = data.decode("utf-8")
-            data = clean_lua(relative.as_posix(), text).encode("utf-8")
-        entries.append((relative.as_posix(), data))
+    with tempfile.TemporaryDirectory(prefix="mcm-player-") as temporary:
+        stage_root = Path(temporary)
+        write_stage(source, stage_root)
+        apply_release_patches(source, stage_root)
+        target = stage_root / ROOT_NAME
+        files = sorted(path for path in target.rglob("*") if path.is_file())
 
-    entries = [(name, data) for name, data in entries if name != "README.txt"]
-    entries.append(("README.txt", b"Creator: zerodancing\n"))
-    entries.sort(key=lambda item: item[0])
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if output.exists():
+            output.unlink()
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    if output.exists():
-        output.unlink()
-
-    total_bytes = 0
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        for relative, data in entries:
-            total_bytes += len(data)
-            info = zipfile.ZipInfo(f"{ROOT_NAME}/{relative}", (2020, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = 0o100644 << 16
-            info.create_system = 3
-            archive.writestr(info, data, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+        total_bytes = 0
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+            for path in files:
+                relative = path.relative_to(target).as_posix()
+                data = path.read_bytes()
+                total_bytes += len(data)
+                info = zipfile.ZipInfo(f"{ROOT_NAME}/{relative}", (2020, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o100644 << 16
+                info.create_system = 3
+                archive.writestr(info, data, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
 
     with zipfile.ZipFile(output) as archive:
         broken = archive.testzip()
         if broken is not None:
             raise RuntimeError(f"archive CRC verification failed: {broken}")
-    return len(entries), total_bytes
+    return len(files), total_bytes
 
 
 def main() -> int:
