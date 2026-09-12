@@ -14,8 +14,12 @@ desktop.ini
 *.bak
 *~
 
+# Generated build output
+dist/
+
 # Python test artifacts
 __pycache__/
+.pytest_cache/
 *.py[cod]
 
 # Runtime / diagnostic output
