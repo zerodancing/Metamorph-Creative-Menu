@@ -1,0 +1,197 @@
+--- metamorph_creative_menu/files/integrations/ew/bridge/materials.lua
++++ metamorph_creative_menu/files/integrations/ew/bridge/materials.lua
+@@ -70,14 +70,6 @@
+ local world_frame_world_number = nil
+ local active_world_number = nil
+ local relay_queue = new_queue(RELAY_QUEUE_CAPACITY)
+-
+-local metrics = {
+-    chunks = 0,
+-    bytes = 0,
+-    relays = 0,
+-    overwritten_batches = 0,
+-}
+-local metrics_enabled = false
+ 
+ local function clean_error(err)
+     if common ~= nil and type(common.clean) == "function" then return common.clean(err) end
+@@ -288,9 +280,6 @@
+ local function drain_outbox()
+     local next_sequence, newest = transport.first_available_sequence(last_sequence)
+     if next_sequence > last_sequence + 1 then
+-        if metrics_enabled then
+-            metrics.overwritten_batches = metrics.overwritten_batches + (next_sequence - last_sequence - 1)
+-        end
+         last_sequence = next_sequence - 1
+         transport.mark_ack(last_sequence)
+     end
+@@ -347,10 +336,6 @@
+     if not string_ok or type(payload) ~= "string" then return false, payload or "encode_string" end
+     local send_ok, send_error = pcall(net.proxy_bin_send, KEY_WORLD_FRAME, payload)
+     if not send_ok then return false, send_error end
+-    if metrics_enabled then
+-        metrics.chunks = metrics.chunks + 1
+-        metrics.bytes = metrics.bytes + #payload
+-    end
+     return true, "sent"
+ end
+ 
+@@ -569,24 +554,10 @@
+                 return
+             end
+             queue_pop(relay_queue)
+-            if metrics_enabled then metrics.relays = metrics.relays + 1 end
+             return
+         end
+     end
+ end
+-
+-local function publish_metrics(frame)
+-    if not metrics_enabled or frame % 60 ~= 0 then return end
+-    GlobalsSetValue("mcm_material_sync_sent_chunks_v1", tostring(metrics.chunks))
+-    GlobalsSetValue("mcm_material_sync_sent_bytes_v1", tostring(metrics.bytes))
+-    GlobalsSetValue("mcm_material_sync_relay_entities_v1", tostring(metrics.relays))
+-    GlobalsSetValue("mcm_material_sync_overwritten_batches_v1", tostring(metrics.overwritten_batches))
+-    GlobalsSetValue("mcm_material_sync_backlog_v1", table.concat({
+-        tostring(chunk_queue.size), tostring(relay_queue.size),
+-    }, ":"))
+-end
+-
+-function materials_bridge.set_metrics_enabled(enabled) metrics_enabled = enabled == true end
+ 
+ function materials_bridge.register(shared_rpc, shared_common)
+     rpc, common = shared_rpc, shared_common
+@@ -603,7 +574,6 @@
+     drain_outbox()
+     drain_chunks(frame)
+     drain_relays(frame)
+-    publish_metrics(frame)
+ end
+ 
+ return materials_bridge
+--- metamorph_creative_menu/files/integrations/ew/kolmi_lifecycle.lua
++++ metamorph_creative_menu/files/integrations/ew/kolmi_lifecycle.lua
+@@ -5,6 +5,7 @@
+ local observed, pending, retired = {}, {}, {}
+ local installed = false
+ local native_notify
++
+ 
+ local function alive(entity)
+     return EntityGetIsAlive(entity) == true
+@@ -71,14 +72,9 @@
+     local ok, entity = resolve(record.gid)
+     if not ok or entity ~= record.entity then return end
+ 
+-    local sent, failure = pcall(native_notify, record.entity, record.wait,
++    local sent = pcall(native_notify, record.entity, record.wait,
+         record.x, record.y, "", responsible or 0)
+-    if not sent then
+-        if record.error ~= tostring(failure) then
+-            record.error = tostring(failure)
+-        end
+-        return
+-    end
++    if not sent then return end
+     record.reason = reason
+     pending[record.gid] = record
+ end
+--- metamorph_creative_menu/files/integrations/ew/resilience.lua
++++ metamorph_creative_menu/files/integrations/ew/resilience.lua
+@@ -27,8 +27,9 @@
+     "data/scripts/items/potion_starting.lua",
+ }
+ 
++local EW_CROSSCALL_FILES = {}
++
+ local resilience_patches = dofile("mods/metamorph_creative_menu/files/integrations/ew/resilience_patches.lua")
+-local DEV_MODE = false
+ 
+ ew_resilience.patch_crosscall_source = resilience_patches.patch_crosscall_source
+ ew_resilience.patch_wand_pickup_killself_source = resilience_patches.patch_wand_pickup_killself_source
+@@ -38,7 +39,6 @@
+ ew_resilience.patch_detour_source = resilience_patches.patch_detour_source
+ ew_resilience.patch_world_sync_source = resilience_patches.patch_world_sync_source
+ ew_resilience.patch_polymorph_death_source = resilience_patches.patch_polymorph_death_source
+-ew_resilience.patch_polymorph_profile_source = resilience_patches.patch_polymorph_profile_source
+ ew_resilience.patch_material_pixel_scene_source = resilience_patches.patch_material_pixel_scene_source
+ ew_resilience.patch_peer_perk_isolation_source = resilience_patches.patch_peer_perk_isolation_source
+ ew_resilience.patch_perk_helper_sync_source = resilience_patches.patch_perk_helper_sync_source
+@@ -67,7 +67,7 @@
+     world_sync = {
+         path = "mods/quant.ew/files/system/world_sync/world_sync.lua",
+         marker = "mcm_poly_world_sync_v5",
+-        patcher = function(content) return ew_resilience.patch_world_sync_source(content, DEV_MODE) end,
++        patcher = ew_resilience.patch_world_sync_source,
+         global_key = "mcm_compat_world_sync_patch_v1",
+     },
+     material_scenes = {
+@@ -129,10 +129,6 @@
+                     .. tostring(name) .. " (" .. tostring(status) .. ")"
+                 print(diagnostic_message)
+                 if type(GamePrint) == "function" then pcall(GamePrint, user_message) end
+-                if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-                    pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE,
+-                        "ew.compatibility." .. tostring(name), tostring(status))
+-                end
+             end
+         end
+     end
+@@ -162,25 +158,6 @@
+ 
+ local function patch_world_sync_file()
+     return apply_verified_patch("world_sync")
+-end
+-
+-local function patch_polymorph_profile_file()
+-    local path = "mods/quant.ew/files/system/polymorph/polymorph.lua"
+-    local function finish(status)
+-        if type(GlobalsSetValue) == "function" then
+-            pcall(GlobalsSetValue, "mcm_compat_poly_profile_patch_v1", global_text.encode_diagnostic(status))
+-        end
+-        return status
+-    end
+-    local ok, content = pcall(ModTextFileGetContent, path)
+-    if not ok or type(content) ~= "string" or content == "" then return finish("read_failed") end
+-    if string.find(content, "mcm_poly_profile_v1", 1, true) ~= nil then return finish("already_present") end
+-    local patch_ok, changed, count = pcall(ew_resilience.patch_polymorph_profile_source, content)
+-    if not patch_ok or type(changed) ~= "string" or (tonumber(count) or 0) <= 0
+-        or string.find(changed, "mcm_poly_profile_v1", 1, true) == nil
+-    then return finish("anchor_mismatch") end
+-    if not pcall(ModTextFileSetContent, path, changed) then return finish("write_failed") end
+-    return finish("applied")
+ end
+ 
+ local function patch_peer_perk_isolation_file()
+@@ -245,6 +222,9 @@
+ 
+ local function patch_crosscall_files()
+     local count = 0
++    for _, relative in ipairs(EW_CROSSCALL_FILES) do
++        count = count + patch_file("mods/quant.ew/" .. relative, ew_resilience.patch_crosscall_source)
++    end
+ 
+     count = count + patch_file(
+         "mods/quant.ew/files/system/entity_sync_helper/scripts/killself.lua",
+@@ -278,9 +258,7 @@
+     end
+     apply_verified_patch("form_death")
+     patch_world_sync_file()
+-    if DEV_MODE then
+-        patch_polymorph_profile_file()
+-    elseif type(GlobalsSetValue) == "function" then
++    if type(GlobalsSetValue) == "function" then
+         pcall(GlobalsSetValue, "mcm_compat_poly_profile_patch_v1", "disabled")
+     end
+     apply_verified_patch("material_scenes")
+@@ -310,9 +288,7 @@
+     local crosscalls = patch_crosscall_files()
+     apply_verified_patch("form_death")
+     patch_world_sync_file()
+-    if DEV_MODE then
+-        patch_polymorph_profile_file()
+-    elseif type(GlobalsSetValue) == "function" then
++    if type(GlobalsSetValue) == "function" then
+         pcall(GlobalsSetValue, "mcm_compat_poly_profile_patch_v1", "disabled")
+     end
+     apply_verified_patch("material_scenes")
