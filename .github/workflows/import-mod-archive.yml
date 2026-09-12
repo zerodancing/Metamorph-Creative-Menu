@@ -41,12 +41,12 @@ jobs:
           from pathlib import Path, PurePosixPath
 
           archive_pattern = re.compile(
-              r'^Metamorph-Creative-Menu-v[0-9]+(?:\.[0-9]+){0,2}\.zip$',
+              r'^Metamorph-Creative-Menu-v[0-9]+(?:[._-][0-9A-Za-z]+)*\.zip$',
               re.IGNORECASE,
           )
           archives = sorted(
               path for path in Path('.').glob('Metamorph-Creative-Menu-v*.zip')
-              if archive_pattern.fullmatch(path.name)
+              if archive_pattern.fullmatch(path.name) and '-modworkshop' not in path.name.lower()
           )
 
           if not archives:
@@ -85,7 +85,17 @@ jobs:
               Path('metamorph_creative_menu/VERSION.txt'),
               Path('metamorph_creative_menu/mod.xml'),
               Path('metamorph_creative_menu/init.lua'),
+              Path('metamorph_creative_menu/dev_mode.lua'),
               Path('metamorph_creative_menu/tests/run_all.py'),
+              Path('metamorph_creative_menu/files/qa/controller.lua'),
+              Path('metamorph_creative_menu/files/diagnostics/service.lua'),
+              Path('metamorph_creative_menu/native_src/mcm_native_gameover.c'),
+              Path('metamorph_creative_menu/mcm_native_gameover.lib'),
+              Path('metamorph_creative_menu/tools/build_release.py'),
+              Path('metamorph_creative_menu/tools/player_release/00-runtime.patch'),
+              Path('metamorph_creative_menu/tools/player_release/10-ew.patch'),
+              Path('metamorph_creative_menu/tools/player_release/20-ui.patch'),
+              Path('metamorph_creative_menu/tools/player_release/30-data.patch'),
               Path('metamorph_creative_menu/NoitaPatcher/noitapatcher.dll'),
           ]
           missing = [str(path) for path in required if not path.is_file()]
@@ -111,7 +121,7 @@ jobs:
       - name: Check source hygiene
         if: steps.import.outputs.changed == 'true'
         shell: bash
-        run: python tools/check_source_hygiene.py metamorph_creative_menu
+        run: python tools/check_source_hygiene.py .
 
       - name: Run regression suite
         if: steps.import.outputs.changed == 'true'
@@ -122,8 +132,8 @@ jobs:
         if: steps.import.outputs.changed == 'true'
         shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "zerodancing"
+          git config user.email "194230808+zerodancing@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then
             echo "Source archive already matches the repository."
