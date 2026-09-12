@@ -20,7 +20,7 @@
  mcm_wand_level,LEVEL,УРОВЕНЬ,NÍVEL,NIVEL,STUFE,NIVEAU,LIVELLO,POZIOM,等级,レベル,레벨,,,
  mcm_wand_shuffle,SHUFFLE,ПЕРЕМЕШИВАНИЕ,EMBARALHAR,BARAJAR,MISCHEN,MÉLANGER,MESCOLA,LOSOWANIE,乱序,シャッフル,셔플,,,
  mcm_wand_never_reload,NO RELOAD,БЕЗ ПЕРЕЗАРЯДКИ,SEM RECARGA,SIN RECARGA,KEIN AUFLADEN,SANS RECHARGE,NESSUNA RICARICA,BEZ PRZEŁADOWANIA,无需充能,リロードなし,재충전 없음,,,
--mcm_wand_edit_error,Could not change wand,Не удалось изменить жезл,Não foi possível alterar a varinha,No se pudo cambiar la varita,Zauberstab konnte nicht geändert werden,Impossible de modifier la baguette,Impossibile modificare il perk,Nie udało się zmienić różdżki,无法修改法杖,杖を変更できませんでした,완드를 변경할 수 없습니다,,,
+-mcm_wand_edit_error,Could not change wand,Не удалось изменить жезл,Não foi possível alterar a varinha,No se pudo cambiar la varita,Zauberstab konnte nicht geändert werden,Impossible de modifier la baguette,Impossibile modificare la bacchetta,Nie udało się zmienić różdżki,无法修改法杖,杖を変更できませんでした,완드를 변경할 수 없습니다,,,
  mcm_wand_presets,WAND PRESETS,СОХРАНЁННЫЕ ЖЕЗЛЫ,VARINHAS SALVAS,VARITAS GUARDADAS,STAB-VORLAGEN,BAGUETTES SAUVÉES,BACCHETTE SALVATE,ZAPISANE RÓŻDŻKI,法杖预设,杖プリセット,완드 프리셋,,,
  mcm_wand_no_presets,No saved wands,Нет сохранённых жезлов,Nenhuma varinha salva,No hay varitas guardadas,Keine gespeicherten Stäbe,Aucune baguette sauvée,Nessuna bacchetta salvata,Brak zapisanych różdżek,没有已保存法杖,保存済みの杖なし,저장된 완드 없음,,,
  mcm_wand_preset_error,Preset error,Ошибка сохранения,Erro de predefinição,Error de preajuste,Vorlagenfehler,Erreur de préréglage,Errore preset,Błąd presetu,预设错误,プリセットエラー,프리셋 오류,,,
