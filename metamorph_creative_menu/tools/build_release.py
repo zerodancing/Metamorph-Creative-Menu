@@ -36,6 +36,10 @@ REQUIRED_FILES = {
     "tests/run_all.py",
     "tests/TESTING.txt",
     "tools/build_release.py",
+    "tools/player_release/00-runtime.patch",
+    "tools/player_release/10-ew.patch",
+    "tools/player_release/20-ui.patch",
+    "tools/player_release/30-data.patch",
 }
 
 
@@ -104,12 +108,8 @@ def main() -> int:
     major = version.split(".", 1)[0] if version else "source"
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "output",
-        nargs="?",
-        type=Path,
-        default=root / "dist" / f"Metamorph-Creative-Menu-v{major}.zip",
-    )
+    parser.add_argument("output", nargs="?", type=Path,
+                        default=root / "dist" / f"Metamorph-Creative-Menu-v{major}.zip")
     args = parser.parse_args()
     try:
         built_version, count, total_bytes = build(root, args.output.resolve())
