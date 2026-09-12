@@ -72,13 +72,11 @@ jobs:
         shell: bash
         run: |
           version="$(tr -d '\r\n ' < metamorph_creative_menu/VERSION.txt)"
-          git tag -f latest-build HEAD
-          git push origin refs/tags/latest-build --force
+          notes="Ready-to-install Metamorph: Creative Menu ${version}. Source commit: ${GITHUB_SHA}. Development and QA files are excluded from this archive."
 
-          notes="Ready-to-install Metamorph: Creative Menu ${version}. Development and QA files are excluded from this archive."
           if gh release view latest-build >/dev/null 2>&1; then
             gh release upload latest-build Metamorph-Creative-Menu.zip --clobber
             gh release edit latest-build --title "Metamorph: Creative Menu ${version}" --notes "$notes"
           else
-            gh release create latest-build Metamorph-Creative-Menu.zip --title "Metamorph: Creative Menu ${version}" --notes "$notes"
+            gh release create latest-build Metamorph-Creative-Menu.zip --target "$GITHUB_SHA" --title "Metamorph: Creative Menu ${version}" --notes "$notes"
           fi
