@@ -1,0 +1,45 @@
+name: Check full source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'metamorph_creative_menu/**'
+      - 'tools/check_source_hygiene.py'
+      - '.github/workflows/check-source.yml'
+  pull_request:
+    paths:
+      - 'metamorph_creative_menu/**'
+      - 'tools/check_source_hygiene.py'
+      - '.github/workflows/check-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-full-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lua test runtime
+        shell: bash
+        run: |
+          if ! command -v texlua >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y texlive-binaries
+          fi
+
+      - name: Check source hygiene
+        run: python tools/check_source_hygiene.py .
+
+      - name: Run regression suite
+        run: python metamorph_creative_menu/tests/run_all.py metamorph_creative_menu
+
+      - name: Verify deterministic source archive build
+        run: python metamorph_creative_menu/tools/build_release.py /tmp/Metamorph-Creative-Menu-source-check.zip
