@@ -1,2 +1,2 @@
-Metamorph: Creative Menu 3.0.0
+Metamorph: Creative Menu
 Development source
