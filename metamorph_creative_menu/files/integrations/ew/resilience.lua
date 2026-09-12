@@ -27,19 +27,9 @@ local SEEDED_RANDOM_FILES = {
     "data/scripts/items/potion_starting.lua",
 }
 
--- These files execute outside EW's main module context (LuaComponents, appended
--- vanilla callbacks and entity scripts). EW leaves a Lua fallback named CrossCall
--- installed even when the matching optional system is disabled; that fallback then
--- indexes a missing callback and can generate thousands of errors followed by a Lua
--- stack overflow. Keep the call when registered and provide conservative semantics
--- only for the missing-handler case.
--- Never prepend a lexical CrossCall wrapper into Entangled Worlds itself. EW installs
--- and replaces CrossCall handlers as systems initialize; capturing a nil/string value at
--- file-load time poisoned the stable inventory API and produced the observed
--- ew_ff / ew_api_force_send_inventory failures. Keep the helper patcher below only for
--- explicit future compatibility use, but do not apply it to EW core/modules.
-local EW_CROSSCALL_FILES = {}
-
+-- CrossCall wrappers must not be prepended to EW core modules because EW replaces those
+-- handlers while systems initialize. Only the specific external helper patched below uses
+-- the conservative missing-handler fallback.
 local resilience_patches = dofile("mods/metamorph_creative_menu/files/integrations/ew/resilience_patches.lua")
 local DEV_MODE = tonumber(dofile("mods/metamorph_creative_menu/dev_mode.lua")) == 1
 
@@ -260,9 +250,6 @@ end
 
 local function patch_crosscall_files()
     local count = 0
-    for _, relative in ipairs(EW_CROSSCALL_FILES) do
-        count = count + patch_file("mods/quant.ew/" .. relative, ew_resilience.patch_crosscall_source)
-    end
     -- This helper executes in an entity Lua VM. If a save resumes before EW's
     -- ew_is_wand_pickup callback is registered, the unguarded line survives forever
     -- and throws once per frame. Conservative failure semantics are to retire the
