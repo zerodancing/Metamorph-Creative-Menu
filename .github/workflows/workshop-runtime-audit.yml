@@ -1,0 +1,66 @@
+name: Workshop runtime residue audit
+
+on:
+  push:
+    branches: [workshop]
+    paths:
+      - '.github/workflows/workshop-runtime-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Scan exact Steam upload set
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          import xml.etree.ElementTree as ET
+
+          root = Path('metamorph_creative_menu')
+          workshop = ET.parse(root / 'workshop.xml').getroot()
+
+          def split_pipe(value):
+              return [x.strip().replace('\\', '/') for x in value.split('|') if x.strip()]
+
+          excluded_dirs = set(split_pipe(workshop.attrib.get('dont_upload_folders', '')))
+          excluded_files = set(split_pipe(workshop.attrib.get('dont_upload_files', '')))
+          text_suffixes = {'.lua', '.xml', '.txt', '.csv', '.json', '.frag', '.vert'}
+          rules = [
+              ('numbered test chronology', re.compile(r'\bTEST\s+\d+\b', re.I)),
+              ('test-only production API', re.compile(r'\b[A-Za-z0-9_]+_for_test\b')),
+              ('conversation wording', re.compile(r"\b(?:the\s+)?user['’]s\s+build\b|\bat\s+the\s+user['’]s\s+request\b", re.I)),
+              ('numbered runtime label', re.compile(r'\[MCM\s*(?:TEST\s*)?\d{2,}\]', re.I)),
+              ('AI attribution residue', re.compile(r'\b(?:ChatGPT|OpenAI|Claude|Gemini|Copilot|LLM|AI[- ]generated|generated\s+by\s+AI)\b', re.I)),
+              ('debug state API', re.compile(r'\bdebug_state\b')),
+              ('profiling control API', re.compile(r'\bset_(?:profiling|metrics)_enabled\b')),
+          ]
+
+          findings = []
+          scanned = 0
+          for path in sorted(root.rglob('*')):
+              if not path.is_file() or path.suffix.lower() not in text_suffixes:
+                  continue
+              rel = path.relative_to(root).as_posix()
+              if rel in excluded_files or any(rel == d or rel.startswith(d + '/') for d in excluded_dirs):
+                  continue
+              scanned += 1
+              try:
+                  text = path.read_text(encoding='utf-8')
+              except UnicodeDecodeError:
+                  continue
+              for lineno, line in enumerate(text.splitlines(), 1):
+                  for label, pattern in rules:
+                      if pattern.search(line):
+                          findings.append(f'{rel}:{lineno}: {label}: {line.strip()[:220]}')
+
+          if findings:
+              print(f'WORKSHOP_RUNTIME_AUDIT=FAIL files={scanned} findings={len(findings)}')
+              for finding in findings:
+                  print(finding)
+              raise SystemExit(1)
+          print(f'WORKSHOP_RUNTIME_AUDIT=PASS files={scanned}')
