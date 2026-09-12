@@ -1,4 +1,5 @@
 local root=assert(arg[1],"root required")
+METAMORPH_CREATIVE_MENU_TESTING = true
 
 local frame=100
 local next_component=500
@@ -220,7 +221,7 @@ assert(ok and reason=="installed","install failed: "..tostring(reason))
 -- Normal top-level EW discovery. Kolmisilma and boss_limbs bypass demotion.
 ewext.module_on_new_entity({101,102,103,107,108,109,110},7)
 assert(original_new_calls==1,"native new entity wrapper did not delegate")
-assert(module.pending_count_for_test()==2,"normal boss + creative Kolmi should be pending")
+assert(module._test.pending_count()==2,"normal boss + creative Kolmi should be pending")
 assert(EntityGetFirstComponentIncludingDisabled(101,"BossDragonComponent")==202,"BossDragon ID changed after enqueue")
 assert(EntityGetFirstComponent(101,"BossDragonComponent")==nil,"BossDragon restored immediately after on_new_entity")
 assert(EntityGetFirstComponentIncludingDisabled(102,"DamageModelComponent")~=nil,"ordinary entity mutated")
@@ -236,14 +237,14 @@ assert(globals["mcm27_creative_kolmi_non_global_v1"]=="1","creative Kolmi was no
 ensure_entity(104,{boss=true,miniboss=true},"data/entities/animals/boss_alchemist/boss_alchemist.xml")
 add_component(104,"BossHealthBarComponent",{},true,"",209)
 add_component(104,"DamageModelComponent",{hp="40",wait_for_kill_flag_on_death=false},true,"",210)
-assert(module.last_seen_entity_id_for_test()==110,"Lua discovery high-water mark incorrect")
+assert(module._test.last_seen_entity_id()==110,"Lua discovery high-water mark incorrect")
 -- Use a newer id because 104 is below current high-water in this deterministic mock.
 entities[111]=entities[104]; entities[104]=nil
 for _,cid in ipairs(entities[111].components) do comps[cid].entity=111 end
 
 ewext.module_on_world_update()
 assert(original_update_calls==1,"native update did not run")
-assert(module.pending_count_for_test()==2,"budget-delayed normal boss + creative Kolmi should remain pending")
+assert(module._test.pending_count()==2,"budget-delayed normal boss + creative Kolmi should remain pending")
 assert(EntityGetFirstComponentIncludingDisabled(111,"BossHealthBarComponent")~=nil,"gap natural boss components not restored after native GID")
 assert(EntityGetFirstComponentIncludingDisabled(105,"BossHealthBarComponent")~=nil,"EntityLoad authority boss not restored")
 assert(EntityGetFirstComponentIncludingDisabled(106,"BossHealthBarComponent")~=nil,"deserialize authority boss not restored")
@@ -256,7 +257,7 @@ frame=101
 track_creative_now=true
 ewext.module_on_world_update()
 assert(original_update_calls==2,"second native update did not run")
-assert(module.pending_count_for_test()==0,"tracked creative boss was not restored")
+assert(module._test.pending_count()==0,"tracked creative boss was not restored")
 assert(EntityGetFirstComponentIncludingDisabled(101,"BossDragonComponent")==202,"BossDragon original component ID was not preserved")
 assert(EntityGetFirstComponentIncludingDisabled(101,"StreamingKeepAliveComponent")==201,"KeepAlive original component ID was not preserved")
 assert(ComponentGetIsEnabled(202)==true and ComponentGetIsEnabled(201)==true,"preserved boss components were not re-enabled")
