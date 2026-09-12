@@ -21,6 +21,8 @@ MAX_UNCOMPRESSED_BYTES = 256 * 1024 * 1024
 
 REQUIRED_SOURCE_FILES = {
     "VERSION.txt",
+    "LICENSE.txt",
+    "NOTICE.txt",
     "mod.xml",
     "init.lua",
     "dev_mode.lua",
