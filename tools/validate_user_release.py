@@ -35,6 +35,8 @@ REQUIRED_FILES = {
     f"{ROOT}/mod.xml",
     f"{ROOT}/init.lua",
     f"{ROOT}/README.txt",
+    f"{ROOT}/LICENSE.txt",
+    f"{ROOT}/NOTICE.txt",
     f"{ROOT}/NoitaPatcher/noitapatcher.dll",
     f"{ROOT}/mcm_native_gameover.dll",
 }
@@ -203,6 +205,13 @@ def main() -> int:
             readme = zf.read(f"{ROOT}/README.txt").decode("utf-8")
             if readme != "Creator: zerodancing\n":
                 failures.append("README.txt must contain only 'Creator: zerodancing'")
+
+        if f"{ROOT}/NOTICE.txt" in names:
+            notice = zf.read(f"{ROOT}/NOTICE.txt").decode("utf-8")
+            if "Original developer: zerodancing" not in notice:
+                failures.append("NOTICE.txt must preserve zerodancing attribution")
+            if "https://github.com/zerodancing/Metamorph-Creative-Menu" not in notice:
+                failures.append("NOTICE.txt must preserve the original GitHub project link")
 
         for name in sorted(names):
             suffix = PurePosixPath(name).suffix.lower()
