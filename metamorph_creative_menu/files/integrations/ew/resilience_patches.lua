@@ -565,8 +565,7 @@ function resilience_patches.patch_material_pixel_scene_source(content)
         if first == nil then return source, false end
         return string.sub(source, 1, first - 1) .. after .. string.sub(source, last + 1), true
     end
-    local anchor = [[    -- TODO there are a couple more parameters, tho they don't seem to be used in vanilla
-    CrossCall(
+    local anchor = [[    CrossCall(
         "ew_sync_pixel_scene",]]
     local replacement = [[    -- mcm_material_brush_pixel_scene_v1: the MCM solid brush supplies its
     -- material dynamically through color_to_material_table. EW's stock pixel-scene
@@ -581,7 +580,6 @@ function resilience_patches.patch_material_pixel_scene_source(content)
     then
         return
     end
-    -- TODO there are a couple more parameters, tho they don't seem to be used in vanilla
     CrossCall(
         "ew_sync_pixel_scene",]]
     local changed, ok = replace_material_scene_once(content, anchor, replacement)
