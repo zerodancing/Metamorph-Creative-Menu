@@ -1,0 +1,26 @@
+--- metamorph_creative_menu/translations.csv
++++ metamorph_creative_menu/translations.csv
+@@ -171,15 +171,7 @@
+ mcm_rule_day_speed,DAY CYCLE SPEED,СКОРОСТЬ СУТОК,VELOCIDADE DO DIA,VELOCIDAD DEL DÍA,TAGESZYKLUS,VITESSE DU CYCLE JOUR,VELOCITÀ DEL GIORNO,SZYBKOŚĆ DOBY,昼夜循环速度,昼夜サイクル速度,낮밤 주기 속도,,,
+ mcm_rule_day_speed_desc,Multiplier for the natural day-night cycle speed,Множитель естественной скорости смены дня и ночи,Multiplica a velocidade natural do ciclo dia/noite,Multiplica la velocidad natural del ciclo día/noche,Faktor für die natürliche Tag-Nacht-Geschwindigkeit,Multiplicateur de vitesse naturelle jour/nuit,Moltiplica la velocità naturale giorno/notte,Mnożnik naturalnej prędkości dnia i nocy,自然昼夜循环速度倍率,自然な昼夜サイクル速度倍率,자연 낮밤 주기 속도 배율,,,
+ mcm_setting_possession_key,POSSESSION KEY,КЛАВИША ВСЕЛЕНИЯ,TECLA DE POSSESSÃO,TECLA DE POSESIÓN,BESITZERGREIFUNGS-TASTE,TOUCHE DE POSSESSION,TASTO POSSESSIONE,KLAWISZ OPĘTANIA,附身按键,憑依キー,빙의 키,,,
+-mcm_mobs_mode_play,PLAY,ИГРА,JOGAR,JUGAR,SPIELEN,JOUER,GIOCA,GRAJ,游玩,プレイ,플레이,,,
+-mcm_mobs_mode_log_retest,LOG RETEST,ЛОГ: ПОВТОР,LOG RETESTE,REG. REPRUEBA,LOG RETEST,LOG RETEST,LOG RITEST,LOG TESTUJ,记录复测,再テストログ,재검사 기록,,,
+-mcm_mobs_review_help,REVIEW: click a mob to log its exact path; no transform/spawn occurs,"ПРОВЕРКА: нажмите моба, чтобы записать точный путь в лог; спавн и превращение не выполняются",REVISÃO: clique num mob para registrar o caminho exato; sem spawn/transformação,REVISIÓN: pulsa un mob para registrar su ruta exacta; no se genera ni transforma,"PRÜFUNG: Mob anklicken, um den exakten Pfad zu protokollieren; kein Spawn/Verwandeln",REVUE : cliquez sur un mob pour journaliser son chemin exact ; aucun spawn/transformation,REVISIONE: clicca un mob per registrare il percorso esatto; nessuno spawn/trasformazione,"PRZEGLĄD: kliknij moba, aby zapisać dokładną ścieżkę; bez spawnu/przemiany",审查：点击生物以记录精确路径；不会生成或变形,確認: モブをクリックして正確なパスをログ記録。スポーン/変身はしません,검토: 몹을 클릭해 정확한 경로를 기록합니다. 소환/변신은 하지 않습니다,,,
+-mcm_mobs_review_click,CLICK: log,КЛИК: записать,CLIQUE: registrar,CLIC: registrar,KLICK: loggen,CLIC : journaliser,CLIC: registra,KLIK: zapisz,点击：记录,クリック: 記録,클릭: 기록,,,
+-mcm_mobs_marked,MARKED,ОТМЕЧЕНО,MARCADO,MARCADO,MARKIERT,MARQUÉ,SEGNATO,OZNACZONO,已标记,マーク済み,표시됨,,,
+ mcm_mobs_showing,SHOWING,ПОКАЗАНО,MOSTRANDO,MOSTRANDO,ANZEIGE,AFFICHÉS,VISUALIZZATI,POKAZANO,显示,表示,표시,,,
+-mcm_mobs_review_logged,MOBS REVIEW,ПРОВЕРКА МОБОВ,REVISÃO MOBS,REVISIÓN MOBS,MOBS-PRÜFUNG,REVUE MOBS,REVISIONE MOBS,PRZEGLĄD MOBÓW,生物审查,モブ確認,몹 검토,,,
+-mcm_mobs_mode_log_safe,LOG SAFE,ЛОГ: РАБОТАЕТ,LOG SEGURO,REG. SEGURO,LOG SICHER,LOG SÛR,LOG SICURO,LOG DZIAŁA,记录安全,安全ログ,안전 기록,,,
+-mcm_mobs_mode_log_unsafe,LOG UNSAFE,ЛОГ: НЕ РАБОТАЕТ,LOG INSEGURO,REG. INSEGURO,LOG UNSICHER,LOG RISQUÉ,LOG NON SICURO,LOG NIE DZIAŁA,记录不安全,危険ログ,위험 기록,,,
+ mcm_mobs_scanning,SCANNING...,ПРОВЕРКА...,A VERIFICAR...,ESCANEANDO...,PRÜFUNG...,ANALYSE...,ANALISI...,SKANOWANIE...,扫描中...,スキャン中...,스캔 중...,,,
+ mcm_perk_apply_failed,Could not apply perk,Не удалось применить перк,Não foi possível aplicar o benefício,No se pudo aplicar el perk,Perk konnte nicht angewendet werden,Impossible d’appliquer l’atout,Impossibile applicare il perk,Nie udało się zastosować perka,无法应用天赋,パークを適用できませんでした,퍽을 적용하지 못했습니다,,,
+ mcm_weather_unavailable,Weather editing unavailable,Редактирование погоды недоступно,Edição do clima indisponível,La edición del clima no está disponible,Wetterbearbeitung nicht verfügbar,Modification de la météo indisponible,Modifica del meteo non disponibile,Edycja pogody jest niedostępna,天气编辑不可用,天候編集を利用できません,날씨 편집을 사용할 수 없습니다,,,
+@@ -298,7 +290,6 @@
+ mcm_wand_level,LEVEL,УРОВЕНЬ,NÍVEL,NIVEL,STUFE,NIVEAU,LIVELLO,POZIOM,等级,レベル,레벨,,,
+ mcm_wand_shuffle,SHUFFLE,ПЕРЕМЕШИВАНИЕ,EMBARALHAR,BARAJAR,MISCHEN,MÉLANGER,MESCOLA,LOSOWANIE,乱序,シャッフル,셔플,,,
+ mcm_wand_never_reload,NO RELOAD,БЕЗ ПЕРЕЗАРЯДКИ,SEM RECARGA,SIN RECARGA,KEIN AUFLADEN,SANS RECHARGE,NESSUNA RICARICA,BEZ PRZEŁADOWANIA,无需充能,リロードなし,재충전 없음,,,
+-mcm_wand_edit_error,Could not change wand,Не удалось изменить жезл,Não foi possível alterar a varinha,No se pudo cambiar la varita,Zauberstab konnte nicht geändert werden,Impossible de modifier la baguette,Impossibile modificare il perk,Nie udało się zmienić różdżki,无法修改法杖,杖を変更できませんでした,완드를 변경할 수 없습니다,,,
+ mcm_wand_presets,WAND PRESETS,СОХРАНЁННЫЕ ЖЕЗЛЫ,VARINHAS SALVAS,VARITAS GUARDADAS,STAB-VORLAGEN,BAGUETTES SAUVÉES,BACCHETTE SALVATE,ZAPISANE RÓŻDŻKI,法杖预设,杖プリセット,완드 프리셋,,,
+ mcm_wand_no_presets,No saved wands,Нет сохранённых жезлов,Nenhuma varinha salva,No hay varitas guardadas,Keine gespeicherten Stäbe,Aucune baguette sauvée,Nessuna bacchetta salvata,Brak zapisanych różdżek,没有已保存法杖,保存済みの杖なし,저장된 완드 없음,,,
+ mcm_wand_preset_error,Preset error,Ошибка сохранения,Erro de predefinição,Error de preajuste,Vorlagenfehler,Erreur de préréglage,Errore preset,Błąd presetu,预设错误,プリセットエラー,프리셋 오류,,,
