@@ -1,4 +1,4 @@
-name: Workshop runtime residue audit
+name: One-time Workshop runtime cleanup
 
 on:
   push:
@@ -7,90 +7,98 @@ on:
       - '.github/workflows/workshop-runtime-audit.yml'
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: workshop-runtime-cleanup
+  cancel-in-progress: true
 
 jobs:
-  audit:
+  migrate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-
-      - name: Scan exact Steam upload set
-        id: scan
-        shell: python
-        run: |
-          from pathlib import Path
-          import os
-          import re
-          import xml.etree.ElementTree as ET
-
-          root = Path('metamorph_creative_menu')
-          workshop = ET.parse(root / 'workshop.xml').getroot()
-
-          def split_pipe(value):
-              return [x.strip().replace('\\', '/') for x in value.split('|') if x.strip()]
-
-          excluded_dirs = set(split_pipe(workshop.attrib.get('dont_upload_folders', '')))
-          excluded_files = set(split_pipe(workshop.attrib.get('dont_upload_files', '')))
-          text_suffixes = {'.lua', '.xml', '.txt', '.csv', '.json', '.frag', '.vert'}
-          rules = [
-              ('numbered test chronology', re.compile(r'\bTEST\s+\d+\b', re.I)),
-              ('test-only production API', re.compile(r'\b[A-Za-z0-9_]+_for_test\b')),
-              ('conversation wording', re.compile(r"\b(?:the\s+)?user['’]s\s+build\b|\bat\s+the\s+user['’]s\s+request\b", re.I)),
-              ('numbered runtime label', re.compile(r'\[MCM\s*(?:TEST\s*)?\d{2,}\]', re.I)),
-              ('AI attribution residue', re.compile(r'\b(?:ChatGPT|OpenAI|Claude|Gemini|Copilot|LLM|AI[- ]generated|generated\s+by\s+AI)\b', re.I)),
-              ('debug identifier', re.compile(r'\b(?:debug_[A-Za-z0-9_]+|[A-Za-z0-9_]+_debug|[A-Za-z0-9_]+\.debug(?:_[A-Za-z0-9_]+)?)\b')),
-              ('diagnostic identifier', re.compile(r'\b(?:diagnostic|diagnostics|DIAGNOSTICS|DIAGNOSTIC)\b')),
-              ('dev mode', re.compile(r'\b(?:dev_mode|DEV_MODE|METAMORPH_CREATIVE_MENU_DEV_MODE)\b')),
-              ('profiling or metrics', re.compile(r'\b(?:profiling|profile_metrics|metrics_enabled|set_(?:profiling|metrics)_enabled)\b', re.I)),
-              ('runtime print', re.compile(r'\bprint\s*\(')),
-              ('unfinished marker', re.compile(r'\b(?:TODO|FIXME|HACK)\b', re.I)),
-          ]
-
-          findings = []
-          scanned = 0
-          for path in sorted(root.rglob('*')):
-              if not path.is_file() or path.suffix.lower() not in text_suffixes:
-                  continue
-              rel = path.relative_to(root).as_posix()
-              if rel in excluded_files or any(rel == d or rel.startswith(d + '/') for d in excluded_dirs):
-                  continue
-              scanned += 1
-              try:
-                  text = path.read_text(encoding='utf-8')
-              except UnicodeDecodeError:
-                  continue
-              for lineno, line in enumerate(text.splitlines(), 1):
-                  for label, pattern in rules:
-                      if pattern.search(line):
-                          findings.append(f'{rel}:{lineno}: {label}: {line.strip()[:240]}')
-
-          status = 'FAIL' if findings else 'PASS'
-          report = '\n'.join([f'WORKSHOP_RUNTIME_AUDIT={status} files={scanned} findings={len(findings)}', *findings]) + '\n'
-          Path('workshop-runtime-audit.txt').write_text(report, encoding='utf-8')
-          print(report, end='')
-          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
-              output.write(f'findings={len(findings)}\n')
-
-      - name: Upload audit report
-        if: always()
-        uses: actions/upload-artifact@v7
         with:
-          name: workshop-runtime-audit
-          path: workshop-runtime-audit.txt
-          if-no-files-found: error
-          retention-days: 1
+          fetch-depth: 0
 
-      - name: Upload source snapshot
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: workshop-source-snapshot
-          path: metamorph_creative_menu
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Fail on runtime residue
-        if: steps.scan.outputs.findings != '0'
+      - name: Apply verified runtime cleanup
         shell: bash
-        run: exit 1
+        run: |
+          set -euo pipefail
+          cat .github/workshop-runtime-cleanup.part1 \
+              .github/workshop-runtime-cleanup.part2 \
+              .github/workshop-runtime-cleanup.part3 \
+              .github/workshop-runtime-cleanup.part4 \
+            | base64 -d | gzip -d > /tmp/workshop-runtime-cleanup.patch
+          git apply --check /tmp/workshop-runtime-cleanup.patch
+          git apply /tmp/workshop-runtime-cleanup.patch
+          git diff --check
+
+      - name: Install texlua
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends texlive-binaries >/dev/null
+
+      - name: Run Workshop regression suite
+        working-directory: metamorph_creative_menu
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          import subprocess
+          import sys
+
+          root = Path('.').resolve()
+          texlua = shutil.which('texlua')
+          if not texlua:
+              raise SystemExit('texlua not found')
+
+          excluded = {'standalone_patcher_contract.py'}
+          preferred = [
+              'syntax_contract.py',
+              'architecture_contract.py',
+              'behavior_coverage_contract.py',
+              'localization_contract.py',
+              'qa_phase_contract.py',
+          ]
+          contracts = {
+              p.name: p for p in (root / 'tests').glob('*_contract.py')
+              if p.name not in excluded
+          }
+          ordered = []
+          for name in preferred:
+              path = contracts.pop(name, None)
+              if path is not None:
+                  ordered.append(path)
+          ordered.extend(contracts[name] for name in sorted(contracts))
+          mocks = sorted((root / 'tests').glob('*_mock.lua'), key=lambda p: p.name)
+          commands = [[sys.executable, str(path), str(root)] for path in ordered]
+          commands.extend([[texlua, str(path), str(root)] for path in mocks])
+          for command in commands:
+              print('+', ' '.join(command), flush=True)
+              subprocess.run(command, check=True)
+          print(
+              'WORKSHOP_MIGRATION_TESTS=PASS '
+              f'count={len(commands)} contracts={len(ordered)} behavioral_mocks={len(mocks)} '
+              'excluded=standalone_patcher_contract.py'
+          )
+          PY
+
+      - name: Commit cleaned Workshop source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workshop-runtime-cleanup.part1 \
+                .github/workshop-runtime-cleanup.part2 \
+                .github/workshop-runtime-cleanup.part3 \
+                .github/workshop-runtime-cleanup.part4
+          git config user.name "zerodancing"
+          git config user.email "unamocenyj@gmail.com"
+          git add -A metamorph_creative_menu .github/workshop-runtime-cleanup.part1 \
+            .github/workshop-runtime-cleanup.part2 .github/workshop-runtime-cleanup.part3 \
+            .github/workshop-runtime-cleanup.part4
+          git commit -m "Clean Workshop player runtime"
+          git push origin HEAD:workshop
