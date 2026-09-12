@@ -8,6 +8,8 @@ on:
       - 'tools/build_user_release.py'
       - 'tools/validate_user_release.py'
       - 'tools/check_source_hygiene.py'
+      - 'tools/import_source_archive.py'
+      - 'tools/test_repository_tools.py'
       - '.github/workflows/publish-ready-build.yml'
   workflow_dispatch:
 
@@ -26,6 +28,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check repository tooling
+        run: |
+          python -m compileall -q tools
+          python tools/test_repository_tools.py
+
       - name: Install Lua test runtime
         shell: bash
         run: |
@@ -35,19 +42,15 @@ jobs:
           fi
 
       - name: Check source hygiene
-        shell: bash
         run: python tools/check_source_hygiene.py .
 
       - name: Run regression suite
-        shell: bash
         run: python metamorph_creative_menu/tests/run_all.py metamorph_creative_menu
 
       - name: Build player package
-        shell: bash
         run: python tools/build_user_release.py metamorph_creative_menu Metamorph-Creative-Menu.zip
 
       - name: Validate player package
-        shell: bash
         run: python tools/validate_user_release.py Metamorph-Creative-Menu.zip
 
       - name: Publish stable download URL
