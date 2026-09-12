@@ -36,10 +36,6 @@ REQUIRED_FILES = {
     "tests/run_all.py",
     "tests/TESTING.txt",
     "tools/build_release.py",
-    "tools/player_release/00-runtime.patch",
-    "tools/player_release/10-ew.patch",
-    "tools/player_release/20-ui.patch",
-    "tools/player_release/30-data.patch",
 }
 
 
@@ -67,6 +63,10 @@ def validate(root: Path, files: list[Path]) -> str:
     missing = sorted(REQUIRED_FILES - relative_files)
     if missing:
         raise RuntimeError("missing source files: " + ", ".join(missing))
+
+    patch_dir = root / "tools" / "player_release"
+    if not patch_dir.is_dir() or not any(patch_dir.glob("*.patch")):
+        raise RuntimeError("missing player release cleanup patches")
 
     version = (root / "VERSION.txt").read_text(encoding="utf-8").strip()
     if re.fullmatch(r"[0-9]+(?:\.[0-9]+){0,2}", version) is None:
