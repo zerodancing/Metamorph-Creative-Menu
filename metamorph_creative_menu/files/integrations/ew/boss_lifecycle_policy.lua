@@ -1,5 +1,5 @@
 -- Runtime traits, not a list of vanilla filenames: inherited/custom mod XML works too.
--- Kolmisilma retains her separately tested TEST 31 encounter lifecycle.
+-- Kolmisilma keeps its dedicated encounter lifecycle.
 local policy = {}
 local KOLMI = "data/entities/animals/boss_centipede/boss_centipede.xml"
 policy.EVENTS = "mcm32_boss_death_events_v1"
