@@ -92,15 +92,15 @@ jobs:
               Path('metamorph_creative_menu/native_src/mcm_native_gameover.c'),
               Path('metamorph_creative_menu/mcm_native_gameover.lib'),
               Path('metamorph_creative_menu/tools/build_release.py'),
-              Path('metamorph_creative_menu/tools/player_release/00-runtime.patch'),
-              Path('metamorph_creative_menu/tools/player_release/10-ew.patch'),
-              Path('metamorph_creative_menu/tools/player_release/20-ui.patch'),
-              Path('metamorph_creative_menu/tools/player_release/30-data.patch'),
               Path('metamorph_creative_menu/NoitaPatcher/noitapatcher.dll'),
           ]
           missing = [str(path) for path in required if not path.is_file()]
           if missing:
               raise SystemExit('Missing required source files: ' + ', '.join(missing))
+
+          release_patches = sorted(Path('metamorph_creative_menu/tools/player_release').glob('*.patch'))
+          if not release_patches:
+              raise SystemExit('Missing player release cleanup patches')
 
           version = Path('metamorph_creative_menu/VERSION.txt').read_text(encoding='utf-8').strip()
           if not re.fullmatch(r'[0-9]+(?:\.[0-9]+){0,2}', version):
