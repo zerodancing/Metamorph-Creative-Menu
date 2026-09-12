@@ -7,7 +7,10 @@ import argparse
 import re
 from pathlib import Path
 
-TEXT_SUFFIXES = {".lua", ".py", ".md", ".txt", ".xml", ".yml", ".yaml", ".csv", ".c", ".h", ".patch"}
+TEXT_SUFFIXES = {
+    ".lua", ".py", ".md", ".txt", ".xml", ".yml", ".yaml", ".csv",
+    ".c", ".h", ".patch", ".bat", ".cmd", ".ps1", ".sh",
+}
 SKIP_PARTS = {".git", "__pycache__", ".pytest_cache", "dist"}
 SKIP_FILES = {
     "tools/check_source_hygiene.py",
