@@ -1,0 +1,108 @@
+name: One-time EW pixel-scene anchor maintenance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/maintenance-ew-anchor.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: one-time-ew-anchor-maintenance
+  cancel-in-progress: false
+
+jobs:
+  rewrite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rewrite anchor and regenerate player patch
+        shell: python
+        run: |
+          from __future__ import annotations
+
+          import shutil
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          relative = Path('metamorph_creative_menu/files/integrations/ew/resilience_patches.lua')
+          source = Path(relative)
+          patch_file = Path('metamorph_creative_menu/tools/player_release/10-ew-05.patch')
+          upstream_comment = "    -- TODO there are a couple more parameters, tho they don't seem to be used in vanilla\n"
+
+          original = source.read_text(encoding='utf-8')
+          occurrences = original.count(upstream_comment)
+          if occurrences != 2:
+              raise SystemExit(f'Expected exactly two upstream TODO anchor lines, found {occurrences}')
+
+          with tempfile.TemporaryDirectory(prefix='mcm-ew-anchor-') as temp:
+              stage_root = Path(temp)
+              clean_file = stage_root / relative
+              clean_file.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(source, clean_file)
+
+              patch_result = subprocess.run(
+                  ['patch', '-p0', '--batch', '--fuzz=0', '-d', str(stage_root), '-i', str(patch_file.resolve())],
+                  text=True,
+                  capture_output=True,
+              )
+              if patch_result.returncode != 0:
+                  raise SystemExit(
+                      'Current player cleanup patch does not apply before migration:\n'
+                      + patch_result.stdout + patch_result.stderr
+                  )
+
+              source.write_text(original.replace(upstream_comment, ''), encoding='utf-8')
+
+              diff_result = subprocess.run(
+                  [
+                      'diff', '-u',
+                      '--label', relative.as_posix(),
+                      '--label', relative.as_posix(),
+                      str(source), str(clean_file),
+                  ],
+                  text=True,
+                  capture_output=True,
+              )
+              if diff_result.returncode != 1 or not diff_result.stdout:
+                  raise SystemExit(
+                      f'Could not regenerate player cleanup patch (diff rc={diff_result.returncode})\n'
+                      + diff_result.stderr
+                  )
+              patch_file.write_text(diff_result.stdout, encoding='utf-8')
+
+          if upstream_comment in source.read_text(encoding='utf-8'):
+              raise SystemExit('Upstream TODO text still exists in production patcher source')
+
+      - name: Install Lua test runtime
+        shell: bash
+        run: |
+          if ! command -v texlua >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y texlive-binaries
+          fi
+
+      - name: Verify repository after migration
+        shell: bash
+        run: |
+          python tools/check_source_hygiene.py .
+          python metamorph_creative_menu/tests/run_all.py metamorph_creative_menu
+          python metamorph_creative_menu/tools/build_release.py /tmp/Metamorph-Creative-Menu-source-check.zip
+          python tools/build_user_release.py metamorph_creative_menu /tmp/Metamorph-Creative-Menu-player-check.zip
+          python tools/validate_user_release.py /tmp/Metamorph-Creative-Menu-player-check.zip
+
+      - name: Commit migration and remove one-time workflow
+        shell: bash
+        run: |
+          rm .github/workflows/maintenance-ew-anchor.yml
+          git config user.name "zerodancing"
+          git config user.email "194230808+zerodancing@users.noreply.github.com"
+          git add -A
+          git commit -m "Remove upstream comment dependency from EW patch"
+          git push
