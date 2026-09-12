@@ -6,6 +6,7 @@ on:
       - 'Metamorph-Creative-Menu-v*.zip'
       - 'Metamorph-Creative-Menu-v*.ZIP'
       - 'tools/import_source_archive.py'
+      - 'tools/test_repository_tools.py'
       - '.github/workflows/import-mod-archive.yml'
   workflow_dispatch:
 
@@ -24,6 +25,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Check repository tooling
+        run: |
+          python -m compileall -q tools
+          python tools/test_repository_tools.py
 
       - name: Import source archive
         id: import
