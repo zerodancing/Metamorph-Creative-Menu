@@ -3,10 +3,11 @@ name: Publish ready-to-install build
 on:
   push:
     branches: [main]
+    paths:
+      - 'metamorph_creative_menu/**'
+      - 'tools/build_user_release.py'
+      - '.github/workflows/publish-ready-build.yml'
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Import full MCM archive"]
-    types: [completed]
 
 permissions:
   contents: write
@@ -17,48 +18,86 @@ concurrency:
 
 jobs:
   publish:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main
 
-      - name: Validate release links and mod entrypoints
+      - name: Install Lua test runtime
         shell: bash
         run: |
-          grep -Fq 'releases/download/latest-build/Metamorph-Creative-Menu.zip' README.md
-          test -f metamorph_creative_menu/mod.xml
-          test -f metamorph_creative_menu/init.lua
-          test "$(tr -d '\r\n ' < metamorph_creative_menu/VERSION.txt)" = '3.0.0'
+          if ! command -v texlua >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y texlive-binaries
+          fi
 
-      - name: Package playable mod
+      - name: Check source hygiene
         shell: bash
+        run: python tools/check_source_hygiene.py metamorph_creative_menu
+
+      - name: Run regression suite
+        shell: bash
+        run: python metamorph_creative_menu/tests/run_all.py metamorph_creative_menu
+
+      - name: Build player package
+        shell: bash
+        run: python tools/build_user_release.py metamorph_creative_menu Metamorph-Creative-Menu.zip
+
+      - name: Validate player package
+        shell: python
         run: |
-          rm -f Metamorph-Creative-Menu.zip
-          zip -r -9 Metamorph-Creative-Menu.zip metamorph_creative_menu \
-            -x 'metamorph_creative_menu/tests/*' \
-               'metamorph_creative_menu/README.txt'
-          unzip -l Metamorph-Creative-Menu.zip | grep -q 'metamorph_creative_menu/mod.xml'
-          unzip -l Metamorph-Creative-Menu.zip | grep -q 'metamorph_creative_menu/init.lua'
-          unzip -p Metamorph-Creative-Menu.zip metamorph_creative_menu/VERSION.txt | tr -d '\r\n ' | grep -qx '3.0.0'
+          import zipfile
+
+          archive = 'Metamorph-Creative-Menu.zip'
+          forbidden = (
+              '/tests/', '/files/qa/', '/files/diagnostics/', '/native_src/', '/tools/',
+          )
+          forbidden_files = {
+              'metamorph_creative_menu/BUILD.txt',
+              'metamorph_creative_menu/CHANGELOG.txt',
+              'metamorph_creative_menu/VERSION.txt',
+              'metamorph_creative_menu/dev_mode.lua',
+              'metamorph_creative_menu/mcm_native_gameover.lib',
+              'metamorph_creative_menu/mod_id.txt',
+              'metamorph_creative_menu/files/core/bounded_log.lua',
+              'metamorph_creative_menu/files/features/creatures/diagnostics.lua',
+              'metamorph_creative_menu/files/integrations/ew/bridge/qa.lua',
+              'metamorph_creative_menu/files/integrations/ew/bridge/qa_reserved.lua',
+          }
+
+          with zipfile.ZipFile(archive) as zf:
+              names = {name for name in zf.namelist() if not name.endswith('/')}
+              required = {
+                  'metamorph_creative_menu/mod.xml',
+                  'metamorph_creative_menu/init.lua',
+                  'metamorph_creative_menu/README.txt',
+                  'metamorph_creative_menu/NoitaPatcher/noitapatcher.dll',
+                  'metamorph_creative_menu/mcm_native_gameover.dll',
+              }
+              missing = sorted(required - names)
+              if missing:
+                  raise SystemExit('Missing runtime files: ' + ', '.join(missing))
+              bad = sorted(name for name in names if name in forbidden_files or any(part in name for part in forbidden))
+              if bad:
+                  raise SystemExit('Development files leaked into player package: ' + ', '.join(bad[:20]))
+              readme = zf.read('metamorph_creative_menu/README.txt').decode('utf-8')
+              if readme != 'Creator: zerodancing\n':
+                  raise SystemExit('Player README.txt is not the minimal creator notice')
 
       - name: Publish stable download URL
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          version="$(tr -d '\r\n ' < metamorph_creative_menu/VERSION.txt)"
           git tag -f latest-build HEAD
           git push origin refs/tags/latest-build --force
 
+          notes="Ready-to-install Metamorph: Creative Menu ${version}. Development and QA files are excluded from this archive."
           if gh release view latest-build >/dev/null 2>&1; then
             gh release upload latest-build Metamorph-Creative-Menu.zip --clobber
-            gh release edit latest-build \
-              --title "Latest ready-to-install build" \
-              --notes "Automatically packaged from the current main branch. Download Metamorph-Creative-Menu.zip, then copy the included metamorph_creative_menu folder into Noita/mods/."
+            gh release edit latest-build --title "Metamorph: Creative Menu ${version}" --notes "$notes"
           else
-            gh release create latest-build Metamorph-Creative-Menu.zip \
-              --title "Latest ready-to-install build" \
-              --notes "Automatically packaged from the current main branch. Download Metamorph-Creative-Menu.zip, then copy the included metamorph_creative_menu folder into Noita/mods/."
+            gh release create latest-build Metamorph-Creative-Menu.zip --title "Metamorph: Creative Menu ${version}" --notes "$notes"
           fi
