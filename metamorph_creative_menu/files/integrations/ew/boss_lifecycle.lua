@@ -2,7 +2,6 @@
 -- release a dead global root. Never infer a custom boss's final death from HP alone.
 local lifecycle = {}
 local policy = dofile("mods/metamorph_creative_menu/files/integrations/ew/boss_lifecycle_policy.lua")
-local global_text = dofile("mods/metamorph_creative_menu/files/core/global_text.lua")
 local candidates, observed, pending, retired = {}, {}, {}, {}
 local installed, native_notify = false, nil
 local last_id, next_sweep = 0, 0
@@ -12,12 +11,6 @@ local function resolve(gid)
     local ok, entity = pcall(ewext.find_by_gid, gid)
     return ok, ok and (tonumber(entity) or 0) or 0
 end
-local function report(event, record)
-    local message = event .. " gid=" .. record.gid .. " ent=" .. tostring(record.entity)
-    GlobalsSetValue("mcm32_boss_lifecycle_last_v1", global_text.encode_diagnostic(message))
-    print("[MCM32 Boss] " .. message)
-end
-
 local function discover(entity)
     if policy.is_boss(entity) then candidates[entity] = true end
 end
@@ -125,13 +118,11 @@ local function submit(record, reason)
     if not sent then
         if record.error ~= tostring(failure) then
             record.error = tostring(failure)
-            report("notify_failed:" .. record.error, record)
         end
         return
     end
     record.reason = reason
     pending[record.gid] = record
-    report("queued:" .. reason, record)
 end
 
 local function before_update()
@@ -182,7 +173,6 @@ local function after_update()
             pending[gid] = nil
             observed[record.entity], candidates[record.entity] = nil, nil
             GlobalsSetValue(policy.EVENT_GID .. tostring(record.entity), "")
-            report("committed:" .. record.reason, record)
             if record.reason == "reconstruction" then quiet_kill(record.entity, gid) end
         elseif ok and entity ~= record.entity then
             retired[gid] = retired[gid] or record.entity
@@ -205,7 +195,7 @@ function lifecycle.install()
     if type(native_new) == "function" then
         ewext.module_on_new_entity = function(arr, len)
             for _, entity in ipairs(arr or {}) do
-                discover(entity) -- before TEST 21 demotion hides the healthbar
+                discover(entity) -- discover before the demotion layer hides the health bar
                 last_id = math.max(last_id, entity)
             end
             return native_new(arr, len)
@@ -243,7 +233,6 @@ function lifecycle.install()
         return result
     end
     installed = true
-    GlobalsSetValue("mcm32_boss_lifecycle_ready_v1", "1")
     return true
 end
 
