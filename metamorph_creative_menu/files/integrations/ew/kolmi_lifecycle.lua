@@ -10,12 +10,6 @@ local observed, pending, retired = {}, {}, {}
 local installed = false
 local native_notify
 
-local function diagnostic(event, record)
-    local message = event .. " gid=" .. record.gid .. " ent=" .. tostring(record.entity)
-    GlobalsSetValue("mcm31_kolmi_lifecycle_last_v1", message)
-    print("[MCM31 Kolmi] " .. message)
-end
-
 local function alive(entity)
     return EntityGetIsAlive(entity) == true
 end
@@ -89,13 +83,11 @@ local function submit(record, reason, responsible)
     if not sent then
         if record.error ~= tostring(failure) then
             record.error = tostring(failure)
-            diagnostic("notify_failed:" .. record.error, record)
         end
         return
     end
     record.reason = reason
     pending[record.gid] = record
-    diagnostic("queued:" .. reason, record)
 end
 
 local function observe()
@@ -118,10 +110,6 @@ local function observe()
                     record.hp = damage and tonumber(ComponentGetValue2(damage, "hp")) or nil
                     record.kill = damage and ComponentGetValue2(damage, "kill_now") == true
                     record.uninitialized = uninitialized(entity)
-                    if first_observation then
-                        diagnostic("observed:hp=" .. tostring(record.hp)
-                            .. ":uninitialized=" .. tostring(record.uninitialized), record)
-                    end
                 end
             end
         end
@@ -171,7 +159,6 @@ local function after_update()
             pending[gid] = nil
             observed[record.entity] = nil
             GlobalsSetValue(REQUEST .. tostring(record.entity), "")
-            diagnostic("committed:" .. record.reason, record)
             if record.reason ~= "death" then quiet_kill(record.entity) end
         elseif ok and entity ~= record.entity then
             -- A queued authority message may recreate the same GID. Observe it below
