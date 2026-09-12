@@ -1,8 +1,7 @@
--- TEST 24: wait until the creative Kolmisilma is actually owned by this DES peer, then
--- hand encounter activation to a *separate* one-shot Lua VM. Vanilla starts Kolmi from
--- Sampo's item_pickup LuaComponent, not from a LuaComponent on the boss itself. Starting
--- the enable_coroutines combat component from the boss' own update was the last semantic
--- difference in TEST 22/23 and can leave the authored coroutine half-started.
+-- Wait until the creative Kolmisilma is owned by this DES peer, then hand encounter
+-- activation to a separate one-shot Lua VM. Vanilla starts Kolmisilma from Sampo's
+-- item-pickup component, so activation from the boss update VM can leave the authored
+-- coroutine half-started.
 local entity = GetUpdatedEntityID()
 local component = GetUpdatedComponentID()
 local REF_ID_VAR = "mcm_creative_kolmi_reference_id_v3"
