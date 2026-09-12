@@ -20,6 +20,9 @@ return true
 ]]
 local patched,count=patches.patch_material_pixel_scene_source(source)
 assert(count==1 and patched:find('mcm_material_brush_pixel_scene_v1',1,true),'material scene patch did not apply')
+local source_without_upstream_comment=source:gsub("    %-%- TODO there are a couple more parameters, tho they don't seem to be used in vanilla\n",'')
+local patched_without_comment,count_without_comment=patches.patch_material_pixel_scene_source(source_without_upstream_comment)
+assert(count_without_comment==1 and patched_without_comment:find('mcm_material_brush_pixel_scene_v1',1,true),'material scene patch depends on upstream comment text')
 local again,again_count=patches.patch_material_pixel_scene_source(patched)
 assert(again_count==0 and again==patched,'material scene patch not idempotent')
 local unchanged,missing=patches.patch_material_pixel_scene_source('return true')
