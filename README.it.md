@@ -4,625 +4,583 @@
 
 <h1 align="center">Metamorph: Creative Menu</h1>
 
-<p align="center">Un menu creativo e una raccolta di strumenti per Noita: incantesimi, bacchette, oggetti, materiali, vantaggi, creature, trasformazioni, effetti, teletrasporto, meteo, regole del mondo e molto altro.</p>
+<p align="center">Un menu creativo e toolkit sandbox per Noita: incantesimi, bacchette, oggetti, materiali, perk, effetti, creature, trasformazioni, possessione, teletrasporto, meteo, regole del mondo, integrazione multiplayer e strumenti di recupero.</p>
 
-<p align="center"><strong>Versione 2.0.0</strong></p>
+<p align="center"><strong>Creatore e maintainer: <a href="https://github.com/zerodancing">zerodancing</a></strong></p>
 
 ---
 
-# Scarica
+# Download
 
-[**⬇️ Scarica l'ultima versione della mod**](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/download/latest-build/Metamorph-Creative-Menu.zip)
+Per giocare normalmente, usa la build pronta da installare:
 
-Versione attuale: **2.0.0**
+[**⬇️ Scarica la build più recente**](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/download/latest-build/Metamorph-Creative-Menu.zip)
 
-**Per usare la versione completa è necessario consentire le mod non sicure.**
+[Pagina della build più recente](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/tag/latest-build) · [Changelog](metamorph_creative_menu/CHANGELOG.txt)
 
-[Pagina dell'ultima build](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/tag/latest-build)
+La release GitHub viene generata automaticamente dall'albero completo di sviluppo. Test, strumenti QA, diagnostica, sorgenti native e strumenti di build restano nel repository ma vengono esclusi dall'archivio per i giocatori.
 
-[Elenco delle modifiche della versione 2.0.0](metamorph_creative_menu/CHANGELOG.txt)
-
-# Indice
-
-- [Installazione](#installazione)
-- [Versione completa e versione del Workshop di Steam](#versione-completa-e-versione-del-workshop-di-steam)
-- [Informazioni sulla mod](#informazioni-sulla-mod)
-- [Comandi e interfaccia](#comandi-e-interfaccia)
-- [Incantesimi](#incantesimi)
-- [Bacchette](#bacchette)
-- [Oggetti e liquidi](#oggetti-e-liquidi)
-- [Materiali](#materiali)
-- [Vantaggi](#vantaggi)
-- [Effetti](#effetti)
-- [Creature e trasformazioni](#creature-e-trasformazioni)
-- [Ritorno dopo una trasformazione e morte della forma](#ritorno-dopo-una-trasformazione-e-morte-della-forma)
-- [Controllare una creatura](#controllare-una-creatura)
-- [Giocatore](#giocatore)
-- [Meteo e ora](#meteo-e-ora)
-- [Regole del mondo](#regole-del-mondo)
-- [Teletrasporto](#teletrasporto)
-- [Entangled Worlds](#entangled-worlds)
-- [NoitaPatcher e mod non sicure](#noitapatcher-e-mod-non-sicure)
-- [Se qualcosa non funziona](#se-qualcosa-non-funziona)
-- [Segnalare un errore](#segnalare-un-errore)
+La build standalone GitHub include NoitaPatcher e supporto nativo di recupero, quindi **Unsafe Mods deve essere consentito**.
 
 # Installazione
 
-1. [Scarica l'ultima versione della mod](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/download/latest-build/Metamorph-Creative-Menu.zip).
-2. Avvia Noita e apri **Mod** dal menu principale.
-3. Fai clic su **Apri cartella mod**.
-4. Sposta la cartella `metamorph_creative_menu` dall'archivio scaricato nella cartella `mods` che si è aperta. Se `metamorph_creative_menu` è già presente, elimina la vecchia cartella e sostituiscila con quella nuova.
-5. Chiudi la cartella delle mod.
-6. Nel menu delle mod, fai clic su **Aggiorna**. **Metamorph: Creative Menu** dovrebbe comparire nell'elenco.
-7. Fai clic su **Mod non sicure** finché il testo non diventa rosso e mostra **Mod non sicure: Consentite**.
-8. Fai clic sul nome della mod in modo che venga evidenziato e compaia **[x]** davanti. Questo indica che la mod è attiva.
-9. Fai clic su **Avvia una nuova partita con le mod attive**.
-10. Scegli una modalità di gioco e gioca.
+1. Scarica `Metamorph-Creative-Menu.zip` dal link qui sopra.
+2. Avvia Noita e apri **Mods** dal menu principale.
+3. Fai clic su **Open mods folder**.
+4. Estrai o sposta la cartella `metamorph_creative_menu` nella cartella `mods`. Il percorso finale deve contenere direttamente `metamorph_creative_menu/mod.xml`, senza una cartella extra creata dall'archivio.
+5. Se è già presente una copia vecchia, sostituisci l'intera cartella `metamorph_creative_menu` invece di unire file vecchi e nuovi.
+6. Torna in Noita e aggiorna la lista dei mod.
+7. Consenti **Unsafe Mods**.
+8. Attiva **Metamorph: Creative Menu** e avvia una partita con i mod attivi.
 
-# Versione completa e versione del Workshop di Steam
+Non attivare contemporaneamente la build standalone GitHub e la versione Steam Workshop.
 
-La build disponibile su questa pagina GitHub è la versione completa di MCM. Include NoitaPatcher e funzioni che richiedono l'autorizzazione per le mod non sicure.
+# Build standalone e Steam Workshop
 
-La [versione del Workshop di Steam](https://steamcommunity.com/sharedfiles/filedetails/?id=3785170245) si installa separatamente. Non include NoitaPatcher né le funzioni della versione completa che richiedono l'accesso delle mod non sicure.
+La build distribuita tramite questo repository GitHub è la build standalone completa. Include NoitaPatcher e funzioni che richiedono accesso non limitato alla mod API, comprese operazioni a basso livello sui materiali e recupero nativo dopo Game Over.
 
-Non installare né attivare entrambe le versioni contemporaneamente.
+La [build Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3785170245) viene installata separatamente. Non include i componenti nativi necessari alle funzioni disponibili solo nella build standalone.
 
-# Informazioni sulla mod
+Le due build usano la stessa identità del mod. Installarle entrambe può quindi causare file duplicati o in conflitto e non è supportato.
 
-**Metamorph: Creative Menu (MCM)** è un menu creativo e una raccolta di strumenti per Noita.
+# Informazioni sul mod
 
-Riunisce in un'unica interfaccia strumenti per incantesimi, bacchette, oggetti, materiali, vantaggi, effetti, creature, trasformazioni, meteo, regole globali del mondo e teletrasporto.
+**Metamorph: Creative Menu (MCM)** è un menu creativo e toolkit sandbox per Noita.
 
-MCM è adatto sia al gioco libero in modalità creativa sia agli esperimenti con le meccaniche di Noita. Molte operazioni non si limitano alla semplice creazione di una nuova entità, ma tengono conto dello stato già esistente della bacchetta, dell'oggetto, della forma, del vantaggio o del mondo.
+Riunisce strumenti per:
 
-**Entangled Worlds non è necessario.** Senza di esso, MCM funziona come una mod completa per giocatore singolo. Se Entangled Worlds è installato, diventano disponibili ulteriori funzioni multigiocatore sperimentali.
+- incantesimi e inventario degli incantesimi;
+- modifica delle bacchette e preset riutilizzabili;
+- oggetti e contenitori di liquidi;
+- catalogo completo dei materiali e pittura con materiali;
+- perk e rimozione supportata dei perk;
+- status ed entità GameEffect;
+- creature, trasformazioni e possessione;
+- meteo e tempo;
+- regole globali del mondo;
+- teletrasporto;
+- integrazione opzionale con Entangled Worlds;
+- percorsi di recupero dopo trasformazioni, morte della forma e Game Over.
 
-# Comandi e interfaccia
+MCM prova a lavorare sullo stato reale di Noita invece di sostituire tutto con copie decorative. Le carte di incantesimo esistenti vengono spostate come entità, la consegna degli oggetti rispetta la struttura dell'inventario, le modifiche alle bacchette usano percorsi di commit/rollback, i materiali restano materiali realmente simulati e le regole reversibili conservano abbastanza stato originale da ripristinare in seguito le impostazioni supportate.
 
-| Azione | Tasto |
+Entangled Worlds è opzionale. Senza EW, MCM rimane un mod single-player completo.
+
+# Controlli
+
+Controlli predefiniti:
+
+| Azione | Input predefinito |
 | --- | --- |
-| Apri / chiudi il menu creativo | **F4 o TAB** |
-| Torna alla forma umana | **TAB durante una trasformazione** |
-| Prendi il controllo di una creatura | **G** |
-| Disegna con il materiale selezionato | **Pulsante centrale del mouse** |
+| Apri / chiudi il menu creativo | **F4** |
+| Torna alla forma umana durante una trasformazione | **TAB** |
+| Possiedi una creatura nel mondo | **G** |
+| Dipingi con il materiale selezionato | **Tasto centrale del mouse** |
 
-Il pannello MCM è disponibile anche tramite la normale interfaccia dell'inventario.
+Il pannello creativo è disponibile anche tramite la normale interfaccia inventario di Noita.
 
-I tasti possono essere modificati nella sezione **COMANDI** o nelle impostazioni della mod.
+Le associazioni possono essere modificate nella sezione **CONTROLS** di MCM e nelle impostazioni mod di Noita. Sono supportati tasti, pulsanti del mouse e combinazioni esatte con **CTRL / SHIFT / ALT**.
 
-Durante l'assegnazione di un tasto:
+Durante l'assegnazione:
 
-- **DELETE / BACKSPACE** — cancella l'assegnazione;
-- **ESC** — annulla;
-- **R** — ripristina l'assegnazione predefinita;
-- **RIPRISTINA TUTTO** — ripristina tutte le assegnazioni predefinite dopo la conferma.
+- **DELETE / BACKSPACE** cancella l'associazione;
+- **ESC** annulla;
+- **R** ripristina il default per quell'azione;
+- **RESET ALL** ripristina tutte le associazioni predefinite dopo conferma.
 
-Se la stessa combinazione viene assegnata a più azioni, MCM segnala un conflitto.
+Le associazioni duplicate restano modificabili, ma MCM mostra il conflitto invece di sostituire silenziosamente un'altra azione.
 
-## Finestra del menu creativo
+Navigazione del menu, sezioni, ritorno dalla forma, possessione, pittura dei materiali, pulizia degli effetti, rilascio del meteo, reset delle regole del mondo e azioni multiplayer supportate possono essere riassegnati.
 
-La finestra può essere:
+# Finestra Creative Menu
 
-- spostata;
-- ridimensionata in larghezza e altezza;
-- ridimensionata dai bordi e dagli angoli;
-- ridotta a icona;
+Il pannello creativo diretto è una finestra persistente e ridimensionabile, non un overlay di debug fisso.
+
+Può essere:
+
+- spostata tramite la barra del titolo;
+- ridimensionata da bordi e angoli;
+- minimizzata;
 - chiusa;
-- riportata alla disposizione predefinita.
+- ripristinata al layout predefinito.
 
-Dimensioni, posizione e ultima sezione aperta vengono conservate tra un avvio del gioco e l'altro.
+Posizione, larghezza, altezza e ultima sezione aperta vengono ricordate tra le sessioni. Dopo un cambio di risoluzione, la geometria salvata viene riportata nell'area visibile della GUI.
 
-I cataloghi più grandi usano lo scorrimento e si adattano automaticamente alle dimensioni attuali della finestra.
+Liste e cataloghi usano layout misurati e contenitori di scorrimento di Noita. Ridimensionare la finestra cambia immediatamente la quantità di contenuto visibile, mentre le etichette tradotte possono andare a capo senza sovrapporsi ai controlli vicini. Nei layout stretti i controlli passano su righe aggiuntive invece di essere disegnati uno sopra l'altro.
 
-## Ricerca
+Aprire o semplicemente passare il mouse sopra il menu separato non disabilita permanentemente il gameplay. Quando un clic, un drag o un campo di testo attivo potrebbe anche azionare il giocatore, MCM sopprime temporaneamente i controlli rilevanti e li ripristina subito dopo.
 
-La ricerca è disponibile nei cataloghi di:
+# Ricerca e localizzazione
 
-- incantesimi;
-- oggetti;
-- materiali;
-- vantaggi;
-- creature.
+La ricerca è disponibile nei cataloghi principali, inclusi incantesimi, oggetti, materiali, perk e creature.
 
-Può prendere in considerazione non solo il nome visualizzato, ma anche il nome inglese, la chiave di localizzazione, l'identificatore tecnico o il percorso XML.
+A seconda della voce può corrispondere a:
 
-La ricerca non distingue tra maiuscole e minuscole e tollera piccoli errori di battitura nelle parole sufficientemente lunghe.
+- nome nella lingua corrente dell'interfaccia;
+- nome inglese;
+- chiavi di localizzazione;
+- identificatori tecnici;
+- percorsi XML.
 
-L'interfaccia di MCM è localizzata in 11 lingue. Per i normali contenuti di gioco vengono riutilizzate, quando possibile, le traduzioni di Noita.
+La ricerca non distingue maiuscole/minuscole, normalizza accenti e separatori comuni e tollera piccoli errori di battitura nelle query più lunghe.
+
+L'interfaccia propria di MCM è localizzata in:
+
+- inglese;
+- russo;
+- portoghese brasiliano;
+- spagnolo;
+- tedesco;
+- francese;
+- italiano;
+- polacco;
+- cinese semplificato;
+- giapponese;
+- coreano.
+
+Per il contenuto normale di Noita, il mod riusa quando possibile le chiavi di localizzazione del gioco invece di mantenere nomi duplicati.
 
 # Incantesimi
 
-La sezione degli incantesimi permette di lavorare non solo con il catalogo, ma anche con i veri incantesimi del giocatore attuale.
+La sezione degli incantesimi lavora sia con il catalogo sia con le entità incantesimo già possedute dal giocatore.
 
-Sono disponibili contemporaneamente:
+L'area principale contiene:
 
-- gli slot della bacchetta attiva;
-- **SEMPRE ATTIVO**;
-- l'inventario degli incantesimi;
-- il catalogo degli incantesimi.
+- slot normali della bacchetta attiva;
+- carte **ALWAYS CAST**;
+- inventario degli incantesimi del giocatore;
+- catalogo ricercabile degli incantesimi.
 
-## Sostituzione rapida
+## Sostituzione rapida dello slot selezionato
 
-Puoi selezionare uno slot preciso della bacchetta e fare clic sinistro sull'incantesimo desiderato nel catalogo. L'incantesimo verrà inserito nello slot selezionato.
+Un clic breve seleziona uno slot della bacchetta. Poi un clic LMB breve su un incantesimo del catalogo sostituisce quello slot.
 
-## Trascinamento
+È il percorso rapido per la modifica normale. Per gli spostamenti precisi si usa il drag-and-drop.
 
-Gli incantesimi esistenti possono essere spostati:
+## Drag-and-drop transazionale
+
+Le carte esistenti possono essere trascinate:
 
 - tra gli slot della bacchetta;
-- in **SEMPRE ATTIVO**;
-- da **SEMPRE ATTIVO** di nuovo negli slot normali;
-- in uno slot preciso dell'inventario degli incantesimi;
+- dagli slot normali a **ALWAYS CAST**;
+- da **ALWAYS CAST** agli slot normali;
+- in uno slot preciso dell'inventario incantesimi;
 - dall'inventario alla bacchetta;
-- nel mondo di gioco;
-- nel cestino.
+- nel mondo;
+- nel cestino quando supportato.
 
-Per le carte incantesimo già esistenti, MCM cerca di spostare la vera entità di gioco invece di crearne una nuova copia. In questo modo può conservare lo stato modificato della carta, compreso quello aggiunto da altre mod.
+Per una carta esistente, MCM sposta l'entità reale quando possibile. Stato mutabile, usi rimanenti e dati aggiunti da altri mod non vengono quindi persi solo perché la carta cambia posizione.
 
-L'incantesimo di origine rimane al suo posto finché la nuova destinazione non viene confermata. Un'operazione non riuscita o non consentita non dovrebbe distruggere la carta originale.
+La sorgente resta intatta finché la transazione di destinazione non viene confermata. Destinazioni non valide o sconosciute annullano l'operazione invece di cancellare la carta originale. Un rilascio del mouse esegue al massimo una singola operazione confermata.
 
-## Sempre attivo
+Le carte del catalogo sono template e non vengono mai consumate trascinandole.
 
-Gli incantesimi permanenti hanno una propria area.
+## Always Cast
 
-Quando si spostano incantesimi tra gli slot normali e **SEMPRE ATTIVO**, MCM tiene conto della capacità della bacchetta in modo che la struttura degli slot normali rimanga corretta.
+Le carte Always Cast hanno una fascia dedicata. Promozione, retrocessione e scambio tengono conto della capacità effettiva degli slot normali per evitare una struttura di bacchetta non valida.
 
-## Annulla / Ripeti
+## Annulla e ripeti
 
-Per le modifiche interne della bacchetta è disponibile una cronologia limitata **ANNULLA / RIPETI**.
+Le mutazioni interne della bacchetta dispongono di una cronologia limitata **UNDO / REDO**.
 
-Si applica alle operazioni che possono essere ripristinate in modo sicuro a partire dallo stato della bacchetta stessa.
-
-Il trasferimento di un vero incantesimo nel mondo esterno o nel normale inventario di gioco non può sempre essere annullato correttamente ripristinando soltanto lo stato della bacchetta. Per questo motivo tali azioni non sono sempre annullabili.
+Le operazioni che consegnano una vera entità al mondo esterno o a un altro inventario non possono sempre essere invertite in sicurezza da uno snapshot della bacchetta, quindi questi trasferimenti esterni non sono garantiti come sempre annullabili.
 
 # Bacchette
 
-MCM include un editor completo della bacchetta attiva.
+L'area bacchetta modifica la bacchetta attualmente impugnata dal giocatore.
 
-È possibile modificare:
+Le statistiche supportate includono:
 
-- il numero di slot;
-- gli incantesimi per lancio;
-- il tempo di ricarica;
-- il ritardo tra i lanci;
-- la dispersione;
-- il moltiplicatore della velocità dei proiettili;
-- il mana massimo;
-- la ricarica del mana;
-- il recupero del rinculo;
-- il livello della bacchetta;
-- la mescola;
-- la modalità senza ricarica.
+- capacità / slot;
+- incantesimi per cast;
+- tempo di ricarica;
+- ritardo tra i cast;
+- dispersione;
+- moltiplicatore velocità proiettili;
+- mana massimo;
+- velocità di ricarica mana;
+- recupero rinculo;
+- livello della bacchetta;
+- shuffle;
+- comportamento senza ricarica.
 
-È inoltre possibile modificare l'aspetto e i parametri correlati:
+MCM modifica anche presentazione e metadati correlati:
 
-- il nome visualizzato;
-- i blocchi;
-- l'immagine della bacchetta;
-- lo spostamento dell'immagine;
-- il punto di sparo.
+- nome mostrato;
+- blocchi della bacchetta e delle carte;
+- percorso sprite;
+- offset dello sprite;
+- posizione di sparo.
 
-È disponibile un catalogo visivo degli aspetti delle bacchette.
+Un catalogo visivo di aspetto segue i dati XML delle bacchette quando disponibili.
 
-## Bacchette salvate
+## Preset delle bacchette
 
-Una bacchetta può essere salvata per riutilizzarne in seguito lo stato memorizzato.
+Le bacchette possono essere salvate come preset persistenti con nome e riutilizzate in altri mondi o sessioni future di Noita.
 
-Vengono salvati:
+Un preset può conservare:
 
-- le caratteristiche;
-- il mana;
-- l'aspetto;
-- gli incantesimi normali;
-- **SEMPRE ATTIVO**;
-- la disposizione delle carte;
-- gli utilizzi rimanenti;
-- lo stato congelato delle carte.
+- statistiche della bacchetta;
+- valori di mana;
+- metadati visivi;
+- carte normali;
+- carte Always Cast;
+- posizioni degli slot;
+- usi rimanenti;
+- stato congelato delle carte.
 
-Le bacchette salvate restano disponibili tra mondi diversi e nei successivi avvii di Noita.
+Ogni preset ha due operazioni separate:
 
-### Applica
+- **APPLY** scrive il blueprint salvato sulla bacchetta attualmente impugnata;
+- **GET COPY** costruisce una nuova bacchetta dallo stesso blueprint.
 
-**APPLICA** applica lo stato salvato alla bacchetta che il giocatore possiede in quel momento.
+La copia viene inserita in uno slot libero per bacchette dell'inventario rapido quando possibile. Se non c'è uno slot adatto, la bacchetta completa viene lasciata nel mondo vicino al giocatore.
 
-### Copia
-
-**COPIA** crea una copia separata della bacchetta salvata.
-
-Se nell'inventario rapido c'è uno slot adatto libero, la nuova bacchetta viene inserita lì. In caso contrario viene creata nel mondo di gioco accanto al giocatore.
-
-Se la creazione non può essere completata correttamente, MCM cerca di rimuovere l'entità incompleta.
+Sostituzione della bacchetta e caricamento dei preset usano percorsi di commit/rollback. Se costruzione o posizionamento non possono essere completati, MCM prova a rimuovere l'albero entità incompleto invece di lasciare una bacchetta parziale danneggiata.
 
 # Oggetti e liquidi
 
 ## Oggetti
 
-**Clic sinistro** su una voce del catalogo crea un oggetto accanto al giocatore.
+Un clic breve **LMB** su una voce del catalogo crea un oggetto supportato vicino al giocatore.
 
-**Clic destro** prova a inserire l'oggetto direttamente nell'inventario.
+**RMB** tenta di consegnarlo alla zona corretta dell'inventario.
 
-Un oggetto può anche essere trascinato:
+Le voci del catalogo possono anche essere trascinate:
 
-- in un'area compatibile dell'inventario rapido;
-- fuori dal menu, nel punto scelto del mondo di gioco.
+- verso una destinazione compatibile dell'inventario rapido;
+- fuori dal menu verso una posizione esatta del mondo.
 
-Se la carta viene rilasciata all'interno del menu senza una destinazione valida, l'operazione viene annullata.
+Rilasciare la carta dentro il menu senza una destinazione valida annulla l'operazione. La carta del catalogo è solo un template e resta disponibile.
 
-Il catalogo contiene modelli, quindi la voce non scompare dopo la creazione di un oggetto.
+MCM rispetta la normale separazione dell'inventario rapido di Noita tra slot per bacchette e slot per oggetti. Un errore nel caricamento XML, riempimento di liquidi, consegna all'inventario o handoff multiplayer opzionale rimuove la nuova entità quando possibile.
 
-MCM rispetta la normale suddivisione dell'inventario rapido di Noita tra slot per bacchette e slot per oggetti e non dovrebbe sostituire senza motivo un oggetto già presente.
+Alcuni veri oggetti da inventario si trovano in directory del gioco orientate alle creature. MCM classifica i casi noti in base al comportamento invece di assumere che il nome della cartella da solo determini se qualcosa sia un oggetto o una creatura.
 
 ## Liquidi
 
-MCM può creare veri contenitori di gioco riempiti con il liquido selezionato.
+Le voci dei liquidi creano veri contenitori Noita già riempiti, non oggetti decorativi dell'interfaccia.
 
-Il contenitore creato si comporta come un normale oggetto di Noita:
-
-- può essere conservato nell'inventario;
-- lanciato nel mondo;
-- rotto;
-- può versare il proprio contenuto;
-- partecipa alle normali reazioni tra materiali.
+Il contenitore può essere portato, lasciato cadere, rotto e versato, e il contenuto partecipa alle normali reazioni dei materiali.
 
 # Materiali
 
-Il catalogo dei materiali viene costruito a partire dalle sostanze registrate nell'istanza corrente di Noita.
+La sezione Materials è uno strumento di pittura del mondo basato sul vero registro dei materiali di Noita.
 
-Comprende diversi tipi di materiali, tra cui:
+Il catalogo viene costruito da liquidi, sabbie / polveri, gas, fuochi, solidi e materiali statici o di effetti registrati dal motore. I materiali aggiunti correttamente da altri mod attivi possono quindi comparire automaticamente.
 
-- liquidi;
-- polveri;
-- gas;
-- fuoco;
-- materiali solidi;
-- materiali statici;
-- materiali con una visualizzazione speciale.
+La scoperta e la validazione costosa dei materiali sono distribuite come lavoro limitato invece di analizzare l'intero catalogo in un singolo frame UI.
 
-Se un'altra mod attiva aggiunge correttamente un proprio materiale a Noita, quel materiale può comparire anche in MCM.
+## Presentazione dei materiali
 
-## Disegnare con i materiali
+I liquidi usano la stessa presentazione con contenitore pieno della sezione Oggetti.
 
-1. Scegli un materiale.
-2. Scegli la dimensione del pennello.
-3. Fai clic su **INIZIA A DIPINGERE**.
+Per i materiali non liquidi, MCM preferisce texture e dati tint definiti in `materials.xml`, incluse le definizioni ereditate. Se non esiste una texture definita, il fallback deriva dal vero colore del materiale nel motore e non da un colore preview arbitrario.
+
+## Pittura
+
+1. Seleziona un materiale.
+2. Seleziona la dimensione del pennello.
+3. Attiva la modalità pittura.
 4. Chiudi l'inventario.
-5. Tieni premuto nel mondo di gioco il tasto assegnato al disegno.
+5. Tieni premuto l'input di disegno configurato nel mondo.
 
-Per impostazione predefinita viene usato il **pulsante centrale del mouse**.
+Aprire l'inventario interrompe la modalità pittura attiva.
 
-Aprire l'inventario interrompe la modalità di disegno.
+La pittura non emette semplicemente particelle decorative. MCM inserisce celle reali nel mondo tramite un percorso appropriato al motore. I materiali dinamici continuano a seguire la simulazione di Noita: i liquidi scorrono, le polveri cadono, i gas si muovono, il fuoco reagisce e le sostanze instabili possono trasformarsi tramite reazioni materiali.
 
-## Comportamento dei materiali
+Classi diverse richiedono strategie di posizionamento diverse. La build standalone può usare l'accesso diretto di NoitaPatcher alla griglia del mondo e un piccolo fallback PixelScene per casi definiti che Noita rifiuta di costruire direttamente in una determinata coordinata della texture.
 
-MCM crea veri materiali del mondo di gioco, non particelle decorative.
+Le code di lavoro sono limitate, così mantenere un pennello grande non esegue intenzionalmente una quantità illimitata di lavoro in un singolo frame.
 
-Dopo essere stati posizionati, continuano a seguire la normale simulazione di Noita:
+# Perk
 
-- i liquidi scorrono;
-- le polveri cadono;
-- i gas si diffondono;
-- il fuoco interagisce con l'ambiente;
-- le sostanze reagiscono tra loro;
-- i materiali instabili possono trasformarsi in altri materiali.
+## Creare e ricevere perk
 
-Per i diversi tipi di materiale, MCM utilizza metodi di posizionamento adatti, comprese funzioni aggiuntive di NoitaPatcher nei casi che non possono essere gestiti correttamente con i normali strumenti delle mod.
+**LMB** crea un pickup normale del perk selezionato nel mondo.
 
-# Vantaggi
+L'azione di ricezione può concedere il perk singolarmente o in blocco. Le operazioni in blocco vengono processate come job limitati invece di applicare tutte le copie in un solo frame UI.
 
-## Creare un vantaggio
+L'interfaccia mostra l'avanzamento e il lavoro ancora in attesa può essere annullato. Le copie già confermate prima dell'annullamento restano applicate.
 
-**Clic sinistro** crea il vantaggio selezionato nel mondo di gioco.
+Ogni copia concessa continua a usare il normale percorso di applicazione del perk invece di simulare direttamente lo stato finale.
 
-Può essere raccolto come un normale vantaggio di Noita.
+## Rimuovere perk
 
-## Ottenere vantaggi
+Rimuovere un perk è molto più complesso che concederlo. I perk possono modificare globals, componenti, entità, statistiche del giocatore e meccaniche persistenti, e Noita non offre un'operazione inversa universale.
 
-MCM permette di ottenere:
+Per questo MCM rimuove soltanto lo stato per cui dispone di un'inversione tracciata sufficientemente sicura. Il journal della transazione prova a rimuovere solo lo stato appartenente a quella specifica applicazione del perk, senza resettare stato non correlato del giocatore.
 
-- 1 copia;
-- 10 copie;
-- 100 copie.
+Se una pulizia è parziale o non può essere dimostrata completa, resta trattata come incompleta invece di essere riportata silenziosamente come riuscita.
 
-L'ottenimento in massa viene elaborato gradualmente per evitare di eseguire molte operazioni pesanti in un singolo fotogramma.
-
-L'interfaccia mostra l'avanzamento e permette di annullare le operazioni ancora da eseguire. Le copie già ottenute con successo rimangono al giocatore dopo l'annullamento.
-
-## Rimuovere vantaggi
-
-Rimuovere un vantaggio in sicurezza è molto più difficile che ottenerlo.
-
-Alcuni vantaggi modificano contemporaneamente più sistemi di gioco, creano entità o avviano effetti per i quali non esiste un unico metodo universale di annullamento.
-
-Per questo MCM rimuove soltanto le modifiche supportate per le quali può eseguire un'operazione inversa con sufficiente affidabilità.
-
-La mod cerca di annullare soltanto lo stato creato dalla specifica applicazione del vantaggio, senza azzerare inutilmente altri effetti o parametri del giocatore.
+Un perk di terze parti può essere concedibile senza essere correttamente rimovibile.
 
 # Effetti
 
-MCM permette di applicare e rimuovere elementi supportati, tra cui:
+La sezione Effects applica e rimuove status dei materiali ed entità GameEffect supportate.
 
-- effetti di gioco;
-- stati legati ai materiali.
+La rimozione tiene conto della proprietà quando possibile. MCM evita di cancellare indiscriminatamente effetti nascosti simili appartenenti a perk, al gioco o a un altro sistema.
 
-Durante la rimozione, la mod cerca di non toccare stati estranei appartenenti ai vantaggi o ad altri sistemi di gioco.
+Gli effetti persistenti creati da MCM usano pulizia / scadenza limitata, in modo che rimuovere un effetto MCM non resetti stato altrui.
 
-In questo modo è possibile rimuovere gli effetti propri di MCM senza cancellare indiscriminatamente tutti gli stati simili del giocatore.
+# Creature
 
-# Creature e trasformazioni
+Il catalogo delle creature conserva percorsi XML esatti invece di unire tutte le entità con nomi simili.
 
-## Creare creature
+Interazioni supportate:
 
-**Clic sinistro** crea la creatura selezionata accanto al giocatore.
+- **LMB** — crea l'entità definita selezionata vicino al giocatore;
+- trascina fuori dal menu — crea alla posizione confermata del cursore nel mondo;
+- **RMB** — trasforma il giocatore attuale in una forma supportata;
+- voce speciale **PLAYER** — crea o ripristina stato del giocatore come descritto sotto.
 
-La carta di una creatura può anche essere trascinata fuori dal menu per crearla nel punto scelto del mondo di gioco.
+Rilasciare una carta trascinata di nuovo sopra il menu annulla lo spawn nel mondo.
 
-**Clic destro** su una voce supportata tenta di trasformare il giocatore attuale nella forma corrispondente.
+Le regole di compatibilità per forme pericolose o insolite usano percorsi esatti. Un nome file che contiene semplicemente una parola familiare non rende automaticamente l'entità equivalente a un'altra forma.
 
-## Compatibilità delle forme
+# Trasformazioni e ritorno alla forma umana
 
-Le creature di Noita sono molto diverse tra loro nella struttura interna.
+Le forme giocabili conservano movimento nativo utile, attacchi, presentazione e fisica quando pratico. I componenti che competono direttamente con l'input del giocatore possono essere disabilitati o adattati mentre la forma è controllata dal giocatore.
 
-Per questo MCM distingue gli obiettivi di trasformazione in base a percorsi XML esatti e non considera automaticamente intercambiabili tutte le creature simili.
+Alcune creature complesse richiedono logica aggiuntiva. Boss, wrapper scriptati ed entità fortemente dipendenti dalla fisica non sono garantiti a comportarsi esattamente come le versioni controllate dall'IA quando usati come forma del giocatore.
 
-Durante una trasformazione, MCM utilizza le capacità della forma scelta e, se necessario, applica regole di compatibilità specifiche per determinate creature.
+L'azione di ritorno configurata — **TAB** per default — usa prima il normale percorso di fine trasformazione. Quando non basta, la build standalone dispone di percorsi aggiuntivi di ripristino tramite NoitaPatcher.
 
-# Ritorno dopo una trasformazione e morte della forma
+Nei casi supportati di danno letale, MCM prova a:
 
-Puoi tornare alla forma umana con l'azione assegnata, **TAB per impostazione predefinita**.
+- lasciare la forma temporanea morta o il cadavere nel mondo quando appropriato;
+- ripristinare un'entità umana del giocatore;
+- restituire authority e controlli;
+- preservare l'inventario;
+- ripristinare stato rilevante del giocatore.
 
-MCM usa prima i normali meccanismi di Noita per terminare una trasformazione. Per i casi più complessi è disponibile un recupero aggiuntivo tramite NoitaPatcher.
+Questa è logica di recupero, non immortalità assoluta. Un kill script di terze parti, stato incompatibile del motore o crash del processo può aggirare l'handoff supportato.
 
-La mod gestisce inoltre le situazioni supportate in cui una forma temporanea subisce danni letali.
+# Possessione
 
-In questi casi MCM cerca di:
-
-- conservare il cadavere della forma morta;
-- ripristinare il giocatore umano;
-- restituire il controllo;
-- conservare l'inventario;
-- ripristinare lo stato legato al giocatore.
-
-Non si tratta di immortalità assoluta. Modi di morire insoliti causati da altre mod, mod incompatibili o un errore interno di Noita possono aggirare il normale meccanismo di recupero.
-
-# Controllare una creatura
-
-Oltre a scegliere una forma dal catalogo, MCM può prendere il controllo di **una creatura già presente nel mondo di gioco**.
+La possessione controlla una creatura che esiste già nel mondo invece di scegliere una forma dal catalogo.
 
 Il tasto predefinito è **G**.
 
-Posiziona il cursore su un bersaglio compatibile e usa l'azione assegnata.
+Punta una creatura adatta e usa l'azione di possessione. MCM valida il bersaglio, prepara una transizione compatibile e rimuove o ritira l'entità originale dal mondo solo dopo aver confermato il nuovo stato controllato dal giocatore.
 
-MCM controlla la creatura, esegue la trasformazione in una forma compatibile e rimuove l'entità originale dal mondo soltanto dopo aver confermato che la trasformazione è riuscita.
+Se la transizione fallisce, la creatura originale non dovrebbe semplicemente sparire.
 
-Se la trasformazione non viene completata, la creatura originale non dovrebbe semplicemente scomparire.
+La possessione non è limitata al catalogo interno di MCM. Una creatura compatibile creata da un altro mod può funzionare, ma non è garantita compatibilità universale con ogni entità di terze parti.
 
-Questa funzione non è limitata al catalogo statico di MCM. Anche una creatura compatibile aggiunta da un'altra mod può superare il controllo, anche se non è garantita la compatibilità universale con qualsiasi entità di terze parti.
+# Voce Player
 
-# Giocatore
+**PLAYER** è una voce speciale del catalogo creature, non un normale bersaglio polymorph.
 
-**GIOCATORE** è una voce speciale del catalogo delle creature.
+La sua azione di spawn crea un personaggio separato simile al giocatore e prova a copiare presentazione appropriata e informazioni sulla salute massima.
 
-Non è una normale forma in cui trasformarsi.
+Usare l'azione di trasformazione su **PLAYER** non trasforma un giocatore già umano in un duplicato. Se il giocatore è in un'altra forma, l'azione viene usata per tornare alla forma umana.
 
-**Clic sinistro** crea un personaggio separato per il quale MCM tenta di copiare:
+# Recupero Game Over in single-player
 
-- l'aspetto del giocatore;
-- la salute massima.
+La build standalone single-player include un percorso aggiuntivo di recupero per la schermata Game Over standard di Noita.
 
-**Clic destro** sulla voce **GIOCATORE** non trasforma il giocatore normale in questa entità.
+Quando l'integrazione nativa riesce a identificare in sicurezza le strutture necessarie del gioco, MCM aggiunge l'azione **“I didn't die”** all'interfaccia Game Over.
 
-Se il giocatore è già in forma umana, l'azione non fa nulla. Se il giocatore è trasformato in un'altra creatura, viene usato il ritorno alla forma umana.
+MCM mantiene un backup aggiornato dello stato del giocatore durante la partita. Attivare il recupero richiede il ripristino tramite il normale percorso di aggiornamento di MCM invece di ricostruire tutto il giocatore direttamente nel gestore del clic UI.
 
-# Meteo e ora
+Un recupero supportato prova a:
 
-MCM permette di modificare:
+- ripristinare o ottenere un'entità giocatore viva;
+- renderla di nuovo authoritative;
+- cancellare lo stato Game Over del motore;
+- restituire controlli e stato utilizzabile;
+- eseguire pulizia best-effort di audio, musica e interfaccia Game Over;
+- fornire una breve finestra di protezione dopo il ripristino.
 
-- l'ora del giorno;
-- configurazioni meteo predefinite;
-- singoli parametri meteo supportati.
+L'helper nativo è progettato in fail-closed. Analizza l'eseguibile Noita supportato in esecuzione alla ricerca di strutture note invece di scrivere a un singolo indirizzo codificato per sempre. Se le strutture attese non possono essere identificate in sicurezza dopo un aggiornamento, il recupero opzionale non viene usato invece di scrivere in una posizione incerta.
 
-È possibile imporre lo stato desiderato e poi liberare il parametro corrispondente dal controllo di MCM.
+# Meteo e tempo
 
-Per esempio, dopo aver imposto un'ora specifica è possibile restituire a Noita il normale scorrere del tempo.
+MCM può controllare stato meteo e temporale supportato, inclusi preset e singoli parametri esposti dall'implementazione corrente.
+
+Uno stato forzato può essere poi rilasciato al normale controllo del gioco. Per esempio, dopo aver fissato un'ora precisa, MCM può smettere di possedere quell'impostazione in modo che il flusso naturale del tempo di Noita riprenda.
+
+Le modifiche meteo vengono trattate come stato controllato, non come comandi console a senso unico.
 
 # Regole del mondo
 
-La sezione **REGOLE** permette di modificare più a fondo il comportamento del mondo di gioco.
+La sezione **RULES** modifica il comportamento globale supportato del gioco.
 
-A seconda della regola, è possibile controllare parametri come:
+Le regole coprono aree come:
 
-- i rapporti tra creature;
-- l'oro;
-- l'uso degli incantesimi;
-- la nebbia di guerra;
-- le ricompense per determinati tipi di uccisione;
-- le ricompense curative;
-- il sangue;
-- la gravità;
-- il comportamento fisico;
-- la forza del calcio;
-- i giunti fisici;
-- il ciclo giorno-notte;
+- relazioni tra creature;
+- comportamento dell'oro;
+- uso degli incantesimi;
+- fog of war;
+- ricompense selezionate per uccisioni;
+- drop di cura;
+- comportamento legato al sangue;
+- gravità;
+- fisica;
+- forza del calcio;
+- giunti fisici;
+- ciclo giorno/notte;
 - altri parametri globali supportati.
 
-La caratteristica principale è che le regole di MCM sono progettate come **modifiche reversibili**.
+L'obiettivo principale è la reversibilità.
 
-Per le impostazioni supportate, la mod conserva lo stato originale e permette di riportare i parametri al loro valore normale.
+Per le regole supportate, MCM registra o deriva lo stato originale per poter ripristinare l'impostazione in seguito. I controlli moltiplicatori vengono applicati rispetto al valore originale invece di moltiplicare ripetutamente un risultato già modificato.
 
-Quando viene usato un moltiplicatore, il nuovo valore viene calcolato rispetto allo stato di base invece di continuare a moltiplicare un risultato già modificato.
-
-Le operazioni che devono modificare molte entità o oggetti fisici vengono elaborate gradualmente, invece di tentare di modificare tutto il mondo nel momento stesso in cui si preme il pulsante.
+Le regole che devono toccare molte entità o oggetti fisici usano lavoro limitato distribuito sui frame invece di riscrivere sincronicamente l'intero mondo con un clic.
 
 # Teletrasporto
 
-MCM permette di spostarsi rapidamente verso destinazioni predefinite del gioco, tra cui punti:
+La sezione teletrasporto offre destinazioni preparate nel mondo, inclusi punti lungo il percorso principale, Holy Mountains, grandi aree laterali e altri luoghi supportati.
 
-- lungo il percorso principale;
-- nelle Montagne Sacre;
-- in grandi aree laterali;
-- in altre località supportate.
+Prima di spostare il giocatore, MCM può richiedere il caricamento dell'area di destinazione e cerca spazio libero utilizzabile nelle vicinanze invece di posizionare intenzionalmente il giocatore dentro terreno solido.
 
-Prima del teletrasporto, la mod può caricare l'area di destinazione e cerca di trovare uno spazio libero nelle vicinanze per evitare di collocare il giocatore direttamente dentro una parete solida o un altro ostacolo.
+Il teletrasporto dipende comunque dalla capacità del mondo di caricarsi e fornire una destinazione valida. Mondi fortemente modificati possono richiedere comportamento di fallback.
 
 # Entangled Worlds
 
-**Entangled Worlds / Noita Proxy è facoltativo.**
+**Entangled Worlds / Noita Proxy è opzionale.** MCM funziona senza EW.
 
-MCM funziona completamente in giocatore singolo anche senza di esso.
+Quando EW è presente, MCM abilita comportamenti aggiuntivi consapevoli del multiplayer. Tutti i peer dovrebbero usare build MCM compatibili quando dipendono da stato sincronizzato specifico di MCM.
 
-Quando Entangled Worlds è installato, vengono attivate ulteriori funzioni multigiocatore sperimentali.
+## Authority e forme
 
-Per una migliore compatibilità, è consigliabile che tutti i partecipanti utilizzino la stessa versione di MCM.
+Le forme del giocatore richiedono gestione speciale dell'ownership perché un giocatore trasformato non deve lasciare accidentalmente una seconda authority di rete.
+
+MCM coordina ownership, retirement e ritorno alla forma umana con EW dove supportato. Entità di boss e tipo Kolmi dispongono di trattamento lifecycle aggiuntivo pensato per evitare authority duplicate e vecchie copie controllate dalla rete.
+
+Il normale percorso di morte di EW resta responsabile delle entità non riconosciute come stato di forma appartenente a MCM.
 
 ## Oggetti, bacchette e incantesimi
 
-Quando possibile, gli oggetti presenti nel mondo e gli incantesimi lasciati a terra utilizzano i normali meccanismi di Entangled Worlds.
+Quando possibile, MCM usa i normali meccanismi di item / inventario di EW invece di inventare un sistema di trasporto parallelo.
 
-Anche le modifiche all'inventario possono essere trasmesse tramite Entangled Worlds.
+Le modifiche confermate a bacchette e inventario incantesimi richiedono l'aggiornamento multiplayer appropriato quando l'integrazione è disponibile. Gli oggetti del mondo creati da MCM possono essere consegnati al normale percorso world-item di EW.
 
-## Vantaggi
+## Perk
 
-Un vantaggio creato da MCM rimane una vera entità di gioco e, quando possibile, viene trasmesso tramite il normale sistema degli oggetti nel mondo di Entangled Worlds.
+I pickup normali dei perk possono usare la sincronizzazione world-item standard di EW. La gestione dello stato dei perk da parte di MCM coordina refresh e operazioni limitate, così le azioni in blocco non tentano un costoso refresh globale per ogni copia.
 
 ## Materiali
 
-Il disegno con i materiali dispone di un supporto multigiocatore sperimentale.
+La pittura dei materiali ha un percorso dedicato di compatibilità perché le modifiche alle celle del mondo non sono normali entità oggetto.
 
-MCM sincronizza le aree del mondo interessate in modo che il risultato possa comparire anche agli altri partecipanti.
+MCM mantiene il lavoro di pittura limitato, separa il lavoro ai confini dei chunk e coordina i passaggi world-frame / persistenza richiesti da EW prima di rilasciare lavoro di conversione sincronizzato. Un chunk di bordo non ancora caricato viene rimandato invece di bloccare l'intero tratto attivo.
 
-Per funzionare correttamente, il materiale corrispondente deve esistere anche per l'altro giocatore. Se gli insiemi di mod sono diversi, non è possibile garantire una visualizzazione identica di tutti i materiali.
+L'obiettivo è permettere ai peer EW vicini di vedere lo stato dipinto supportato senza dover riprodurre a distanza la normale azione UI di MCM come chiamata PixelScene basata solo sul filename.
 
-## Meteo e regole del mondo
+Restano comunque le assunzioni di EW sugli ID dei materiali: un gioco ricevente non può creare correttamente un materiale che non esiste lì o il cui registro materiali del motore è incompatibile.
 
-Le modifiche supportate al meteo e alle regole globali possono essere sincronizzate tramite Entangled Worlds.
+## Meteo, possessione e stato del mondo
 
-## Trasformazioni e controllo delle creature
+Lo stato multiplayer supportato di MCM include anche coordinamento per meteo, possessione e alcuni comportamenti di regole / lifecycle. I controlli di authority evitano che due peer provino a possedere lo stesso stato contemporaneamente.
 
-Le trasformazioni ricevono supporto aggiuntivo quando si utilizza Entangled Worlds.
+Il supporto EW è intenzionalmente conservativo. Quando l'integrazione non può dimostrare un percorso di sincronizzazione sicuro, MCM preferisce il comportamento locale supportato invece di fingere che ogni operazione single-player sia automaticamente sicura in multiplayer.
 
-Quando si prende il controllo di una creatura già esistente, la mod tiene conto anche del suo stato di rete. Se MCM non può stabilire con sufficiente sicurezza che l'entità originale può essere rimossa, preferisce lasciarla al suo posto.
+# Compatibilità e limitazioni
 
-## Giocatore
+Noita espone molti sistemi tramite entità debolmente accoppiate, XML, componenti Lua e comportamento nativo del motore. MCM non può quindi promettere compatibilità universale con ogni entità modificata o ogni futuro aggiornamento del gioco.
 
-La creazione dell'entità speciale **GIOCATORE** è supportata anche con Entangled Worlds. In questo caso copia i colori dell'aspetto della persona che l'ha creata.
+Limitazioni importanti:
 
-## Teletrasporto tra giocatori
+- una creatura può essere spawnabile senza essere una forma giocatore sicura;
+- un perk può essere concedibile senza avere un'inversione affidabile;
+- trasferimenti esterni di incantesimi o oggetti non possono sempre essere annullati da uno snapshot interno;
+- script di terze parti possono aggirare percorsi supportati di morte e recupero;
+- le funzioni native di recupero dipendono da comportamento supportato dell'eseguibile Noita e falliscono in sicurezza se le strutture richieste non possono essere identificate;
+- Entangled Worlds non può sincronizzare un materiale assente dal registro del gioco ricevente;
+- inventari, entità o regole fortemente modificati possono richiedere compatibilità specifica per quel mod.
 
-Quando Entangled Worlds è attivo, la sezione di teletrasporto mostra i giocatori disponibili.
+MCM prova a preservare lo stato originale e fare rollback delle mutazioni fallite, ma uno strumento sandbox che modifica stato vivo del gioco non può rendere completamente transazionale ogni combinazione di mod di terze parti.
 
-**VAI DA** ti teletrasporta vicino al giocatore selezionato.
+# Dati salvati
 
-**PORTA QUI** invia al giocatore selezionato una richiesta di teletrasportarsi da te.
+MCM persiste lo stato utente che deve sopravvivere tra le sessioni, comprese impostazioni supportate, associazioni, layout del menu e preset delle bacchette.
 
-In entrambi i casi, MCM cerca di utilizzare uno spazio libero vicino alla destinazione.
+L'identità del mod rimane stabile così gli aggiornamenti normali possono conservare i dati supportati. È comunque consigliato sostituire l'intera cartella del mod quando si installa una nuova build standalone, perché unire file vecchi e nuovi può lasciare runtime obsoleto.
 
-## Limitazioni
+# Risoluzione dei problemi
 
-Il supporto a Entangled Worlds rimane sperimentale.
+## Il mod non compare
 
-**In multigiocatore, trasformarsi in boss grandi o composti da molte articolazioni può causare un calo critico delle prestazioni e rendere di fatto inutilizzabile la sessione di gioco corrente.**
+Verifica che il percorso termini con:
 
-Noita è estremamente difficile da sincronizzare completamente, soprattutto quando cambiano contemporaneamente:
+`mods/metamorph_creative_menu/mod.xml`
 
-- il mondo a pixel;
-- i materiali;
-- gli oggetti fisici;
-- creature e boss complessi;
-- i contenuti di altre mod.
+Una cartella extra sopra `metamorph_creative_menu` impedisce a Noita di vedere correttamente il mod.
 
-Per questo MCM non garantisce una sincronizzazione perfetta di ogni possibile stato.
+## Le funzioni native o dei materiali non funzionano
 
-# NoitaPatcher e mod non sicure
+Verifica che **Unsafe Mods** sia consentito e che sia installata la build standalone GitHub senza mescolare file della Workshop.
 
-La versione completa di MCM include **NoitaPatcher**.
+## Il menu si apre ma si attiva anche un'azione di gioco
 
-Viene usato per funzioni che non possono essere realizzate in modo sufficiente con i normali strumenti di modifica di Noita, in particolare per parte dei meccanismi di:
+Controlla i conflitti nelle associazioni personalizzate. MCM mostra i duplicati ma permette intenzionalmente di mantenerli se desiderato.
 
-- recupero dopo trasformazioni complesse;
-- gestione delle entità di gioco;
-- interazione con il mondo di gioco;
-- posizionamento di alcuni materiali;
-- compatibilità estesa.
+## Una creatura non può essere trasformata in sicurezza
 
-Per questo, nella versione completa è necessario consentire le **mod non sicure**.
+Non ogni entità XML spawnabile è una forma giocatore supportata. Esistono regole per percorso esatto per le creature che richiedono gestione speciale.
 
-NoitaPatcher è già incluso nella build pronta di MCM e non deve essere installato separatamente.
+## Un perk non può essere rimosso
 
-# Se qualcosa non funziona
+La rimozione è disponibile solo dove MCM possiede un'operazione inversa supportata per lo stato tracciato. È intenzionale: indovinare la pulizia può danneggiare stato non correlato del giocatore.
 
-## MCM non si carica
+## Il multiplayer si comporta diversamente tra i peer
 
-Verifica che, dopo l'estrazione, esista:
+Usa build MCM compatibili su tutti i partecipanti e un ambiente Noita / Entangled Worlds compatibile. MCM non può correggere un registro materiali incompatibile o modifiche di rete arbitrarie di altri mod.
 
-```text
-Noita/mods/metamorph_creative_menu/mod.xml
-```
+# Segnalare bug
 
-Verifica che:
+Una segnalazione utile dovrebbe includere:
 
-- MCM sia attivo nel menu **Mod**;
-- accanto compaia **[x]**;
-- le **mod non sicure siano consentite**;
-- il gioco sia stato avviato con le mod attive.
+- cosa stavi cercando di fare;
+- sezione e azione esatte di MCM;
+- se il problema avviene in single-player, Entangled Worlds o entrambi;
+- se è installata la build standalone o Workshop;
+- se sono attivi altri gameplay mod;
+- passaggi affidabili per riprodurre il problema;
+- log rilevanti di Noita / EW quando disponibili.
 
-## Le funzioni che usano NoitaPatcher non funzionano
+Per problemi di trasformazione, possessione, oggetti o materiali, indica se possibile l'entità o il materiale esatto. Gli identificatori tecnici sono spesso più utili di un nome visualizzato tradotto.
 
-Verifica che esista:
+# Repository e sorgente di sviluppo
 
-```text
-metamorph_creative_menu/NoitaPatcher/noitapatcher.dll
-```
+Il repository contiene intenzionalmente **l'albero completo di sviluppo**, non lo stesso archivio ridotto scaricato dai giocatori.
 
-e assicurati che le **mod non sicure** siano consentite.
+`metamorph_creative_menu/` contiene codice runtime insieme a:
 
-## Non riesci a tornare da una forma
+- test automatizzati;
+- strumenti QA;
+- diagnostica;
+- sorgenti native;
+- strumenti di build;
+- regole di pulizia della release;
+- documentazione di sviluppo.
 
-Prova l'azione di ritorno assegnata, **TAB per impostazione predefinita**.
+Questi file sono utili per sviluppo e test di regressione, quindi restano nel source GitHub. Lo ZIP pronto per i giocatori viene generato separatamente ed esclude il contenuto solo sviluppo.
 
-Se il problema si ripresenta, nella segnalazione è utile indicare:
+Il pacchetto giocatore riceve inoltre pulizia specifica della release, incluso il `README.txt` minimo del pacchetto, mentre l'albero source mantiene la documentazione di sviluppo.
 
-- il nome esatto della creatura;
-- il percorso XML, se conosciuto;
-- come è stata ottenuta la forma;
-- se il normale ritorno funziona;
-- se il problema compare soltanto dopo danni letali;
-- se viene usato Entangled Worlds.
+# Test
 
-## Problemi con Entangled Worlds
+La suite automatizzata si trova in `metamorph_creative_menu/tests/` e combina controlli di contratto Python con mock test Lua.
 
-Verifica:
+Dalla root del repository, il workflow di release esegue la suite sul source completo importato prima di pubblicare la build per i giocatori. `texlua` è necessario per la parte di mock Lua.
 
-- che tutti i partecipanti usino la stessa versione di MCM;
-- che le versioni di Entangled Worlds siano compatibili;
-- che venga usato lo stesso insieme di mod se il problema riguarda materiali o creature provenienti da altre mod.
+I controlli di source hygiene proteggono inoltre file orientati alla produzione e documentazione da residui della cronologia di sviluppo, vecchie superfici di debug e artefatti accidentali del processo.
 
-# Segnalare un errore
+# Importazione del source e processo di release
 
-[Crea una Issue](https://github.com/zerodancing/Metamorph-Creative-Menu/issues)
+Il source completo di sviluppo può essere importato da un archivio della famiglia `Metamorph-Creative-Menu-v...zip`.
 
-Per una segnalazione utile è consigliabile indicare:
+Il workflow di importazione verifica la struttura, richiede tutti i componenti di sviluppo, esegue source hygiene e la suite di regressione prima di committare l'albero importato.
 
-- la versione di MCM;
-- che cosa stavi facendo esattamente;
-- il risultato previsto;
-- il risultato effettivo;
-- il nome della creatura, dell'oggetto, del vantaggio o del materiale interessato;
-- se viene usato Entangled Worlds;
-- altre mod che potrebbero essere collegate al problema;
-- il testo dell'errore o il relativo estratto del registro;
-- uno screenshot o un video, se aiuta a mostrare il problema.
+Un archivio ModWorkshop / player-style non viene trattato come source di sviluppo.
+
+La release pubblica `latest-build` viene poi prodotta dal source completo tramite un player-builder separato. Il builder rimuove QA, test, diagnostica, sorgenti native e altro payload solo sviluppo, applica le regole di pulizia, valida l'archivio risultante e solo allora aggiorna l'asset di download stabile.
+
+Questa separazione mantiene il repository utile per lo sviluppo lasciando il download normale dei giocatori piccolo e privo di strumentazione di sviluppo.
 
 # Componenti di terze parti
 
-- **Noita** — Nolla Games.
-- **NoitaPatcher** — dextercd, incluso nella versione completa.
-- **lbase64** — Ilya Kolbin, incluso in MCM.
-- **Entangled Worlds / Noita Proxy** — IntQuant e collaboratori del progetto; si installa separatamente ed è facoltativo.
-
-Informazioni dettagliate sui progetti originali e sulle relative licenze si trovano in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
----
-
-**Metamorph: Creative Menu** è una mod non ufficiale creata dagli utenti per Noita. Il progetto non è affiliato a Nolla Games e non è una parte ufficialmente supportata del gioco.
-
-[↑ Torna alla selezione della lingua](#languages)
+Componenti di terze parti, dipendenze incluse e progetti upstream sono documentati in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
