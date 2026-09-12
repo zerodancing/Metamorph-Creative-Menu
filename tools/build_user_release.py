@@ -300,6 +300,8 @@ def apply_release_patches(source: Path, stage_root: Path) -> None:
                 f"player release patch {patch_file.name} no longer matches the source:\n"
                 + result.stdout.strip()
             )
+    for backup in stage_root.rglob("*.orig"):
+        backup.unlink()
 
 
 def build(source: Path, output: Path) -> tuple[int, int]:
