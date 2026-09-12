@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a deterministic full Metamorph: Creative Menu distribution archive."""
+"""Build the complete Metamorph: Creative Menu development/source archive."""
 
 from __future__ import annotations
 
@@ -9,16 +9,13 @@ import sys
 import zipfile
 from pathlib import Path
 
-
-VERSION = "3.0.0"
 ROOT_NAME = "metamorph_creative_menu"
-EXCLUDED_DIRECTORIES = {
-    "dist",
-}
+EXCLUDED_DIRECTORIES = {"dist"}
 EXCLUDED_DIRECTORY_NAMES = {"__pycache__", ".pytest_cache", ".git"}
 EXCLUDED_FILENAMES = {".DS_Store", "Thumbs.db"}
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 REQUIRED_FILES = {
+    "BUILD.txt",
     "CHANGELOG.txt",
     "VERSION.txt",
     "README.txt",
@@ -34,7 +31,6 @@ REQUIRED_FILES = {
     "mcm_native_gameover.dll",
     "mcm_native_gameover.lib",
     "native_src/mcm_native_gameover.c",
-    "files/platform/noita/native_gameover_patch.lua",
     "files/diagnostics/service.lua",
     "files/qa/controller.lua",
     "tests/run_all.py",
@@ -44,87 +40,86 @@ REQUIRED_FILES = {
 
 
 def is_excluded(relative: Path) -> bool:
-    if relative.name in EXCLUDED_FILENAMES:
-        return True
-    if relative.suffix.lower() in EXCLUDED_SUFFIXES:
+    if relative.name in EXCLUDED_FILENAMES or relative.suffix.lower() in EXCLUDED_SUFFIXES:
         return True
     if any(part in EXCLUDED_DIRECTORY_NAMES for part in relative.parts):
         return True
     normalized = relative.as_posix()
-    return any(normalized == directory or normalized.startswith(directory + "/")
-               for directory in EXCLUDED_DIRECTORIES)
+    return any(normalized == directory or normalized.startswith(directory + "/") for directory in EXCLUDED_DIRECTORIES)
 
 
-def release_files(root: Path) -> list[Path]:
-    result = []
+def source_files(root: Path) -> list[Path]:
+    files = []
     for path in root.rglob("*"):
         if path.is_symlink():
-            raise RuntimeError(f"release input contains a symlink: {path.relative_to(root)}")
+            raise RuntimeError(f"source tree contains a symlink: {path.relative_to(root)}")
         if path.is_file() and not is_excluded(path.relative_to(root)):
-            result.append(path)
-    return sorted(result, key=lambda path: path.relative_to(root).as_posix())
+            files.append(path)
+    return sorted(files, key=lambda path: path.relative_to(root).as_posix())
 
 
-def validate(root: Path, files: list[Path]) -> None:
+def validate(root: Path, files: list[Path]) -> str:
     relative_files = {path.relative_to(root).as_posix() for path in files}
     missing = sorted(REQUIRED_FILES - relative_files)
     if missing:
-        raise RuntimeError("missing required release files: " + ", ".join(missing))
+        raise RuntimeError("missing source files: " + ", ".join(missing))
+
     version = (root / "VERSION.txt").read_text(encoding="utf-8").strip()
-    if version != VERSION:
-        raise RuntimeError(f"VERSION.txt is {version!r}, expected {VERSION!r}")
-    mod_id = (root / "mod_id.txt").read_text(encoding="utf-8").strip()
-    if mod_id != ROOT_NAME:
-        raise RuntimeError(f"mod id changed: {mod_id!r}")
-    dev_mode = (root / "dev_mode.lua").read_text(encoding="utf-8")
-    if re.search(r"\bdev_mode\s*=\s*0\b", dev_mode) is None or re.search(r"\breturn\s+dev_mode\b", dev_mode) is None:
-        raise RuntimeError("dev_mode.lua is not locked to the release default")
-    build = (root / "BUILD.txt").read_text(encoding="utf-8").strip()
-    if "3.0.0" not in build or "release" not in build.lower() or "test" in build.lower():
-        raise RuntimeError("BUILD.txt is not finalized as the 3.0.0 release")
-    mod_xml = (root / "mod.xml").read_text(encoding="utf-8")
-    if "v3.0.0" not in mod_xml or "TEST 36" in mod_xml:
-        raise RuntimeError("mod.xml still contains test-build metadata")
+    if re.fullmatch(r"[0-9]+(?:\.[0-9]+){0,2}", version) is None:
+        raise RuntimeError(f"invalid VERSION.txt: {version!r}")
+    if (root / "mod_id.txt").read_text(encoding="utf-8").strip() != ROOT_NAME:
+        raise RuntimeError("mod_id.txt does not match the mod directory name")
+    return version
 
 
-def build(root: Path, output: Path) -> tuple[int, int]:
-    files = release_files(root)
-    validate(root, files)
+def build(root: Path, output: Path) -> tuple[str, int, int]:
+    files = source_files(root)
+    version = validate(root, files)
     output.parent.mkdir(parents=True, exist_ok=True)
     if output.exists():
         output.unlink()
-    source_bytes = 0
+
+    total_bytes = 0
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in files:
             relative = path.relative_to(root).as_posix()
             data = path.read_bytes()
-            source_bytes += len(data)
+            total_bytes += len(data)
             info = zipfile.ZipInfo(f"{ROOT_NAME}/{relative}", (2020, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o100644 << 16
             info.create_system = 3
             archive.writestr(info, data, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
-    with zipfile.ZipFile(output, "r") as archive:
-        bad = archive.testzip()
-        if bad is not None:
-            raise RuntimeError(f"archive CRC verification failed: {bad}")
-    return len(files), source_bytes
+
+    with zipfile.ZipFile(output) as archive:
+        broken = archive.testzip()
+        if broken is not None:
+            raise RuntimeError(f"archive CRC verification failed: {broken}")
+    return version, len(files), total_bytes
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("output", nargs="?", type=Path,
-                        help="output ZIP (default: dist/metamorph_creative_menu_v3.0.0.zip)")
-    args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
-    output = (args.output or root / "dist" / f"{ROOT_NAME}_v{VERSION}.zip").resolve()
+    version = (root / "VERSION.txt").read_text(encoding="utf-8").strip()
+    major = version.split(".", 1)[0] if version else "source"
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "output",
+        nargs="?",
+        type=Path,
+        default=root / "dist" / f"Metamorph-Creative-Menu-v{major}.zip",
+    )
+    args = parser.parse_args()
     try:
-        count, source_bytes = build(root, output)
+        built_version, count, total_bytes = build(root, args.output.resolve())
     except Exception as exc:
-        print(f"release_build=FAIL {exc}", file=sys.stderr)
+        print(f"SOURCE_BUILD=FAIL {exc}", file=sys.stderr)
         return 1
-    print(f"release_build=PASS version={VERSION} files={count} source_bytes={source_bytes} "
-          f"archive_bytes={output.stat().st_size} output={output}")
+    print(
+        f"SOURCE_BUILD=PASS version={built_version} files={count} "
+        f"source_bytes={total_bytes} output={args.output}"
+    )
     return 0
 
 
