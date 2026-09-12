@@ -21,6 +21,6 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check README set
         run: python tools/check_readme_consistency.py .
