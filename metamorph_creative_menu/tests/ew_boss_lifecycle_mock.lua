@@ -119,8 +119,8 @@ assert(native_dofile(root.."/files/integrations/ew/kolmi_lifecycle.lua").install
 local general=loadfile(root.."/files/integrations/ew/boss_lifecycle.lua")
 if general then local m=general(); assert(m.install()); assert(m.install()) end
 
--- TEST 31 regression: a generic mod boss with only a standard healthbar dies between
--- frames. Running this file against TEST 31 must fail here with retained FullEntityData.
+-- Regression: a generic mod boss with only a standard healthbar can die between
+-- frames; the retired GID must not retain FullEntityData after native release.
 spawn(100,"9007199254740992")
 ewext.module_on_world_update()
 EntityKill(100)
