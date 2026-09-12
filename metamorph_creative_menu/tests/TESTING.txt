@@ -1,7 +1,7 @@
 Metamorph: Creative Menu — test infrastructure
 ==============================================
 
-This file documents the automated regression-test system only. The project behavior and architecture contract lives in the root `README.txt`.
+This file documents the automated regression-test system only. Player-facing behavior is documented in the repository's multilingual `README*.md` files. The source-package `README.txt` only identifies the full development tree and is not an executable behavior contract.
 
 Testing principle
 -----------------
