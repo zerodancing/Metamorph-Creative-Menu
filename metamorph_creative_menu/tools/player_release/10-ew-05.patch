@@ -1,0 +1,175 @@
+--- metamorph_creative_menu/files/integrations/ew/resilience_patches.lua
++++ metamorph_creative_menu/files/integrations/ew/resilience_patches.lua
+@@ -379,11 +230,7 @@
+         end]]
+ 
+ local POLYMORPH_DEATH_BLOCK = [[        if has_hp_component and hp <= 0 and not gameover_requested then
+-            -- mcm_poly_death_intercept_v1: a creative MCM form death is a form-lifecycle
+-            -- transition, not an EW player death. Give MCM one synchronous chance to
+-            -- commit its serialized human backup before local_health/shared-health can
+-            -- create notplayer or trigger game over. Ordinary EW polymorphs keep the
+-            -- exact upstream path when the acknowledgement is absent.
++            local mcm_poly_death_intercept_v1 = true
+             local mcm_old_entity = ctx.my_player.entity
+             local function mcm_death_ack_matches()
+                 if type(GlobalsGetValue) ~= "function" then return false end
+@@ -396,13 +243,7 @@
+                 if not ok_frame then return true end
+                 return math.abs((tonumber(frame) or 0) - (tonumber(ack_frame) or -100000)) <= 2
+             end
+-            -- The entity-side death() callback may have run earlier in this same frame.
+-            -- Accept that recent committed acknowledgement even though corpse handoff has
+-            -- already removed the MCM player-form tag from the old body.
+             local mcm_poly_death_handled = mcm_death_ack_matches()
+-            -- EW replaces the global CrossCall in its own VM with a private local
+-            -- callback table. MCM's handler lives in the mod VM, so the synchronous
+-            -- fallback must use NoitaPatcher's native cross-VM entry point when present.
+             local mcm_cross_call = type(np) == "table" and type(np.CrossCall) == "function"
+                 and np.CrossCall or CrossCall
+             if not mcm_poly_death_handled
+@@ -432,108 +273,6 @@
+     return string.sub(content, 1, first - 1) .. POLYMORPH_DEATH_BLOCK .. string.sub(content, last + 1), 1
+ end
+ 
+-function resilience_patches.patch_polymorph_profile_source(content)
+-    if type(content) ~= "string" or string.find(content, "mcm_poly_profile_v1", 1, true) ~= nil then
+-        return content, 0
+-    end
+-    local original = content
+-    local function replace_once(source, before, after)
+-        local first, last = string.find(source, before, 1, true)
+-        if first == nil then return source, false end
+-        return string.sub(source, 1, first - 1) .. after .. string.sub(source, last + 1), true
+-    end
+-
+-    local module_anchor = "local module = {}"
+-    local helpers = [=[local module = {}
+-
+--- mcm_poly_profile_v1
+-local function mcm_poly_profile_now()
+-    if type(GameGetRealWorldTimeSinceStarted) ~= "function" then return nil end
+-    local ok, value = pcall(GameGetRealWorldTimeSinceStarted)
+-    value = ok and tonumber(value) or nil
+-    return value
+-end
+-
+-local function mcm_poly_profile_source(entity)
+-    if entity == nil or entity == 0 then return "" end
+-    for _, component in ipairs(EntityGetComponentIncludingDisabled(entity, "VariableStorageComponent") or {}) do
+-        local ok_name, name = pcall(ComponentGetValue2, component, "name")
+-        if ok_name and name == "metamorph_creative_menu_network_source" then
+-            local ok_value, value = pcall(ComponentGetValue2, component, "value_string")
+-            if ok_value and type(value) == "string" then return value end
+-        end
+-    end
+-    local ok, filename = pcall(EntityGetFilename, entity)
+-    return ok and tostring(filename or "") or ""
+-end
+-
+-local function mcm_poly_profile_kind(entity)
+-    if entity == nil or entity == 0 then return "unknown" end
+-    if EntityGetFirstComponentIncludingDisabled(entity, "BossDragonComponent") ~= nil then return "boss_dragon" end
+-    if EntityGetFirstComponentIncludingDisabled(entity, "WormComponent") ~= nil then return "worm" end
+-    if EntityGetFirstComponentIncludingDisabled(entity, "CharacterDataComponent") ~= nil then return "character" end
+-    if EntityGetFirstComponentIncludingDisabled(entity, "AdvancedFishAIComponent") ~= nil then return "fish" end
+-    return "other"
+-end
+-
+-local function mcm_poly_profile_publish(prefix, entity, byte_count, started, finished)
+-    local tag_ok, is_mcm = false, false
+-    if type(EntityHasTag) == "function" then tag_ok, is_mcm = pcall(EntityHasTag, entity, "metamorph_creative_menu_network_form") end
+-    if not tag_ok or is_mcm ~= true then return end
+-    local elapsed_ms = -1
+-    if started ~= nil and finished ~= nil then elapsed_ms = math.max(0, (finished - started) * 1000) end
+-    local bytes = math.max(0, tonumber(byte_count) or 0)
+-    local source = mcm_poly_profile_source(entity)
+-    local kind = mcm_poly_profile_kind(entity)
+-    if type(GlobalsSetValue) == "function" then
+-        pcall(GlobalsSetValue, prefix .. "_ms_v1", string.format("%.3f", elapsed_ms))
+-        pcall(GlobalsSetValue, prefix .. "_bytes_v1", tostring(bytes))
+-        pcall(GlobalsSetValue, prefix .. "_source_v1", source)
+-        pcall(GlobalsSetValue, prefix .. "_kind_v1", kind)
+-        if type(GameGetFrameNum) == "function" then
+-            local ok, frame = pcall(GameGetFrameNum)
+-            if ok then pcall(GlobalsSetValue, prefix .. "_frame_v1", tostring(tonumber(frame) or -1)) end
+-        end
+-    end
+-    if type(print) == "function" then
+-        print("[MCM EW profile] " .. tostring(prefix) .. " ms=" .. string.format("%.3f", elapsed_ms)
+-            .. " bytes=" .. tostring(bytes) .. " kind=" .. tostring(kind) .. " source=" .. tostring(source))
+-    end
+-end]=]
+-    local ok
+-    content, ok = replace_once(content, module_anchor, helpers)
+-    if not ok then return original, 0 end
+-
+-    if string.find(content, "mcm_poly_death_intercept_v1", 1, true) == nil then
+-        local death_patched, death_count = resilience_patches.patch_polymorph_death_source(content)
+-        if death_count ~= 1 then return original, 0 end
+-        content = death_patched
+-    end
+-
+-    local serialize_anchor = [[        rpc.change_entity({ data = util.serialize_entity(ctx.my_player.entity) })]]
+-    local serialize_block = [[        local mcm_profile_serialize_started = mcm_poly_profile_now()
+-        local mcm_profile_serialized = util.serialize_entity(ctx.my_player.entity)
+-        local mcm_profile_serialize_finished = mcm_poly_profile_now()
+-        mcm_poly_profile_publish("mcm_ew_poly_serialize", ctx.my_player.entity,
+-            type(mcm_profile_serialized) == "string" and #mcm_profile_serialized or 0,
+-            mcm_profile_serialize_started, mcm_profile_serialize_finished)
+-        rpc.change_entity({ data = mcm_profile_serialized })]]
+-    content, ok = replace_once(content, serialize_anchor, serialize_block)
+-    if not ok then return original, 0 end
+-
+-    local deserialize_anchor = [[        local ent = util.deserialize_entity(seri_ent.data)]]
+-    local deserialize_block = [[        local mcm_profile_deserialize_started = mcm_poly_profile_now()
+-        local ent = util.deserialize_entity(seri_ent.data)
+-        local mcm_profile_deserialize_finished = mcm_poly_profile_now()
+-        mcm_poly_profile_publish("mcm_ew_poly_deserialize", ent,
+-            type(seri_ent.data) == "string" and #seri_ent.data or 0,
+-            mcm_profile_deserialize_started, mcm_profile_deserialize_finished)]]
+-    content, ok = replace_once(content, deserialize_anchor, deserialize_block)
+-    if not ok then return original, 0 end
+-
+-    return content, 1
+-end
+-
+ function resilience_patches.patch_material_pixel_scene_source(content)
+     if type(content) ~= "string" then return content, 0 end
+     if string.find(content, "mcm_material_brush_pixel_scene_v1", 1, true) then return content, 0 end
+@@ -543,23 +282,14 @@
+         if first == nil then return source, false end
+         return string.sub(source, 1, first - 1) .. after .. string.sub(source, last + 1), true
+     end
+-    local anchor = [[    -- TODO there are a couple more parameters, tho they don't seem to be used in vanilla
+-    CrossCall(
++    local anchor = [[    CrossCall(
+         "ew_sync_pixel_scene",]]
+-    local replacement = [[    -- mcm_material_brush_pixel_scene_v1: the MCM solid brush supplies its
+-    -- material dynamically through color_to_material_table. EW's stock pixel-scene
+-    -- RPC intentionally forwards only filenames/position, so replaying this MCM-owned
+-    -- mask remotely cannot preserve the selected material and breaks peers without MCM.
+-    -- The scene has already been applied locally above. Do not send a filename-only
+-    -- replay that cannot represent the selected material; stock EW world synchronization
+-    -- remains responsible for whatever resulting grid state its normal model can encode.
+-    -- All non-MCM pixel scenes keep the exact upstream path.
++    local replacement = [[    local mcm_material_brush_pixel_scene_v1 = true
+     if string.find(tostring(materials_filename or ""),
+         "mods/metamorph_creative_menu/files/features/materials/brushes/", 1, true) == 1
+     then
+         return
+     end
+-    -- TODO there are a couple more parameters, tho they don't seem to be used in vanilla
+     CrossCall(
+         "ew_sync_pixel_scene",]]
+     local changed, ok = replace_material_scene_once(content, anchor, replacement)
+@@ -580,8 +310,8 @@
+ 
+     if string.find(content, "mcm_peer_perk_remote_safety_v1", 1, true) == nil then
+         local ignore_anchor = "local perks_to_ignore = {"
+-        local ignore_block = [[local perks_to_ignore = {
+-    -- mcm_peer_perk_remote_safety_v1: exact ids with unsafe/non-replica mechanics.
++        local ignore_block = [[local mcm_peer_perk_remote_safety_v1 = true
++local perks_to_ignore = {
+     ABILITY_ACTIONS_MATERIALIZED = true,
+     RESPAWN = true,
+     SAVING_GRACE = true,
