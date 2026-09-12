@@ -81,6 +81,15 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: Upload source snapshot
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workshop-source-snapshot
+          path: metamorph_creative_menu
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Fail on runtime residue
         if: steps.scan.outputs.findings != '0'
         shell: bash
