@@ -44,6 +44,8 @@ This file documents external projects and code used by or integrated with **Meta
 
 ## MCM project license
 
-Licensing of MCM's original code is governed only by any top-level project license file present in the repository. This notice does not itself grant a license to MCM's original code and does not alter the terms of the third-party components listed above.
+Original MCM material for which **zerodancing** has the right to grant permissions is licensed under the **Metamorph Creative Menu Attribution License 1.0** in the top-level `LICENSE` file. Redistributed and modified versions may be used commercially, but must preserve the required attribution to `zerodancing` and the original GitHub project as specified by that license.
 
-If a project license is added or changed, this file should remain so bundled third-party components continue to be identified separately from MCM's original code.
+The player/source package also carries `metamorph_creative_menu/LICENSE.txt` and `metamorph_creative_menu/NOTICE.txt` so the license and required attribution travel with downloaded builds.
+
+The MCM project license does **not** relicense third-party components. Third-party code, libraries, binaries, game resources and trademarks remain subject to their own licenses and terms described above or in their original notices.
