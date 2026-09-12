@@ -5,11 +5,24 @@ on:
     branches: [main]
     paths:
       - 'metamorph_creative_menu/**'
+      - '!metamorph_creative_menu/tests/**'
+      - '!metamorph_creative_menu/files/qa/**'
+      - '!metamorph_creative_menu/files/diagnostics/**'
+      - '!metamorph_creative_menu/native_src/**'
+      - '!metamorph_creative_menu/tools/**'
+      - '!metamorph_creative_menu/README.txt'
+      - '!metamorph_creative_menu/BUILD.txt'
+      - '!metamorph_creative_menu/CHANGELOG.txt'
+      - '!metamorph_creative_menu/dev_mode.lua'
+      - '!metamorph_creative_menu/mod_id.txt'
+      - '!metamorph_creative_menu/mcm_native_gameover.lib'
+      - '!metamorph_creative_menu/files/core/bounded_log.lua'
+      - '!metamorph_creative_menu/files/features/creatures/diagnostics.lua'
+      - '!metamorph_creative_menu/files/integrations/ew/bridge/qa.lua'
+      - '!metamorph_creative_menu/files/integrations/ew/bridge/qa_reserved.lua'
+      - 'metamorph_creative_menu/tools/player_release/*.patch'
       - 'tools/build_user_release.py'
       - 'tools/validate_user_release.py'
-      - 'tools/check_source_hygiene.py'
-      - 'tools/import_source_archive.py'
-      - 'tools/test_repository_tools.py'
       - '.github/workflows/publish-ready-build.yml'
   workflow_dispatch:
 
