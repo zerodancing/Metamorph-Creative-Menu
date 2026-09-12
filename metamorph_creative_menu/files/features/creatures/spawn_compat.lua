@@ -9,11 +9,9 @@ local CREATIVE_REF_TAG = "mcm_creative_kolmi_reference_v3"
 local BOOTSTRAP = "mods/metamorph_creative_menu/files/features/creatures/kolmi_creative_bootstrap.lua"
 local CONTROLLER = "mods/metamorph_creative_menu/files/features/creatures/kolmi_encounter_start.lua"
 
--- TEST 30: a real boss_arena already contains a pre-fight boss_centipede, Sampo and
--- reference_point.  Spawning another Kolmi from MCM on top of that authored encounter used
--- to create two roots at nearly identical coordinates.  They are visually indistinguishable
--- during the fight; when one dies, the other suddenly becomes visible and looks exactly like
--- a post-death resurrection.  Avoid creating the second root in the first place.
+-- The final-boss arena already contains an authored Kolmisilma and reference point.
+-- Reuse or retire that root before creating a creative replacement so the encounter never
+-- starts with two nearly coincident boss authorities.
 local ARENA_BOSS_RADIUS_SQ = 192 * 192
 local ARENA_REFERENCE_RADIUS_SQ = 768 * 768
 local REPLACED_COUNT = "mcm30_kolmi_existing_arena_root_replaced_v1"
@@ -201,7 +199,7 @@ local function add_bootstrap(entity)
     return ok and component or nil
 end
 
--- Runs before EntityLoad.  If the user clicks Kolmisilma while standing in the real final
+-- Runs before EntityLoad. If the user clicks Kolmisilma while standing in the real final
 -- boss arena, retire the authored dormant root first and reuse its authored reference point.
 -- A remote-owned root cannot be safely deleted by this peer; in that case reuse it instead
 -- of creating a second final boss.
@@ -218,14 +216,11 @@ function spawn_compat.before_spawn(path, x, y)
     if retired then
         bump(REPLACED_COUNT)
         if reference ~= 0 then bump(REUSED_REFERENCE_COUNT) end
-        local action = reason == "retire_queued" and "queued replacement of" or "replaced"
-        print("[MCM31] " .. action .. " existing authored Kolmisilma before creative spawn ent=" .. tostring(existing))
         return { kind = "kolmi", reference_id = reference, replaced_entity = existing }
     end
 
     if reason == "remote_authority" then
         bump(REUSED_REMOTE_COUNT)
-        print("[MCM30] reused remote-owned authored Kolmisilma instead of spawning a duplicate ent=" .. tostring(existing))
         return { kind = "reuse", entity = existing, reference_id = reference, reason = reason }
     end
     -- A failed retirement must not create another root on top of the retained one.
@@ -263,7 +258,4 @@ spawn_compat.CREATIVE_MARKER = CREATIVE_MARKER
 spawn_compat.CREATIVE_REF_TAG = CREATIVE_REF_TAG
 spawn_compat.BOOTSTRAP = BOOTSTRAP
 spawn_compat.CONTROLLER = CONTROLLER
-spawn_compat.prepare_creative_kolmi_for_test = prepare_creative_kolmi
-spawn_compat.quiet_retire_existing_for_test = quiet_retire_existing
-
 return spawn_compat
