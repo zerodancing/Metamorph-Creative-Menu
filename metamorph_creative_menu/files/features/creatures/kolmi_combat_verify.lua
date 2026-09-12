@@ -1,8 +1,7 @@
--- TEST 25: verify that the authored Kolmisilma combat LuaComponent actually entered its
--- coroutine after the stock Sampo pickup transition.  This is deliberately a watchdog for
--- *startup only*: it never implements attacks/phases/death itself.  If the disabled authored
--- component failed to execute after being enabled, replace it once with the exact same vanilla
--- script in a fresh ONE_PER_COMPONENT_INSTANCE VM.  The VFS still supplies vanilla + EW append.
+-- Verify that the authored Kolmisilma combat coroutine entered the normal attack flow.
+-- This is a startup watchdog only; it never replaces attacks, phases, or death behavior.
+-- If the authored component failed to execute after activation, restart the same vanilla
+-- script once in a fresh component VM.
 local controller = GetUpdatedEntityID()
 local UPDATE = "data/entities/animals/boss_centipede/boss_centipede_update.lua"
 local STATUS = "mcm25_kolmi_combat_status_v1"
@@ -89,7 +88,7 @@ if frame - start < GRACE_FRAMES then return end
 local restart_frame = storage_value_int(controller, RESTART_VAR)
 if restart_frame == 0 then
     -- The authored component was enabled by stock sampo_pickup.lua but never reached init_boss().
-    -- Recreate only that authored VM.  Do not copy or emulate any phase code.
+    -- Recreate only that authored VM. Do not copy or emulate any phase code.
     for _, lua in ipairs(update_components(boss)) do pcall(EntityRemoveComponent, boss, lua) end
 
     local values = {
