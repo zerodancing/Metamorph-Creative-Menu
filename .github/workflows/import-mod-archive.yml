@@ -1,13 +1,17 @@
-name: Import full MCM archive
+name: Import full MCM source archive
 
 on:
   push:
     paths:
       - 'Metamorph-Creative-Menu-v*.zip'
-      - 'Metamorph_Creative_Menu_standalone_noitapatcher*.zip'
+  workflow_dispatch:
 
 permissions:
   contents: write
+
+concurrency:
+  group: import-mcm-source
+  cancel-in-progress: false
 
 jobs:
   import:
@@ -18,33 +22,45 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Import standalone archive
+      - name: Install Lua test runtime
+        shell: bash
+        run: |
+          if ! command -v texlua >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y texlive-binaries
+          fi
+
+      - name: Import source archive
+        id: import
         shell: python
         run: |
-          import glob
+          import os
+          import re
           import shutil
           import zipfile
           from pathlib import Path, PurePosixPath
 
-          patterns = [
-              'Metamorph-Creative-Menu-v*.zip',
-              'Metamorph_Creative_Menu_standalone_noitapatcher*.zip',
-          ]
-          archives = sorted({Path(path) for pattern in patterns for path in glob.glob(pattern)})
+          archive_pattern = re.compile(
+              r'^Metamorph-Creative-Menu-v[0-9]+(?:\.[0-9]+){0,2}\.zip$',
+              re.IGNORECASE,
+          )
+          archives = sorted(
+              path for path in Path('.').glob('Metamorph-Creative-Menu-v*.zip')
+              if archive_pattern.fullmatch(path.name)
+          )
+
           if not archives:
-              raise SystemExit(
-                  'MCM release archive was not found. Expected a file such as '
-                  'Metamorph-Creative-Menu-v3.zip'
-              )
+              print('No full source archive found; nothing to import.')
+              with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
+                  fh.write('changed=false\n')
+              raise SystemExit(0)
           if len(archives) != 1:
-              names = ', '.join(path.name for path in archives)
               raise SystemExit(
-                  'Expected exactly one MCM release archive in the repository root, found: ' + names
+                  'Expected exactly one full source archive, found: '
+                  + ', '.join(path.name for path in archives)
               )
 
           archive = archives[0]
-          print(f'Importing {archive.name}')
-
           with zipfile.ZipFile(archive) as zf:
               members = zf.infolist()
               for member in members:
@@ -68,30 +84,50 @@ jobs:
           required = [
               Path('metamorph_creative_menu/VERSION.txt'),
               Path('metamorph_creative_menu/mod.xml'),
-              Path('metamorph_creative_menu/mod_id.txt'),
               Path('metamorph_creative_menu/init.lua'),
+              Path('metamorph_creative_menu/tests/run_all.py'),
               Path('metamorph_creative_menu/NoitaPatcher/noitapatcher.dll'),
           ]
           missing = [str(path) for path in required if not path.is_file()]
           if missing:
-              raise SystemExit('Missing required files: ' + ', '.join(missing))
+              raise SystemExit('Missing required source files: ' + ', '.join(missing))
 
           version = Path('metamorph_creative_menu/VERSION.txt').read_text(encoding='utf-8').strip()
-          if not version:
-              raise SystemExit('VERSION.txt is empty')
-          print(f'Imported MCM version {version}')
+          if not re.fullmatch(r'[0-9]+(?:\.[0-9]+){0,2}', version):
+              raise SystemExit(f'Invalid VERSION.txt: {version!r}')
+
+          archive_major = re.search(r'-v([0-9]+)', archive.name, re.IGNORECASE).group(1)
+          source_major = version.split('.', 1)[0]
+          if archive_major != source_major:
+              raise SystemExit(
+                  f'Archive name says v{archive_major}, but VERSION.txt says {version}'
+              )
 
           archive.unlink()
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as fh:
+              fh.write('changed=true\n')
+              fh.write(f'version={version}\n')
 
-      - name: Commit imported mod
+      - name: Check source hygiene
+        if: steps.import.outputs.changed == 'true'
+        shell: bash
+        run: python tools/check_source_hygiene.py metamorph_creative_menu
+
+      - name: Run regression suite
+        if: steps.import.outputs.changed == 'true'
+        shell: bash
+        run: python metamorph_creative_menu/tests/run_all.py metamorph_creative_menu
+
+      - name: Commit imported source
+        if: steps.import.outputs.changed == 'true'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then
-            echo "Archive contents already match the repository."
+            echo "Source archive already matches the repository."
             exit 0
           fi
-          git commit -m "Import full standalone Metamorph Creative Menu"
+          git commit -m "Import Metamorph Creative Menu source ${{ steps.import.outputs.version }}"
           git push
