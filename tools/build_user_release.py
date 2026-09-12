@@ -279,6 +279,24 @@ def write_stage(source: Path, stage_root: Path) -> None:
     (target / "README.txt").write_text("Creator: zerodancing\n", encoding="utf-8")
 
 
+def run_patch(executable: str, patch_file: Path, stage_root: Path, *, reverse: bool, dry_run: bool) -> subprocess.CompletedProcess[str]:
+    command = [executable, "-p0", "--batch", "--fuzz=0"]
+    if dry_run:
+        command.append("--dry-run")
+    if reverse:
+        command.append("--reverse")
+    else:
+        command.append("--forward")
+    command.extend(["-i", str(patch_file.resolve())])
+    return subprocess.run(
+        command,
+        cwd=stage_root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+
+
 def apply_release_patches(source: Path, stage_root: Path) -> None:
     patch_dir = source / "tools" / "player_release"
     patch_files = sorted(patch_dir.glob("*.patch")) if patch_dir.is_dir() else []
@@ -287,19 +305,31 @@ def apply_release_patches(source: Path, stage_root: Path) -> None:
     executable = shutil.which("patch")
     if executable is None:
         raise RuntimeError("the 'patch' utility is required to build the player release")
+
     for patch_file in patch_files:
-        result = subprocess.run(
-            [executable, "-p0", "--batch", "--forward", "--fuzz=0", "-i", str(patch_file.resolve())],
-            cwd=stage_root,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
+        forward_check = run_patch(executable, patch_file, stage_root, reverse=False, dry_run=True)
+        if forward_check.returncode == 0:
+            applied = run_patch(executable, patch_file, stage_root, reverse=False, dry_run=False)
+            if applied.returncode != 0:
+                raise RuntimeError(
+                    f"player release patch {patch_file.name} passed dry-run but failed to apply:\n"
+                    + applied.stdout.strip()
+                )
+            continue
+
+        # A future source version may permanently adopt a cleanup that used to be
+        # release-only. If the complete patch cleanly applies in reverse, the stage
+        # already contains that cleanup and no mutation is needed.
+        reverse_check = run_patch(executable, patch_file, stage_root, reverse=True, dry_run=True)
+        if reverse_check.returncode == 0:
+            continue
+
+        raise RuntimeError(
+            f"player release patch {patch_file.name} no longer matches the source. "
+            "Update or retire this cleanup rule before publishing the new version.\n"
+            + forward_check.stdout.strip()
         )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"player release patch {patch_file.name} no longer matches the source:\n"
-                + result.stdout.strip()
-            )
+
     for backup in stage_root.rglob("*.orig"):
         backup.unlink()
 
