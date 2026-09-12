@@ -6,6 +6,8 @@ on:
     paths:
       - 'metamorph_creative_menu/**'
       - 'tools/build_user_release.py'
+      - 'tools/validate_user_release.py'
+      - 'tools/check_source_hygiene.py'
       - '.github/workflows/publish-ready-build.yml'
   workflow_dispatch:
 
@@ -34,7 +36,7 @@ jobs:
 
       - name: Check source hygiene
         shell: bash
-        run: python tools/check_source_hygiene.py metamorph_creative_menu
+        run: python tools/check_source_hygiene.py .
 
       - name: Run regression suite
         shell: bash
@@ -45,45 +47,8 @@ jobs:
         run: python tools/build_user_release.py metamorph_creative_menu Metamorph-Creative-Menu.zip
 
       - name: Validate player package
-        shell: python
-        run: |
-          import zipfile
-
-          archive = 'Metamorph-Creative-Menu.zip'
-          forbidden = (
-              '/tests/', '/files/qa/', '/files/diagnostics/', '/native_src/', '/tools/',
-          )
-          forbidden_files = {
-              'metamorph_creative_menu/BUILD.txt',
-              'metamorph_creative_menu/CHANGELOG.txt',
-              'metamorph_creative_menu/VERSION.txt',
-              'metamorph_creative_menu/dev_mode.lua',
-              'metamorph_creative_menu/mcm_native_gameover.lib',
-              'metamorph_creative_menu/mod_id.txt',
-              'metamorph_creative_menu/files/core/bounded_log.lua',
-              'metamorph_creative_menu/files/features/creatures/diagnostics.lua',
-              'metamorph_creative_menu/files/integrations/ew/bridge/qa.lua',
-              'metamorph_creative_menu/files/integrations/ew/bridge/qa_reserved.lua',
-          }
-
-          with zipfile.ZipFile(archive) as zf:
-              names = {name for name in zf.namelist() if not name.endswith('/')}
-              required = {
-                  'metamorph_creative_menu/mod.xml',
-                  'metamorph_creative_menu/init.lua',
-                  'metamorph_creative_menu/README.txt',
-                  'metamorph_creative_menu/NoitaPatcher/noitapatcher.dll',
-                  'metamorph_creative_menu/mcm_native_gameover.dll',
-              }
-              missing = sorted(required - names)
-              if missing:
-                  raise SystemExit('Missing runtime files: ' + ', '.join(missing))
-              bad = sorted(name for name in names if name in forbidden_files or any(part in name for part in forbidden))
-              if bad:
-                  raise SystemExit('Development files leaked into player package: ' + ', '.join(bad[:20]))
-              readme = zf.read('metamorph_creative_menu/README.txt').decode('utf-8')
-              if readme != 'Creator: zerodancing\n':
-                  raise SystemExit('Player README.txt is not the minimal creator notice')
+        shell: bash
+        run: python tools/validate_user_release.py Metamorph-Creative-Menu.zip
 
       - name: Publish stable download URL
         env:
