@@ -2,7 +2,7 @@ local root = assert(arg[1], "root required")
 local native_dofile = dofile
 local tile_calls = 0
 local error_labels = 0
-local diagnostic_calls = 0
+local error_prints = 0
 local tab_draw_calls = 0
 
 local ui = {
@@ -56,8 +56,7 @@ function GuiLayoutBeginHorizontal() end
 function GuiLayoutEnd() end
 function GuiBeginAutoBox() end
 function InputIsMouseButtonJustDown() return false end
-function print() end
-METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE=function() diagnostic_calls=diagnostic_calls+1 end
+function print(message) if string.find(tostring(message), "UI tab", 1, true) then error_prints=error_prints+1 end end
 
 METAMORPH_CREATIVE_MENU_MENU_CONTROLLER=nil
 local controller = assert(native_dofile(root.."/files/ui/menu_controller.lua"))
@@ -67,6 +66,6 @@ assert(ok1 and ok2, "tab runtime error escaped menu controller: "..tostring(err1
 assert(tab_draw_calls == 2, "active tab was not attempted on both frames")
 assert(tile_calls == 14, "top tab bar stopped rendering after a tab error")
 assert(error_labels == 2, "menu did not show bounded tab error fallback")
-assert(diagnostic_calls == 1, "same persistent tab error should be reported once, not every frame")
+assert(error_prints == 1, "same persistent tab error should be printed once, not every frame")
 
 print("menu_error_isolation=PASS header_survives=true error_contained=true")

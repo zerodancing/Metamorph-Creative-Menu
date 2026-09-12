@@ -4,7 +4,6 @@ local tile_calls=0
 local white_labels={}
 local step_calls=0
 local click_once=true
-local diagnostics=0
 local service={
     can_edit=function() return true,"singleplayer" end,
     has_overrides=function() return false end,
@@ -51,9 +50,6 @@ function GuiLayoutEnd() end
 function GuiBeginScrollContainer() end
 function GuiEndScrollContainer() end
 function GuiGetPreviousWidgetInfo() return false,false,false end
-METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE=function(kind,details)
-    if kind=="ui.rules.action" and string.find(details,"intentional Rules mutation failure",1,true) then diagnostics=diagnostics+1 end
-end
 
 local tab=assert(native_dofile(root.."/files/ui/tabs/world_rules.lua"))
 local ok1,err1=pcall(tab.draw,nil,220,180)
@@ -61,7 +57,6 @@ local ok2,err2=pcall(tab.draw,nil,220,180)
 assert(ok1 and ok2,"Rules action exception escaped tab draw: "..tostring(err1 or err2))
 assert(step_calls==1,"probe did not execute exactly one failing Rules mutation")
 assert(tile_calls==2,"Rules grid stopped drawing after a mutation error")
-assert(diagnostics==1,"Rules mutation exception was not reported to diagnostics")
 local saw_error=false
 for _,text in ipairs(white_labels) do if string.find(text,"RULE ERROR:",1,true) then saw_error=true end end
 assert(saw_error,"Rules tab did not surface bounded mutation failure")

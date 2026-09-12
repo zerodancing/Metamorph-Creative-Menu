@@ -3,7 +3,6 @@ if type(METAMORPH_CREATIVE_MENU_MENU_CONTROLLER) == "table" then return METAMORP
 local menu_controller = {}
 
 local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
-local audit = ui.audit
 local player_locator = dofile("mods/metamorph_creative_menu/files/platform/noita/player_locator.lua")
 local input_guard = dofile("mods/metamorph_creative_menu/files/platform/noita/input_guard.lua")
 local keycodes = dofile("mods/metamorph_creative_menu/files/platform/noita/keycodes.lua")
@@ -37,7 +36,7 @@ local function update_emergency_open(player)
     if not input_guard.actions_allowed() then return end
     local key = keycodes.resolve("Key_TAB", "KEY_TAB"); if key == nil then return end
     local ok, pressed = pcall(InputIsKeyJustDown, key)
-    if ok and pressed == true then emergency_open = not emergency_open; audit("menu.emergency_toggle", "open="..tostring(emergency_open)) end
+    if ok and pressed == true then emergency_open = not emergency_open end
 end
 
 
@@ -82,7 +81,7 @@ local function draw_tab_bar(width)
             local title = ui.tr(tab.key, tab.fallback)
             local clicked = ui.tile(0, 0, ui.EMPTY_SLOT, tab.icon, tab.fallback_icon or ui.EMPTY_SLOT,
                 title, "", active_tab == index, { target_size=18, max_scale=2.5, padding=1 })
-            if clicked then active_tab = index; audit("menu.tab", "id="..tostring(tab.id)) end
+            if clicked then active_tab = index end
         end
         GuiLayoutEnd(ui.gui())
     end
@@ -141,9 +140,6 @@ function menu_controller.draw()
                 local signature = tostring(err)
                 if tab_error_signatures[tab.id] ~= signature then
                     tab_error_signatures[tab.id] = signature
-                    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
-                        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "ui." .. tostring(tab.id), signature)
-                    end
                     print("[Metamorph: Creative Menu] UI tab '" .. tostring(tab.id) .. "' failed: " .. signature)
                 end
             else

@@ -425,23 +425,23 @@ function perk_service.apply(player_entity_id, perk, options)
     return true, "applied", tracked == true, track_reason
 end
 
-function perk_service.root_companion_debug()
-    return root_companions.debug()
+function perk_service.root_companion_state()
+    return root_companions.ownership_summary()
 end
 
-function perk_service.debug_ownership_state()
+function perk_service.ownership_state()
     local global_owners, flag_owners = 0, 0
-    if type(transactions.debug_active_global_owners) == "function" then
-        global_owners, flag_owners = transactions.debug_active_global_owners()
+    if type(transactions.active_global_owner_counts) == "function" then
+        global_owners, flag_owners = transactions.active_global_owner_counts()
     end
     return {
         transactions = type(transactions.active_count) == "function" and transactions.active_count() or 0,
-        mutations = type(transactions.debug_active_mutations) == "function" and transactions.debug_active_mutations() or 0,
+        mutations = type(transactions.active_mutation_count) == "function" and transactions.active_mutation_count() or 0,
         global_owners = tonumber(global_owners) or 0,
         run_flag_owners = tonumber(flag_owners) or 0,
-        cleanup = type(transactions.debug_cleanup_state) == "function" and transactions.debug_cleanup_state() or {pending=0,failed=0},
-        nested = type(nested_pickups.debug_state) == "function" and nested_pickups.debug_state() or {scopes=0,children=0},
-        locomotion_baselines = type(locomotion_guard.debug_baseline_count)=="function" and locomotion_guard.debug_baseline_count() or 0,
+        cleanup = type(transactions.cleanup_state) == "function" and transactions.cleanup_state() or {pending=0,failed=0},
+        nested = type(nested_pickups.state_snapshot) == "function" and nested_pickups.state_snapshot() or {scopes=0,children=0},
+        locomotion_baselines = type(locomotion_guard.baseline_count)=="function" and locomotion_guard.baseline_count() or 0,
     }
 end
 

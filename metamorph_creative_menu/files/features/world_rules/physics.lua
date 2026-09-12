@@ -528,7 +528,7 @@ function physics_adapter.has_persisted_local_recovery()
     return recovery.has("player_gravity")
 end
 
-function physics_adapter.debug_local_gravity(player, factor)
+function physics_adapter.local_gravity_state(player, factor)
     local rows = {}
     if player == nil or player == 0 or not EntityGetIsAlive(player) then return {player=0, factor=factor, rows=rows} end
     for _, pair in ipairs({{"CharacterDataComponent","gravity"},{"CharacterPlatformingComponent","pixel_gravity"}}) do

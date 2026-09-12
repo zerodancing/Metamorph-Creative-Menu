@@ -308,7 +308,7 @@ function global_journal.discard_delta(delta)
     end
 end
 
-function global_journal.debug_active_owners()
+function global_journal.active_owner_counts()
     local globals, flags = 0, 0
     for _ in pairs(global_owners) do globals = globals + 1 end
     for _ in pairs(run_flag_owners) do flags = flags + 1 end

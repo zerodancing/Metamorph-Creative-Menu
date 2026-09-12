@@ -18,8 +18,8 @@ local function effect_xml(target)
 end
 
 local RUNTIME_ENTITY_CLONE_MODE = {
-    -- `sheep.xml` is treated specially by Noita's polymorph path and repeatedly
-    -- resolves to sheep_bat/sheep_fly in the user's build. A byte-identical copy keeps
+    -- `sheep.xml` is treated specially by Noita's polymorph path and can resolve
+    -- to sheep_bat/sheep_fly. A byte-identical copy keeps
     -- the ordinary sheep data while removing the magic filename from the target.
     ["data/entities/animals/sheep.xml"] = "exact",
 

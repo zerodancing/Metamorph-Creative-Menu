@@ -38,8 +38,8 @@ local function collect_world_and_runtime(report)
             local ok_g, factor = pcall(rules.gravity_factor)
             add(report, "INFO", "world_rules.gravity_factor", "ok=" .. tostring(ok_g) .. " factor=" .. tostring(factor))
         end
-        if type(rules.local_gravity_debug) == "function" then
-            local ok_lg, dbg = pcall(rules.local_gravity_debug)
+        if type(rules.local_gravity_state) == "function" then
+            local ok_lg, dbg = pcall(rules.local_gravity_state)
             if ok_lg and type(dbg) == "table" then
                 local rows = {}
                 for _, row in ipairs(dbg.rows or {}) do
@@ -95,8 +95,8 @@ local function collect_world_and_runtime(report)
             " last=" .. one_line(GlobalsGetValue("mcm_remote_qa_last_v1", "")))
     end
 
-    if report.perk_service ~= nil and type(report.perk_service.root_companion_debug) == "function" then
-        local ok_owned, value = pcall(report.perk_service.root_companion_debug)
+    if report.perk_service ~= nil and type(report.perk_service.root_companion_state) == "function" then
+        local ok_owned, value = pcall(report.perk_service.root_companion_state)
         if ok_owned then add(report, "INFO", "perk.root_companion_ownership", tostring(value or "")) end
     end
     if report.perk_service ~= nil and type(report.perk_service.count) == "function" then
@@ -118,8 +118,8 @@ local function collect_world_and_runtime(report)
             if ok then weather_values[#weather_values + 1] = tostring(field.id) .. "=" .. tostring(value) end
         end
         add(report, "INFO", "weather.values", sample_list(weather_values, 20))
-        if type(report.weather.debug_state) == "function" then
-            local ok_state, state = pcall(report.weather.debug_state)
+        if type(report.weather.state_snapshot) == "function" then
+            local ok_state, state = pcall(report.weather.state_snapshot)
             if ok_state and type(state) == "table" then
                 add(report, "INFO", "weather.runtime",
                     "rainfall="..tostring(state.rainfall).." rain="..tostring(state.rain).." rain_target="..tostring(state.rain_target)..

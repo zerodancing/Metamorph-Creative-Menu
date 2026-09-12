@@ -56,7 +56,6 @@ function possession_keybinds.update()
     if not input_guard.actions_allowed() or inventory_open() then return false end
     if not binding_just_down(binding) then return false end
     local success, reason = possession.possess_under_cursor(player_locator.get())
-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION) == "function" then pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION, "possession", "binding="..tostring(binding.name).." result="..tostring(success).." reason="..tostring(reason)) end
     if not success then
         if reason == "no_target" then GamePrint(GameTextGetTranslatedOrNot("$mcm_possess_no_target"))
         else GamePrint(GameTextGetTranslatedOrNot("$mcm_possess_failed") .. ": " .. tostring(reason or "")) end

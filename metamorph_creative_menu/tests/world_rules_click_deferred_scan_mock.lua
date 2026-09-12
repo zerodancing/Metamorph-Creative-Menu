@@ -15,7 +15,7 @@ local physics={
     restore_rule=function() return true,"ok" end,
     reset_all=function() return true end,
     has_overrides=function() return false end,
-    debug_local_gravity=function() return {} end,
+    local_gravity_state=function() return {} end,
     has_persisted_local_recovery=function() return false end,
     recover_persisted_local=function() return true end,
 }

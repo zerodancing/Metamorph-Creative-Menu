@@ -1,24 +1,13 @@
 local weather_tab = {}
 local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
-local audit = ui.audit
 local weather_service = dofile("mods/metamorph_creative_menu/files/features/weather/service.lua")
 local advanced=false
 
 local function time(name)
-    local ok,reason=weather_service.set_time_preset(name)
-    audit("weather.time", "preset="..tostring(name).." result="..tostring(ok).." reason="..tostring(reason))
+    weather_service.set_time_preset(name)
 end
 local function preset(name)
-    local ok,reason=weather_service.apply_preset(name)
-    local detail=""
-    if type(weather_service.debug_state)=="function" then
-        local good,state=pcall(weather_service.debug_state)
-        if good and type(state)=="table" then
-            detail=" rainfall="..tostring(state.rainfall).." rain="..tostring(state.rain).." rain_target="..tostring(state.rain_target)
-                .." last_emit="..tostring(state.last_rain_emit_frame).." stop_guard_until="..tostring(state.rain_stop_guard_until)
-        end
-    end
-    audit("weather.preset", "preset="..tostring(name).." result="..tostring(ok).." reason="..tostring(reason)..detail)
+    weather_service.apply_preset(name)
 end
 local function tile(icon,key,fallback,fn)
     local clicked=ui.tile(0,0,ui.EMPTY_SLOT,icon,ui.EMPTY_SLOT,ui.tr(key,fallback),"",false,{target_size=18,max_scale=2.5})
@@ -45,12 +34,12 @@ function weather_tab.draw(_, panel_width, screen_height)
         GuiLayoutEnd(ui.gui())
         GuiLayoutBeginHorizontal(ui.gui(),0,3,true)
         if ui.button(0,0,ui.tr("$mcm_weather_advanced","ADVANCED")) then advanced=true end
-        if weather_service.is_locked() and ui.button(0,0,ui.tr("$mcm_weather_release","RELEASE")) then local ok=weather_service.release(); audit("weather.release", "result="..tostring(ok)) end
+        if weather_service.is_locked() and ui.button(0,0,ui.tr("$mcm_weather_release","RELEASE")) then weather_service.release() end
         GuiLayoutEnd(ui.gui())
     else
         GuiLayoutBeginHorizontal(ui.gui(),0,0,true)
         if ui.button(0,0,ui.tr("$mcm_weather_back","BACK")) then advanced=false end
-        if weather_service.is_locked() and ui.button(0,0,ui.tr("$mcm_weather_release","RELEASE")) then local ok=weather_service.release(); audit("weather.release", "result="..tostring(ok)) end
+        if weather_service.is_locked() and ui.button(0,0,ui.tr("$mcm_weather_release","RELEASE")) then weather_service.release() end
         GuiLayoutEnd(ui.gui())
         for _,field in ipairs(weather_service.fields()) do
             local value=weather_service.get(field)

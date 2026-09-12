@@ -248,7 +248,7 @@ function root_companions.owned_counts()
     return result
 end
 
-function root_companions.debug()
+function root_companions.ownership_summary()
     local rows = {}
     for perk_id in pairs(ROOT_COMPANION_SPECS) do
         local owned_roots = owned_roots_by_perk[perk_id] or {}

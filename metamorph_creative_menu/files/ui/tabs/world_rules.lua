@@ -1,6 +1,5 @@
 local world_rules_tab = {}
 local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
-local audit = ui.audit
 local world_rule_service = dofile("mods/metamorph_creative_menu/files/features/world_rules/service.lua")
 
 local search = ""
@@ -35,10 +34,6 @@ local function run_rule_action(action_name, fn, ...)
     local call_ok, result, reason = pcall(fn, ...)
     if not call_ok then
         last_action_error = tostring(result)
-        audit(action_name, "result=false reason=exception:" .. last_action_error)
-        if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
-            pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "ui.rules.action", action_name .. ":" .. last_action_error)
-        end
         return false, "exception"
     end
     if result == true then
@@ -56,7 +51,6 @@ function world_rules_tab.draw(_, panel_width, screen_height)
     ui.white_text(0, 1, ui.tr("$mcm_rules_title", "WORLD RULES"))
     if world_rule_service.has_overrides() and ui.button(0, 0, ui.tr("$mcm_rules_reset", "RESET")) and can_edit then
         local ok, reason = run_rule_action("rules.reset", world_rule_service.reset)
-        audit("rules.reset", "result="..tostring(ok).." reason="..tostring(reason))
     end
     GuiLayoutEnd(ui.gui())
     if not can_edit then ui.white_text(0, 0, ui.tr("$mcm_rules_unavailable", "World-rule editing unavailable")) end
@@ -87,7 +81,6 @@ function world_rules_tab.draw(_, panel_width, screen_height)
             if can_edit and (clicked or right) then
                 local ok, reason
                 ok, reason = run_rule_action("rule.step", world_rule_service.step, rule, right and -1 or 1)
-                audit("rule.step", "id="..tostring(rule.id).." direction="..tostring(right and -1 or 1).." result="..tostring(ok).." reason="..tostring(reason))
             end
         end
     end

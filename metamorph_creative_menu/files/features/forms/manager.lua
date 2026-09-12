@@ -46,11 +46,6 @@ local session_counter = 0
 local runtime_error_log = {}
 local RUNTIME_ERROR_REPEAT_FRAMES = 600
 
-local function diagnostic_event(kind, details)
-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_EVENT) == "function" then
-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_EVENT, tostring(kind or "FORM"), tostring(details or ""))
-    end
-end
 
 local function real_time_ms()
     if type(GameGetRealWorldTimeSinceStarted) ~= "function" then return nil end
@@ -72,9 +67,6 @@ local function protected_runtime_call(label, fn, ...)
     local last = runtime_error_log[signature]
     if last == nil or frame - last >= RUNTIME_ERROR_REPEAT_FRAMES then
         runtime_error_log[signature] = frame
-        if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
-            pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "form." .. tostring(label), message)
-        end
         print("[Metamorph: Creative Menu] " .. tostring(label) .. " failed: " .. message)
     end
     return false
@@ -195,9 +187,6 @@ function form_manager.handle_form_death(old_form, reason, responsible, damage, p
     local source_path = session ~= nil and tostring(session.requested_target or session.target or "") or ""
     local x0, y0 = 0, 0
     if old_form ~= 0 and EntityGetIsAlive(old_form) then x0, y0 = EntityGetTransform(old_form) end
-    diagnostic_event("FORM DEATH", string.format("entity=%s source=%s reason=%s responsible=%s damage=%s projectile=%s pos=%.1f,%.1f",
-        tostring(old_form), source_path, tostring(reason or "death"), tostring(responsible or 0), tostring(damage), tostring(projectile or 0),
-        tonumber(x0) or 0, tonumber(y0) or 0))
     if session == nil then return false end
 
     if session.kind ~= "polymorph"
@@ -240,9 +229,6 @@ function form_manager.handle_form_death(old_form, reason, responsible, damage, p
     protect_restored_player(restored, 12)
     local corpse_detached = detach_dead_form_as_corpse(old_form, source_path, reason, responsible)
     local death_finished_ms = real_time_ms()
-    diagnostic_event("FORM HANDOFF", string.format("old=%s restored=%s corpse_detached=%s elapsed_ms=%s",
-        tostring(old_form), tostring(restored), tostring(corpse_detached),
-        death_started_ms ~= nil and death_finished_ms ~= nil and string.format("%.2f", death_finished_ms-death_started_ms) or "nil"))
     session = nil
     pending_return_frame = nil
     protected_runtime_call("form_runtime.reset", form_runtime.reset)
@@ -395,7 +381,6 @@ function form_manager.handle_tab_return(input_blocked)
         pcall(ComponentSetValue2, component, "frames", 1)
     end
     pending_return_frame = GameGetFrameNum()
-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION) == "function" then pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION, "form.return_tab", "result=true") end
     return true
 end
 

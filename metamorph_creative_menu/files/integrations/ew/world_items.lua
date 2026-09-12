@@ -43,9 +43,6 @@ function world_items.notify_world_item(entity)
     if type(CrossCall) == "function" then
         local crosscall_succeeded, crosscall_error = pcall(CrossCall, "ew_thrown", entity)
         if crosscall_succeeded then return true, "direct" end
-        if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
-            pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "item.ew_thrown", tostring(crosscall_error))
-        end
     end
 
     outbox_sequence = math.max(outbox_sequence, tonumber(GlobalsGetValue(OUTBOX_SEQUENCE_KEY, "0")) or 0) + 1

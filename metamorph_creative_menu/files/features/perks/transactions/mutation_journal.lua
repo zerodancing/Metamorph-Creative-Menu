@@ -560,7 +560,7 @@ function mutation_journal.rebuild_ownership(deltas)
     end
 end
 
-function mutation_journal.debug_active_properties()
+function mutation_journal.active_property_count()
     local count = 0
     for _ in pairs(property_owners) do count = count + 1 end
     return count

@@ -71,9 +71,6 @@ local function recover_stale_saved_overrides()
     restore_loaded_gold_lifetimes_if_disabled()
     -- Startup recovery removes stale state from a previous Lua/save session. It is not
     -- a user edit and must not race a live EW host snapshot during peer reconnect.
-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "world_rules.startup_recovery", "restored_stale_saved_overrides=true")
-    end
     return true
 end
 
@@ -257,9 +254,6 @@ local function apply_network_snapshot(choices)
         end
     end
     state.last_physics_scan = -100000
-    if #failures > 0 and type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "world_rules.snapshot_apply", table.concat(failures, ","))
-    end
 end
 
 update_network_sync = function(frame)
@@ -273,8 +267,8 @@ end
 
 function world_rule_service.gravity_factor() return physics_factor("physics_gravity") end
 
-function world_rule_service.local_gravity_debug()
-    return physics_adapter.debug_local_gravity(player_locator.get(), world_rule_service.gravity_factor())
+function world_rule_service.local_gravity_state()
+    return physics_adapter.local_gravity_state(player_locator.get(), world_rule_service.gravity_factor())
 end
 
 function world_rule_service.step(rule, direction)

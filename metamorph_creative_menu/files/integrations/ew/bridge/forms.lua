@@ -4,7 +4,6 @@ local last_remote_pose_frame = {}
 local last_pose_send_frame = -100000
 local last_remote_root_frame = {}
 local remote_articulated_prepared = {}
-local form_pose_sent, form_pose_received = 0, 0
 
 
 local function finite_number(value)
@@ -168,7 +167,6 @@ function forms_bridge.register_pose(shared_rpc, shared_common)
     rotation, scale_x, scale_y = tonumber(rotation) or 0, tonumber(scale_x) or 1, tonumber(scale_y) or 1
     if not finite_number(x) or not finite_number(y) or not finite_number(rotation) then return end
     last_remote_pose_frame[sender] = frame
-    form_pose_received = form_pose_received + 1
 
     local kind = tonumber(motion_kind) or 0
     local articulated = kind == 3 or kind == 5
@@ -253,11 +251,9 @@ local function send_form_pose(frame)
             if ok and type(value) == "table" then phys_info = value end
         end
     end
-    form_pose_sent = form_pose_sent + 1
     rpc.sync_form_pose(frame, x, y, rotation or 0, scale_x or 1, scale_y or 1,
         phys_info, motion_kind, motion_x, motion_y, motion_speed)
 end
 
 function forms_bridge.update(frame) send_form_pose(frame) end
-function forms_bridge.metrics() return form_pose_sent, form_pose_received end
 return forms_bridge

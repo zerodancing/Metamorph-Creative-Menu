@@ -166,8 +166,8 @@ local function perk_guard_snapshot(p)
         local ok_owned, owned_counts=pcall(perk_root_companions.owned_counts)
         if ok_owned and type(owned_counts)=="table" then result.owned_roots=owned_counts end
     end
-    if type(perk_service.debug_ownership_state)=="function" then
-        local ok_state, ownership=pcall(perk_service.debug_ownership_state)
+    if type(perk_service.ownership_state)=="function" then
+        local ok_state, ownership=pcall(perk_service.ownership_state)
         if ok_state and type(ownership)=="table" then result.ownership=ownership end
     end
     if type(EntityGetWithTag)=="function" then

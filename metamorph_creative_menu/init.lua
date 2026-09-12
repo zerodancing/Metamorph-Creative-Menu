@@ -1,15 +1,9 @@
 dofile_once("data/scripts/lib/utilities.lua")
 
-local dev_mode_value = dofile("mods/metamorph_creative_menu/dev_mode.lua")
-local DEV_MODE = tonumber(dev_mode_value) == 1
-METAMORPH_CREATIVE_MENU_DEV_MODE = DEV_MODE
-
 -- init.lua is intentionally only the lifecycle/composition root. Feature state and
 -- behavior live in services, form adapters and UI tab modules under files/.
 local localization = dofile("mods/metamorph_creative_menu/files/platform/noita/localization.lua")
 local input_guard = dofile("mods/metamorph_creative_menu/files/platform/noita/input_guard.lua")
-local diagnostics = DEV_MODE and dofile("mods/metamorph_creative_menu/files/diagnostics/service.lua") or nil
-local qa_controller = DEV_MODE and dofile("mods/metamorph_creative_menu/files/qa/controller.lua") or nil
 local form_manager = dofile("mods/metamorph_creative_menu/files/features/forms/manager.lua")
 local weather = dofile("mods/metamorph_creative_menu/files/features/weather/service.lua")
 local world_rules = dofile("mods/metamorph_creative_menu/files/features/world_rules/service.lua")
@@ -40,34 +34,21 @@ function OnModPreInit()
 end
 
 function OnModPostInit()
-    local seed_fallbacks, biome_fallbacks, crosscall_guards = ew_resilience.post_init()
-    if (tonumber(seed_fallbacks) or 0) > 0 or (tonumber(biome_fallbacks) or 0) > 0
-        or (tonumber(crosscall_guards) or 0) > 0
-    then
-        print("[" .. MOD_NAME .. "] EW resilience: seed=" .. tostring(seed_fallbacks)
-            .. ", biome=" .. tostring(biome_fallbacks) .. ", crosscall=" .. tostring(crosscall_guards))
-    end
+    ew_resilience.post_init()
     -- Noita resolves polymorph effect entity paths early enough that publishing the
     -- generated XML only from a menu click is not reliable on every runtime path.
     -- Prewarm the exact effect wrappers after all mods finish VFS setup; transform_creature()
     -- keeps its lazy publisher as a fallback for dynamically-added creature paths.
     local ok_forms, prepared = pcall(form_manager.prepare_exact_effect_paths_from_catalog)
     if not ok_forms then
-        if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
-            pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "init.polymorph_prewarm", tostring(prepared))
-        end
         print("[" .. MOD_NAME .. "] polymorph prewarm failed: " .. tostring(prepared))
-    elseif tonumber(prepared) ~= nil then
-        print("[" .. MOD_NAME .. "] polymorph effects prepared: " .. tostring(prepared))
     end
 
 end
 
 function OnWorldPreUpdate()
     input_guard.update()
-    if diagnostics ~= nil then diagnostics.update() end
     effect_service.update()
-    if qa_controller ~= nil then qa_controller.update() end
     weather.update()
     world_rules.update()
     ew_perk_sync.update()

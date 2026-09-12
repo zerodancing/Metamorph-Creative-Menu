@@ -57,7 +57,7 @@ assert(math.abs(comps[101].gravity - (-400))<1e-6,"player gravity="..tostring(co
 comps[102].pixel_gravity=-700
 api.post_update()
 assert(math.abs(comps[102].pixel_gravity - (-1400))<1e-6,"post-update reassert="..tostring(comps[102].pixel_gravity))
-local dbg=api.local_gravity_debug(); assert(dbg.factor==-4)
+local dbg=api.local_gravity_state(); assert(dbg.factor==-4)
 local found=false; for _,r in ipairs(dbg.rows) do if r.field=="pixel_gravity" then found=true; assert(r.native==350); assert(r.expected==-1400); assert(r.current==-1400) end end; assert(found)
 -- RESET returns ownership snapshot (perk-modified 0), not the clean scale used for creative multiplication.
 frame=3

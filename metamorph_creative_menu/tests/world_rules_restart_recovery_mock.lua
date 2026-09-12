@@ -122,6 +122,6 @@ assert(service.choice_index(service.rules()[1])==1 and service.choice_index(serv
 assert(service.has_overrides()==false,"restart recovery left in-memory rule ownership")
 assert(dirty_calls==0,"startup recovery was incorrectly published as a user Rules edit")
 assert(network_updates==1,"normal network sync did not continue after recovery")
-assert(diagnostics==1,"restart recovery was not visible to diagnostics")
+assert(diagnostics==0,"restart recovery unexpectedly called diagnostics from player runtime")
 
 io.write("world_rules_restart_recovery=PASS relations=0 pixel_gravity=350 recovery_clean=true\n")

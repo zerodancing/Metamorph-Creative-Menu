@@ -1,6 +1,6 @@
 local root=assert(arg[1])
 local expected={
- "apply_world_rules","request_world_rules","sync_qa_state","request_player_companion",
+ "apply_world_rules","request_world_rules","reserved_protocol_slot_3","request_player_companion",
  "sync_form_pose","remove_global_perk","apply_weather_state","request_weather_state",
  "retire_possession_target","announce_light_form_protocol"
 }

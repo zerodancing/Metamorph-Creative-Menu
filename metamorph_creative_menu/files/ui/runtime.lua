@@ -41,11 +41,6 @@ function ui_runtime.tr(key, fallback)
     return value
 end
 
-function ui_runtime.audit(action, details)
-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION) == "function" then
-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION, action, details)
-    end
-end
 
 function ui_runtime.actions_allowed() return input_guard.actions_allowed() end
 function ui_runtime.mark_hovered(value) if value == true then hovered = true end end

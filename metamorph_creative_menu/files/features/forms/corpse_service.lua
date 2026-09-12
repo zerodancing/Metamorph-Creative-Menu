@@ -8,11 +8,6 @@ local POLYMORPH_EFFECTS = {
 local pending_corpse_watch = {}
 local pending_corpse_finalize = {}
 
-local function diagnostic_event(kind, details)
-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_EVENT) == "function" then
-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_EVENT, tostring(kind or "FORM"), tostring(details or ""))
-    end
-end
 
 local CORPSE_PLAYER_TAGS = {
     -- A dead player-form must become an ordinary world entity. In particular remove
@@ -148,10 +143,6 @@ local function detach(entity, source_path, reason, responsible)
         born=frame, next_index=1, checks={1,3,10,60},
     }
     local gid = corpse_des_gid(entity)
-    diagnostic_event("FORM CORPSE PENDING", string.format("entity=%s source=%s pos=%.1f,%.1f hp=%s/%s ew_synced=%s des=%s gid=%s release=%s",
-        tostring(entity), tostring(source_path or ""), tonumber(x) or 0, tonumber(y) or 0,
-        tostring(hp), tostring(max_hp), tostring(EntityHasTag(entity, "ew_synced")),
-        tostring(EntityHasTag(entity, "ew_des")), tostring(gid or ""), tostring(frame + 1)))
     return true
 end
 
@@ -166,8 +157,6 @@ function corpse_service.update()
         local entity = tonumber(record.entity) or 0
         local alive = entity ~= 0 and EntityGetIsAlive(entity)
         if not alive then
-            diagnostic_event("FORM CORPSE FINALIZED", string.format("entity=%s source=%s age=%s native_death=true",
-                tostring(entity), tostring(record.source or ""), tostring(frame - (tonumber(record.born) or frame))))
             table.remove(pending_corpse_finalize, index)
         elseif frame >= (tonumber(record.release_frame) or frame) and record.released ~= true then
             local damage = EntityGetFirstComponentIncludingDisabled(entity, "DamageModelComponent")
@@ -177,9 +166,6 @@ function corpse_service.update()
             record.released = true
             record.release_frame = frame
             pcall(EntityRemoveTag, entity, "metamorph_creative_menu_form_corpse_pending")
-            diagnostic_event("FORM CORPSE RELEASE", string.format("entity=%s source=%s hp=%s/%s des=%s gid=%s",
-                tostring(entity), tostring(record.source or ""), tostring(corpse_health(entity)),
-                select(2, corpse_health(entity)), tostring(EntityHasTag(entity, "ew_des")), tostring(corpse_des_gid(entity) or "")))
         elseif record.released == true and frame - (tonumber(record.release_frame) or frame) >= 3 and record.forced ~= true then
             -- A few unusual entities cache the wait flag during the death callback. If
             -- kill_now did not complete the death within three frames, clear the wait
@@ -193,7 +179,6 @@ function corpse_service.update()
             end
             freeze_pending_corpse(entity)
             record.forced = true
-            diagnostic_event("FORM CORPSE FORCE_RELEASE", string.format("entity=%s source=%s", tostring(entity), tostring(record.source or "")))
         elseif record.released == true and frame - (tonumber(record.release_frame) or frame) >= 20 then
             -- Last-resort protection: never leave a living detached player-form entity
             -- immortal detached form in the world. For ordinary animals, replace only
@@ -203,8 +188,6 @@ function corpse_service.update()
             -- consequential; a stuck body is removed instead.
             local x, y = EntityGetTransform(entity)
             local fallback = spawn_native_corpse_fallback(record, x, y)
-            diagnostic_event("FORM CORPSE FALLBACK", string.format("old=%s fallback=%s source=%s",
-                tostring(entity), tostring(fallback), tostring(record.source or "")))
             if EntityGetIsAlive(entity) then pcall(EntityKill, entity) end
             if fallback ~= 0 then
                 pending_corpse_watch[#pending_corpse_watch + 1] = {
@@ -227,10 +210,6 @@ function corpse_service.update()
             local x, y, hp, max_hp = 0, 0, nil, nil
             if alive then x, y = EntityGetTransform(entity); hp, max_hp = corpse_health(entity) end
             local gid = alive and corpse_des_gid(entity) or nil
-            diagnostic_event("FORM CORPSE WATCH", string.format("age=%s entity=%s alive=%s source=%s pos=%.1f,%.1f hp=%s/%s sync_request=%s des=%s gid=%s",
-                tostring(check_at), tostring(entity), tostring(alive), tostring(record.source or ""), tonumber(x) or 0, tonumber(y) or 0,
-                tostring(hp), tostring(max_hp), tostring(alive and EntityHasTag(entity, "ew_synced") or false),
-                tostring(alive and EntityHasTag(entity, "ew_des") or false), tostring(gid or "")))
             record.next_index = (record.next_index or 1) + 1
             if not alive or record.next_index > #checks then table.remove(pending_corpse_watch, index) end
         end

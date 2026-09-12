@@ -96,7 +96,7 @@ function nested_pickups.update()
     end
 end
 
-function nested_pickups.debug_state()
+function nested_pickups.state_snapshot()
     local scopes, children = 0, 0
     for _ in pairs(scopes_by_player) do scopes = scopes + 1 end
     for _, rows in pairs(children_by_parent_transaction) do children = children + #(rows or {}) end

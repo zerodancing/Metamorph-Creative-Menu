@@ -25,7 +25,7 @@ local physics = {
     restore_rule=function() physics_value=nil; return true,"ok" end,
     reset_all=function() reset_calls.physics=reset_calls.physics+1; physics_value=nil; return true end,
     has_overrides=function() return physics_value ~= nil end,
-    debug_local_gravity=function() return {} end,
+    local_gravity_state=function() return {} end,
 }
 local stain = {
     supported=function() return true end, apply=function() end, cleanup_stale=function() end,

@@ -287,7 +287,7 @@ function weather_service.update()
     if not state.remote then weather_sync.publish(state, world_component, false) end
 end
 
-function weather_service.debug_state()
+function weather_service.state_snapshot()
     local component = world_component()
     local result = {
         active = state.active == true,

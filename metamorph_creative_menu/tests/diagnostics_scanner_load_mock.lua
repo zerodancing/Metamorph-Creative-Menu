@@ -61,7 +61,7 @@ local module_stubs = {
         can_edit=function() return true, "ok" end,
         is_locked=function() return false end,
         fields=function() return {} end,
-        debug_state=function() return {} end,
+        state_snapshot=function() return {} end,
     },
     ["mods/metamorph_creative_menu/files/ui/menu_controller.lua"] = {active_tab=function() return "SPELLS" end, is_hovered=function() return false end},
     ["mods/metamorph_creative_menu/files/features/possession/keybinds.lua"] = {possess_key_name=function() return "Key_g" end},

@@ -1,8 +1,5 @@
 local creatures_tab = {}
-local DEV_MODE = METAMORPH_CREATIVE_MENU_DEV_MODE == true
-
 local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
-local audit = ui.audit
 local form_manager = dofile("mods/metamorph_creative_menu/files/features/forms/manager.lua")
 local entity_catalog = dofile("mods/metamorph_creative_menu/files/features/creatures/ui_catalog.lua")
 local player_avatar = dofile("mods/metamorph_creative_menu/files/features/companion/player_avatar.lua")
@@ -11,8 +8,6 @@ local creature_service, catalog, filters, filtered = nil, nil, nil, {}
 local selected_filter = 1
 local icon_cache = {}
 local search = ""
-local review_mode = "play"
-local review_marks = {}
 local search_cache_key = nil
 local search_cache_value = nil
 local warmup_cursor = 1
@@ -132,27 +127,8 @@ local function presentation(entry)
     local text = tostring(entry.display_description or "")
     if text ~= "" then text = text .. "\n" end
     text = text .. tostring(entry.path or "")
-    if review_mode == "play" then
-        text = text .. "\n" .. ui.tr("$mcm_left_spawn", "LMB: spawn nearby")
-            .. "\n" .. ui.tr("$mcm_right_transform", "RMB: transform")
-    else
-        local mode_key = "$mcm_mobs_mode_log_retest"
-        local mode_fallback = "LOG RETEST"
-        if review_mode == "safe" then mode_key, mode_fallback = "$mcm_mobs_mode_log_safe", "LOG SAFE" end
-        if review_mode == "unsafe" then mode_key, mode_fallback = "$mcm_mobs_mode_log_unsafe", "LOG UNSAFE" end
-        text = text .. "\n" .. ui.tr("$mcm_mobs_review_click", "CLICK: log") .. " " .. ui.tr(mode_key, mode_fallback)
-        if creature_service ~= nil and type(creature_service.compatibility_status) == "function" then
-            local checked, status, reason = pcall(creature_service.compatibility_status, entry.path)
-            if checked then text = text .. "\nAUTO: " .. tostring(status or "unknown") .. " / " .. tostring(reason or "unknown") end
-        end
-        local marked = review_marks[tostring(entry.path)]
-        if marked ~= nil then
-            local marked_key, marked_fallback = "$mcm_mobs_mode_log_retest", "LOG RETEST"
-            if marked == "safe" then marked_key, marked_fallback = "$mcm_mobs_mode_log_safe", "LOG SAFE" end
-            if marked == "unsafe" then marked_key, marked_fallback = "$mcm_mobs_mode_log_unsafe", "LOG UNSAFE" end
-            text = text .. "\n" .. ui.tr("$mcm_mobs_marked", "MARKED") .. ": " .. ui.tr(marked_key, marked_fallback)
-        end
-    end
+        .. "\n" .. ui.tr("$mcm_left_spawn", "LMB: spawn nearby")
+        .. "\n" .. ui.tr("$mcm_right_transform", "RMB: transform")
     return { description = text }
 end
 
@@ -170,7 +146,6 @@ local function transform_creature(player, creature)
         local checked, status, reason = pcall(creature_service.compatibility_status, creature.path)
         if checked and status == "unsafe" then
             GamePrint(ui.tr("$mcm_creature_poly_failed", "Could not transform") .. ": " .. tostring(creature.display_name or creature.path))
-            audit("creature.transform.blocked", "path="..tostring(creature.path).." reason="..tostring(reason or "known_unsafe"))
             return false, tostring(reason or "known_unsafe")
         end
     end
@@ -188,27 +163,9 @@ local function transform_creature(player, creature)
         local ok, canonical = pcall(creature_service.canonical_transform_path, creature.path)
         if ok and type(canonical) == "string" and canonical ~= "" then target = canonical end
     end
-    -- Spawn identity and transform identity are intentionally separate for confirmed
-    -- crash-prone placement wrappers: LMB keeps the authored biome XML, while player
-    -- polymorph may use its same-species base body. requested_target preserves the
-    -- exact menu/G identity for diagnostics and UI.
     if form_manager.exact_effect_path_for_target(target) == nil then
         pcall(form_manager.prepare_exact_effect_paths, {target})
     end
-    -- Persist intent before entering native polymorph code. If Noita hard-crashes during
-    -- transformation, the diagnostics log still has the exact requested/canonical path
-    -- and the non-destructive compatibility preflight verdict from before the attempt.
-    local compatibility_status, compatibility_reason = "unknown", "unavailable"
-    if creature_service ~= nil and type(creature_service.compatibility_status) == "function" then
-        local checked, status, reason = pcall(creature_service.compatibility_status, creature.path)
-        if checked then
-            compatibility_status = tostring(status or "unknown")
-            compatibility_reason = tostring(reason or "unknown")
-        end
-    end
-    audit("creature.transform.begin", "path="..tostring(creature.path).." target="..tostring(target)
-        .." transform_mode="..transform_mode.." transform_reason="..transform_reason
-        .." compatibility="..compatibility_status.." compatibility_reason="..compatibility_reason)
     local ok, reason = form_manager.transform_creature(player, target, nil, true, {
         requested_target=creature.path,
         compatibility_mode=transform_mode,
@@ -243,21 +200,7 @@ function creatures_tab.draw(player, panel_width, screen_height)
         end
         GuiLayoutEnd(ui.gui())
     end
-    if DEV_MODE then
-        GuiLayoutBeginHorizontal(ui.gui(), 0, 0, true)
-        if ui.button(0, 0, ui.tr("$mcm_mobs_mode_play", "PLAY"), review_mode == "play") then review_mode = "play" end
-        if ui.button(0, 0, ui.tr("$mcm_mobs_mode_log_safe", "LOG SAFE"), review_mode == "safe") then review_mode = "safe" end
-        if ui.button(0, 0, ui.tr("$mcm_mobs_mode_log_unsafe", "LOG UNSAFE"), review_mode == "unsafe") then review_mode = "unsafe" end
-        if ui.button(0, 0, ui.tr("$mcm_mobs_mode_log_retest", "LOG RETEST"), review_mode == "retest") then review_mode = "retest" end
-        GuiLayoutEnd(ui.gui())
-    else
-        review_mode = "play"
-    end
-    if review_mode == "play" then
-        ui.white_text(0, 0, ui.tr("$mcm_creature_controls", "LMB: SPAWN   RMB: TRANSFORM   TAB: HUMAN"))
-    else
-        ui.white_text(0, 0, ui.tr("$mcm_mobs_review_help", "REVIEW: click a mob to log its exact path; no transform/spawn occurs"))
-    end
+    ui.white_text(0, 0, ui.tr("$mcm_creature_controls", "LMB: SPAWN   RMB: TRANSFORM   TAB: HUMAN"))
     search = ui.search_input(search, math.max(88, panel_width - 54), 64, "creatures")
 
     local columns = ui.columns(panel_width)
@@ -279,25 +222,10 @@ function creatures_tab.draw(player, panel_width, screen_height)
             ui.EMPTY_SLOT, icon(entry, false), CREATURE_ICON_FALLBACK, entry.display_name, p.description, false,
             {target_size=18, max_scale=18, padding=0})
         if hovered and icon_cache[tostring(entry.path)] == nil then icon(entry, true) end
-        if review_mode ~= "play" and (clicked or right) then
-            review_marks[tostring(entry.path)] = review_mode
-            local compatibility_status, compatibility_reason = "unknown", "unavailable"
-            if creature_service ~= nil and type(creature_service.compatibility_status) == "function" then
-                local checked, status, reason = pcall(creature_service.compatibility_status, entry.path)
-                if checked then compatibility_status, compatibility_reason = tostring(status or "unknown"), tostring(reason or "unknown") end
-            end
-            audit("creature.review", "verdict="..tostring(review_mode).." path="..tostring(entry.path).." id="..tostring(entry.id or "")
-                .." name="..tostring(entry.display_name or "").." auto="..compatibility_status.." auto_reason="..compatibility_reason)
-            local label = ui.tr("$mcm_mobs_mode_log_retest", "LOG RETEST")
-            if review_mode == "safe" then label = ui.tr("$mcm_mobs_mode_log_safe", "LOG SAFE") end
-            if review_mode == "unsafe" then label = ui.tr("$mcm_mobs_mode_log_unsafe", "LOG UNSAFE") end
-            GamePrint(ui.tr("$mcm_mobs_review_logged", "MOBS REVIEW") .. " " .. label .. ": " .. tostring(entry.path))
-        elseif clicked then
-            local ok=spawn(player, entry)
-            audit("creature.spawn", "path="..tostring(entry.path).." result="..tostring(ok))
+        if clicked then
+            spawn(player, entry)
         elseif right then
-            local ok, reason=transform(player, entry)
-            audit("creature.transform", "path="..tostring(entry.path).." result="..tostring(ok).." reason="..tostring(reason))
+            transform(player, entry)
         end
     end
     GuiEndScrollContainer(ui.gui())

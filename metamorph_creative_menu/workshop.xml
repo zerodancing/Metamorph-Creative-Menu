@@ -3,6 +3,6 @@
     description=""
     tags="gameplay,quality of life,spells,perks,player characters,creatures,items,cheats"
     dont_upload_folders="NoitaPatcher|tests|files\qa|files\diagnostics"
-    dont_upload_files="README.txt"
+    dont_upload_files="README.txt|dev_mode.lua|files\core\bounded_log.lua|files\features\creatures\diagnostics.lua|files\integrations\ew\bridge\qa.lua|files\integrations\ew\bridge\qa_reserved.lua"
 >
 </Mod>

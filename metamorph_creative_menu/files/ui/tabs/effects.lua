@@ -1,7 +1,6 @@
 local effects_tab = {}
 
 local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
-local audit = ui.audit
 local effect_service = dofile("mods/metamorph_creative_menu/files/features/effects/service.lua")
 
 local catalog = nil
@@ -65,7 +64,6 @@ function effects_tab.draw(player, panel_width, screen_height)
     if ui.button(0,0,"  +  ") then duration_index=math.min(#DURATIONS,duration_index+1) end
     if ui.button(0,0,ui.tr("$mcm_effect_remove_all","REMOVE ALL")) then
         local removed=effect_service.remove_all(player)
-        audit("effect.remove_all", "removed="..tostring(removed))
     end
     GuiLayoutEnd(ui.gui())
     search = ui.search_input(search, math.max(88, panel_width - 54), 64, "effects")
@@ -93,10 +91,8 @@ function effects_tab.draw(player, panel_width, screen_height)
             if clicked then
                 local frames=entry.kind=="status" and nil or d.frames
                 local ok,reason=effect_service.add(player,entry,frames)
-                audit("effect.add", "id="..tostring(entry.id or entry.path).." result="..tostring(ok).." reason="..tostring(reason))
             elseif right then
                 local removed=effect_service.remove(player,entry)
-                audit("effect.remove", "id="..tostring(entry.id or entry.path).." removed="..tostring(removed))
             end
         end
     end

@@ -11,8 +11,8 @@ function perk_transactions.update()
     pending_cleanup.update()
 end
 
-function perk_transactions.debug_cleanup_state()
-    return pending_cleanup.debug_state()
+function perk_transactions.cleanup_state()
+    return pending_cleanup.state_snapshot()
 end
 
 function perk_transactions.start_capture(token, environment)
@@ -428,13 +428,13 @@ end
 
 function perk_transactions.clear() history = {} end
 
-function perk_transactions.debug_active_mutations()
-    return mutation_journal.debug_active_properties()
+function perk_transactions.active_mutation_count()
+    return mutation_journal.active_property_count()
 end
 
-function perk_transactions.debug_active_global_owners()
-    if type(global_journal.debug_active_owners) ~= "function" then return 0, 0 end
-    return global_journal.debug_active_owners()
+function perk_transactions.active_global_owner_counts()
+    if type(global_journal.active_owner_counts) ~= "function" then return 0, 0 end
+    return global_journal.active_owner_counts()
 end
 
 METAMORPH_CREATIVE_MENU_PERK_TRANSACTIONS = perk_transactions

@@ -2,7 +2,6 @@ local metadata = dofile("mods/metamorph_creative_menu/files/features/creatures/m
 local classification = dofile("mods/metamorph_creative_menu/files/features/creatures/classification.lua")
 local compatibility = dofile("mods/metamorph_creative_menu/files/features/creatures/compatibility.lua")
 local transform_routing = dofile("mods/metamorph_creative_menu/files/features/creatures/transform_routing.lua")
-local creature_diagnostics = dofile("mods/metamorph_creative_menu/files/features/creatures/diagnostics.lua")
 local catalog_builder = dofile("mods/metamorph_creative_menu/files/features/creatures/catalog_builder.lua")
 local existing_creature_service = METAMORPH_CREATIVE_MENU_CREATURE_SERVICE or METAMORPH_CREATIVE_MENU_CREATURE_API
 if type(existing_creature_service) == "table" then return existing_creature_service end
@@ -56,13 +55,6 @@ function creature_service.collect() return catalog_builder.collect() end
 function creature_service.warmup_step(budget) return catalog_builder.warmup_step(budget) end
 function creature_service.catalog_version() return catalog_builder.catalog_version() end
 
-function creature_service.collect_diagnostics()
-    return creature_diagnostics.collect(creature_service)
-end
-
-function creature_service.diagnostic_info_for_path(path)
-    return creature_diagnostics.info(creature_service, path)
-end
 
 function creature_service.collect_prewarm_candidates()
     -- Prewarm is intentionally broader than the lazy UI catalogue. Exact polymorph XML

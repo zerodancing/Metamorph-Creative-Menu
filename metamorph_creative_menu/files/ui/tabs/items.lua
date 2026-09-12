@@ -1,7 +1,6 @@
 local items_tab = {}
 
 local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
-local audit = ui.audit
 local item_service = dofile("mods/metamorph_creative_menu/files/features/items/service.lua")
 local item_catalog = dofile("mods/metamorph_creative_menu/files/features/items/ui_catalog.lua")
 local liquid_preview = dofile("mods/metamorph_creative_menu/files/features/items/liquid_preview.lua")
@@ -132,7 +131,6 @@ function items_tab.draw(player, panel_width, screen_height)
         if is_liquid then
             if clicked or right then
                 local ok, reason, entity = item_service.spawn_filled_flask(player, entry.id, right)
-                audit(right and "item.take_liquid" or "item.spawn_liquid", "id="..tostring(entry.id).." result="..tostring(ok).." reason="..tostring(reason))
                 if not ok and reason == "full" then
                     GamePrint(ui.tr("$mcm_inventory_full_spawned", "Inventory full — spawned nearby") .. ": " .. entry.display_name)
                 elseif not ok then
@@ -142,7 +140,6 @@ function items_tab.draw(player, panel_width, screen_height)
         else
             if clicked then
                 local entity, reason = item_service.spawn_near(player, entry.path)
-                audit("item.spawn", "path="..tostring(entry.path).." entity="..tostring(entity).." reason="..tostring(reason))
                 if entity ~= 0 then
                     GamePrint(ui.tr("$mcm_created_nearby", "Spawned nearby") .. ": " .. entry.display_name)
                 else
@@ -150,7 +147,6 @@ function items_tab.draw(player, panel_width, screen_height)
                 end
             elseif right then
                 local ok, reason, entity, spawned_nearby = item_service.give(player, entry.path, entry.category ~= "WANDS")
-                audit("item.take", "path="..tostring(entry.path).." result="..tostring(ok).." reason="..tostring(reason).." entity="..tostring(entity))
                 if ok then
                     GamePrint(ui.tr("$mcm_received", "Received") .. ": " .. entry.display_name)
                 elseif reason == "full" then

@@ -35,9 +35,6 @@ local function log_network_error(code, details)
     local signature = tostring(code) .. "\31" .. tostring(details or "")
     if last_network_error.signature == signature and frame - last_network_error.frame < 600 then return end
     last_network_error.signature, last_network_error.frame = signature, frame
-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "world_rules." .. tostring(code), tostring(details or ""))
-    end
     print("[Metamorph: Creative Menu] EW world-rules: " .. tostring(code) .. " - " .. tostring(details or ""))
 end
 

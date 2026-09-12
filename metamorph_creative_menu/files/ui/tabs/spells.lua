@@ -1,7 +1,6 @@
 local spells_tab = {}
 
 local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
-local audit = ui.audit
 local spell_service = dofile("mods/metamorph_creative_menu/files/features/spells/service.lua")
 local spell_catalog = dofile("mods/metamorph_creative_menu/files/features/spells/catalog.lua")
 
@@ -120,11 +119,9 @@ function spells_tab.draw(player, panel_width, screen_height)
     end
     if ui.button(0, 0, ui.tr("$mcm_delete", "DELETE")) and slots[selected_slot] ~= nil then
         local ok = spell_service.remove(player, wand, slots[selected_slot], entries, false)
-        audit("spell.delete", "slot="..tostring(selected_slot+1).." result="..tostring(ok))
     end
     if ui.button(0, 0, ui.tr("$mcm_drop", "DROP")) and slots[selected_slot] ~= nil then
         local ok = spell_service.remove(player, wand, slots[selected_slot], entries, true)
-        audit("spell.drop", "slot="..tostring(selected_slot+1).." result="..tostring(ok))
     end
     GuiLayoutEnd(ui.gui())
 
@@ -141,7 +138,6 @@ function spells_tab.draw(player, panel_width, screen_height)
         if clicked then selected_slot = slot elseif right and entry ~= nil then
             selected_slot = slot
             local ok = spell_service.remove(player, wand, entry, entries, true)
-            audit("spell.drop", "slot="..tostring(slot+1).." result="..tostring(ok))
         end
     end
     GuiLayoutEnd(ui.gui())
@@ -174,7 +170,6 @@ function spells_tab.draw(player, panel_width, screen_height)
 
     if picked ~= nil then
         local ok = spell_service.replace(player, wand, selected_slot, picked.id, slots[selected_slot], entries)
-        audit("spell.replace", "slot="..tostring(selected_slot+1).." action="..tostring(picked.id).." result="..tostring(ok))
     end
 end
 

@@ -31,9 +31,6 @@ local function CrossCall(name, ...)
     local mcm_signature = tostring(name) .. "|" .. tostring(a)
     if not mcm_crosscall_error_seen[mcm_signature] then
         mcm_crosscall_error_seen[mcm_signature] = true
-        if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
-            pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "ew.crosscall." .. tostring(name), tostring(a))
-        end
         print("[Metamorph: Creative Menu] unexpected EW CrossCall failure " .. tostring(name) .. ": " .. tostring(a))
     end
     return nil

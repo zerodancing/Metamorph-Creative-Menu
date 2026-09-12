@@ -72,7 +72,7 @@ globals.mcm_weather_remote_snapshot_v1 = storm_snapshot
 frame = frame + 1
 weather.update()
 assert(weather.is_locked() == true, "remote weather snapshot was not adopted")
-local state = weather.debug_state()
+local state = weather.state_snapshot()
 assert(state.fog == 0.5 and state.wind_speed == 48, "remote storm snapshot did not converge world fields")
 
 -- A peer taking over a remote active lock must retain its local pre-override time_dt.

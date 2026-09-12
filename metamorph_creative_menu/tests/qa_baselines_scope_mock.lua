@@ -20,7 +20,7 @@ local root_companions_stub = {
 }
 local service_calls = 0
 local perk_service_stub = {
-    debug_ownership_state = function()
+    ownership_state = function()
         service_calls = service_calls + 1
         return { transactions = 0, mutations = 0, global_owners = 0, run_flag_owners = 0, cleanup = {pending=0, failed=0} }
     end,

@@ -142,9 +142,16 @@ for path in root.rglob('*'):
         all_runtime_sources.append((path, read(path)))
 
 allowed_root_lua = {'item_registry.lua', 'creature_registry.lua'}
+developer_only_modules = {
+    'files/features/creatures/diagnostics.lua',
+    'files/integrations/ew/bridge/qa.lua',
+    'files/integrations/ew/bridge/qa_reserved.lua',
+}
 for path in sorted((root / 'files').rglob('*.lua')):
     relative = path.relative_to(root).as_posix()
     if path.parent == root / 'files' and path.name in allowed_root_lua:
+        continue
+    if relative.startswith('files/diagnostics/') or relative.startswith('files/qa/') or relative in developer_only_modules:
         continue
     runtime_path = 'mods/metamorph_creative_menu/' + relative
     referenced = any(runtime_path in source for source_path, source in all_runtime_sources if source_path != path)

@@ -131,7 +131,7 @@ function pending_cleanup.update()
     end
 end
 
-function pending_cleanup.debug_state()
+function pending_cleanup.state_snapshot()
     local pending_count, failed_count = 0, 0
     local pending_items, failed_items = {}, {}
     for key, record in pairs(pending) do

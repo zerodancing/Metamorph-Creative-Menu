@@ -258,8 +258,8 @@ local function gravity_rule()
 end
 
 local function gravity_debug_ok(expected_factor)
-    if type(world_rules.local_gravity_debug) ~= "function" then return false, "debug_api_missing" end
-    local ok, info = pcall(world_rules.local_gravity_debug)
+    if type(world_rules.local_gravity_state) ~= "function" then return false, "debug_api_missing" end
+    local ok, info = pcall(world_rules.local_gravity_state)
     if not ok or type(info) ~= "table" then return false, "debug_failed" end
     local rows = info.rows or {}
     if #rows == 0 then return false, "no_player_gravity_components" end
@@ -462,8 +462,8 @@ local function update_state()
         local locked=weather.is_locked()
         local weather_ok=state.pending_ok and locked
         local extra=""
-        if state.pending_name=="clear" and type(weather.debug_state)=="function" then
-            local ok_state,dbg=pcall(weather.debug_state)
+        if state.pending_name=="clear" and type(weather.state_snapshot)=="function" then
+            local ok_state,dbg=pcall(weather.state_snapshot)
             local rainfall=ok_state and type(dbg)=="table" and tonumber(dbg.rainfall) or nil
             local rain=ok_state and type(dbg)=="table" and tonumber(dbg.rain) or nil
             local target=ok_state and type(dbg)=="table" and tonumber(dbg.rain_target) or nil

@@ -1,7 +1,6 @@
 local perks_tab = {}
 
 local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
-local audit = ui.audit
 local perk_service = dofile("mods/metamorph_creative_menu/files/features/perks/service.lua")
 local perk_catalog = dofile("mods/metamorph_creative_menu/files/features/perks/catalog.lua")
 
@@ -131,15 +130,13 @@ function perks_tab.draw(player, panel_width, screen_height)
         if remove_mode then
             if clicked and count > 0 then
                 local ok, reason = perk_service.remove_one(player, perk.data)
-                audit("perk.remove_one", "id="..tostring(perk.id).." result="..tostring(ok).." reason="..tostring(reason).." scope=peer_local")
                 if not ok then GamePrint(ui.tr("$mcm_perk_remove_failed", "Could not safely remove perk") .. ": " .. perk.name) end
             elseif right and count > 0 then
                 local removed, reason = perk_service.remove_all(player, perk.data)
-                audit("perk.remove_all", "id="..tostring(perk.id).." removed="..tostring(removed).." reason="..tostring(reason).." scope=peer_local")
                 if removed == 0 then GamePrint(ui.tr("$mcm_perk_remove_failed", "Could not safely remove perk") .. ": " .. perk.name) end
             end
         else
-            if clicked then local ok=apply_or_spawn(player, perk, false); audit("perk.spawn", "id="..tostring(perk.id).." result="..tostring(ok)) elseif right then local ok=apply_or_spawn(player, perk, true); audit("perk.take", "id="..tostring(perk.id).." result="..tostring(ok)) end
+            if clicked then apply_or_spawn(player, perk, false) elseif right then apply_or_spawn(player, perk, true) end
         end
     end
     GuiEndScrollContainer(ui.gui())

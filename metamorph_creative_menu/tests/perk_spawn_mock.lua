@@ -6,8 +6,8 @@ local stubs = {
     ["mods/metamorph_creative_menu/files/features/perks/inverse_registry.lua"]={has=function() return false end},
     ["mods/metamorph_creative_menu/files/features/perks/transactions.lua"]={has=function() return false end},
     ["mods/metamorph_creative_menu/files/features/perks/root_companions.lua"]={supports=function() return false end, update=function() end, debug=function() return {} end},
-    ["mods/metamorph_creative_menu/files/features/perks/nested_pickups.lua"]={update=function() end,debug_state=function() return {scopes=0,children=0} end},
-    ["mods/metamorph_creative_menu/files/features/perks/locomotion_guard.lua"]={capture_if_idle=function() end,repair_if_idle=function() end,debug_baseline_count=function() return 0 end},
+    ["mods/metamorph_creative_menu/files/features/perks/nested_pickups.lua"]={update=function() end,state_snapshot=function() return {scopes=0,children=0} end},
+    ["mods/metamorph_creative_menu/files/features/perks/locomotion_guard.lua"]={capture_if_idle=function() end,repair_if_idle=function() end,baseline_count=function() return 0 end},
     ["mods/metamorph_creative_menu/files/features/perks/presentation.lua"]={update=function() end},
 }
 dofile=function(path)
