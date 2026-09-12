@@ -18,9 +18,9 @@ local function effect_xml(target)
 end
 
 local RUNTIME_ENTITY_CLONE_MODE = {
-    -- `sheep.xml` is treated specially by Noita's polymorph path and repeatedly
-    -- resolves to sheep_bat/sheep_fly in the user's build. A byte-identical copy keeps
-    -- the ordinary sheep data while removing the magic filename from the target.
+    -- `sheep.xml` is treated specially by Noita's polymorph path and can resolve to
+    -- alternate sheep forms. A byte-identical copy preserves ordinary sheep data while
+    -- removing the special filename from the polymorph target.
     ["data/entities/animals/sheep.xml"] = "exact",
 
     -- These NPCs run wand_ghost.lua on their first update. That script owns NPC wand
@@ -152,8 +152,6 @@ function exact_effects.runtime_target(entity_path)
     if type(entity_path) ~= "string" or entity_path == "" then return nil end
     return exact_runtime_entity_target(entity_path)
 end
-
-
 
 function exact_effects.default_duration_frames()
     return LONG_DURATION
