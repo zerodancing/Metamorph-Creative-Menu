@@ -1,0 +1,173 @@
+--- metamorph_creative_menu/files/integrations/ew/bootstrap.lua
++++ metamorph_creative_menu/files/integrations/ew/bootstrap.lua
+@@ -43,7 +43,7 @@
+ world_rules.register(rpc, common)
+ rpc.opts_reliable()
+ rpc.opts_everywhere()
+-function rpc.sync_qa_state(...) end
++function rpc.reserved_protocol_slot_3(...) end
+ companion.register(rpc, common)
+ forms.register_pose(rpc, common)
+ perks.register(rpc, common)
+--- metamorph_creative_menu/files/integrations/ew/boss_global_demote.lua
++++ metamorph_creative_menu/files/integrations/ew/boss_global_demote.lua
+@@ -427,17 +427,4 @@
+     return true, "installed"
+ end
+ 
+-if rawget(_G, "METAMORPH_CREATIVE_MENU_TESTING") == true then
+-    demote._test = {
+-        prepare_new_entities = prepare_new_entities,
+-        prepare_native_gap_entities_before_update = prepare_native_gap_entities_before_update,
+-        restore_after_native_update = restore_after_native_update,
+-        pending_count = function()
+-            local n = 0
+-            for _ in pairs(pending) do n = n + 1 end
+-            return n
+-        end,
+-        last_seen_entity_id = function() return last_seen_entity_id end,
+-    }
+-end
+ return demote
+--- metamorph_creative_menu/files/integrations/ew/boss_lifecycle.lua
++++ metamorph_creative_menu/files/integrations/ew/boss_lifecycle.lua
+@@ -9,6 +9,7 @@
+     local ok, entity = pcall(ewext.find_by_gid, gid)
+     return ok, ok and (tonumber(entity) or 0) or 0
+ end
++
+ local function discover(entity)
+     if policy.is_boss(entity) then candidates[entity] = true end
+ end
+@@ -109,14 +110,9 @@
+     if pending[record.gid] then return end
+     local ok, tracked = resolve(record.gid)
+     if not ok or tracked ~= record.entity then return end
+-    local sent, failure = pcall(native_notify, record.entity, record.wait,
++    local sent = pcall(native_notify, record.entity, record.wait,
+         record.x, record.y, "", record.responsible or 0)
+-    if not sent then
+-        if record.error ~= tostring(failure) then
+-            record.error = tostring(failure)
+-        end
+-        return
+-    end
++    if not sent then return end
+     record.reason = reason
+     pending[record.gid] = record
+ end
+@@ -225,6 +221,7 @@
+         return result
+     end
+     installed = true
++    GlobalsSetValue("mcm32_boss_lifecycle_ready_v1", "1")
+     return true
+ end
+ 
+--- metamorph_creative_menu/files/integrations/ew/bridge/creative_perks.lua
++++ metamorph_creative_menu/files/integrations/ew/bridge/creative_perks.lua
+@@ -172,8 +172,4 @@
+     cleanup_entries()
+ end
+ 
+-function bridge.debug_state()
+-    return #entries, last_sequence
+-end
+-
+ return bridge
+--- metamorph_creative_menu/files/integrations/ew/bridge/forms.lua
++++ metamorph_creative_menu/files/integrations/ew/bridge/forms.lua
+@@ -5,52 +5,9 @@
+ local last_remote_root_frame = {}
+ local last_remote_entity = {}
+ local remote_articulated_prepared = {}
+-local form_pose_sent, form_pose_received = 0, 0
+-local profiling_enabled = false
+ local MCM_BOSS_DEATH_PRESSURE_KEY = "mcm_ew_boss_death_pressure_until_v1"
+ 
+ local NETWORK_SOURCE_NAME = "metamorph_creative_menu_network_source"
+-
+-local function profile_now_ms()
+-    if not profiling_enabled then return nil end
+-    if type(GameGetRealWorldTimeSinceStarted) ~= "function" then return nil end
+-    local ok, value = pcall(GameGetRealWorldTimeSinceStarted)
+-    value = ok and tonumber(value) or nil
+-    return value ~= nil and value * 1000 or nil
+-end
+-
+-local function form_source(entity)
+-    if entity == nil or entity == 0 then return "" end
+-    for _, component in ipairs(EntityGetComponentIncludingDisabled(entity, "VariableStorageComponent") or {}) do
+-        local ok_name, name = pcall(ComponentGetValue2, component, "name")
+-        if ok_name and name == NETWORK_SOURCE_NAME then
+-            local ok_value, value = pcall(ComponentGetValue2, component, "value_string")
+-            if ok_value and type(value) == "string" then return value end
+-        end
+-    end
+-    return ""
+-end
+-
+-local function publish_remote_prepare_metrics(entity, kind, started_ms, visited, disabled)
+-    if not profiling_enabled or type(GlobalsSetValue) ~= "function" then return end
+-    local finished_ms = profile_now_ms()
+-    local elapsed = started_ms ~= nil and finished_ms ~= nil and math.max(0, finished_ms - started_ms) or -1
+-    pcall(GlobalsSetValue, "mcm_form_remote_prepare_ms_v1", string.format("%.3f", elapsed))
+-    pcall(GlobalsSetValue, "mcm_form_remote_prepare_entities_v1", tostring(math.max(0, tonumber(visited) or 0)))
+-    pcall(GlobalsSetValue, "mcm_form_remote_prepare_components_v1", tostring(math.max(0, tonumber(disabled) or 0)))
+-    pcall(GlobalsSetValue, "mcm_form_remote_prepare_kind_v1", tostring(tonumber(kind) or 0))
+-    pcall(GlobalsSetValue, "mcm_form_remote_prepare_source_v1", form_source(entity))
+-    if type(GameGetFrameNum) == "function" then
+-        local ok, frame = pcall(GameGetFrameNum)
+-        if ok then pcall(GlobalsSetValue, "mcm_form_remote_prepare_frame_v1", tostring(tonumber(frame) or -1)) end
+-    end
+-    if type(print) == "function" then
+-        print("[MCM EW profile] remote_prepare ms=" .. string.format("%.3f", elapsed)
+-            .. " entities=" .. tostring(math.max(0, tonumber(visited) or 0))
+-            .. " components=" .. tostring(math.max(0, tonumber(disabled) or 0))
+-            .. " kind=" .. tostring(tonumber(kind) or 0) .. " source=" .. tostring(form_source(entity)))
+-    end
+-end
+ 
+ local function boss_death_pressure_active()
+     if type(GlobalsGetValue) ~= "function" or type(GameGetFrameNum) ~= "function" then return false end
+@@ -175,8 +132,7 @@
+         if driver ~= nil and driver ~= 0 then return end
+         remote_articulated_prepared[entity] = nil
+     end
+-    local started_ms = profile_now_ms()
+-    local visited, disabled = disable_remote_ai(entity)
++    disable_remote_ai(entity)
+     local worm = EntityGetFirstComponentIncludingDisabled(entity, "WormComponent")
+     local driver = EntityGetFirstComponentIncludingDisabled(entity, "WormPlayerComponent")
+     if kind == 5 then
+@@ -208,7 +164,6 @@
+     if worm ~= nil and worm ~= 0 then pcall(EntitySetComponentIsEnabled, entity, worm, true) end
+     if driver ~= nil and driver ~= 0 then pcall(EntitySetComponentIsEnabled, entity, driver, true) end
+     remote_articulated_prepared[entity] = kind
+-    publish_remote_prepare_metrics(entity, kind, started_ms, visited, disabled)
+ end
+ 
+ local function apply_motion_state(entity, kind, x, y, speed)
+@@ -254,7 +209,6 @@
+     rotation, scale_x, scale_y = tonumber(rotation) or 0, tonumber(scale_x) or 1, tonumber(scale_y) or 1
+     if not finite_number(x) or not finite_number(y) or not finite_number(rotation) then return end
+     last_remote_pose_frame[sender] = frame
+-    form_pose_received = form_pose_received + 1
+ 
+     local kind = tonumber(motion_kind) or 0
+     local articulated = kind == 3 or kind == 5
+@@ -333,7 +287,6 @@
+             if ok and type(value) == "table" then phys_info = value end
+         end
+     end
+-    form_pose_sent = form_pose_sent + 1
+     rpc.sync_form_pose(frame, x, y, rotation or 0, scale_x or 1, scale_y or 1,
+         phys_info, motion_kind, motion_x, motion_y, motion_speed)
+ end
+@@ -344,6 +297,4 @@
+     if entity ~= 0 then enforce_local_form_des_exclusion(entity) end
+     send_form_pose(frame)
+ end
+-function forms_bridge.metrics() return form_pose_sent, form_pose_received end
+-function forms_bridge.set_profiling_enabled(enabled) profiling_enabled = enabled == true end
+ return forms_bridge
