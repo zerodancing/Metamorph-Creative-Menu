@@ -19,6 +19,8 @@ REQUIRED_FILES = {
     "CHANGELOG.txt",
     "VERSION.txt",
     "README.txt",
+    "LICENSE.txt",
+    "NOTICE.txt",
     "compatibility.xml",
     "dev_mode.lua",
     "init.lua",
