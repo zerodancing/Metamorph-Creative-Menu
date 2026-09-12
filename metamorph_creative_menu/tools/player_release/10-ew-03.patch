@@ -1,0 +1,133 @@
+--- metamorph_creative_menu/files/integrations/ew/resilience_patches.lua
++++ metamorph_creative_menu/files/integrations/ew/resilience_patches.lua
+@@ -7,7 +7,7 @@
+     local anchor = 'if not CrossCall("ew_is_wand_pickup") then'
+     local first, last = string.find(content, anchor, 1, true)
+     if first == nil then return content, 0 end
+-    local replacement = [[-- mcm_wand_pickup_crosscall_guard_v1
++    local replacement = [[local mcm_wand_pickup_crosscall_guard_v1 = true
+ local mcm_pickup_ok, mcm_is_wand_pickup = pcall(CrossCall, "ew_is_wand_pickup")
+ if not mcm_pickup_ok or not mcm_is_wand_pickup then]]
+     return string.sub(content, 1, first - 1) .. replacement .. string.sub(content, last + 1), 1
+@@ -17,11 +17,9 @@
+     if type(content) ~= "string" or string.find(content, "CrossCall", 1, true) == nil
+         or string.find(content, "mcm_safe_crosscall_v1", 1, true) ~= nil
+     then return content, 0 end
+-    local guard = [[-- mcm_safe_crosscall_v1
++    local guard = [[local mcm_safe_crosscall_v1 = true
+ local mcm_crosscall_error_seen = {}
+ local function CrossCall(name, ...)
+-    -- Resolve the engine/EW global dynamically. Do not capture it while a LuaComponent
+-    -- is loading: some EW systems install their handler later in the same startup.
+     local mcm_raw_crosscall = _G and _G.CrossCall or nil
+     local mcm_ok, a, b, c, d, e
+     if type(mcm_raw_crosscall) == "function" then
+@@ -38,15 +36,9 @@
+         return type(GameHasFlagRun) == "function" and GameHasFlagRun(flag) or false
+     end
+     if name == "ew_banned_spells" or name == "ew_perk_ban_list" then return {} end
+-    -- Preserve the old nil fallback for compatibility, but surface truly unexpected
+-    -- EW failures once per (call,error) signature. This is intentionally diagnostic
+-    -- only: changing fallback semantics here could break optional EW systems.
+     local mcm_signature = tostring(name) .. "|" .. tostring(a)
+     if not mcm_crosscall_error_seen[mcm_signature] then
+         mcm_crosscall_error_seen[mcm_signature] = true
+-        if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-            pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "ew.crosscall." .. tostring(name), tostring(a))
+-        end
+         print("[Metamorph: Creative Menu] unexpected EW CrossCall failure " .. tostring(name) .. ": " .. tostring(a))
+     end
+     return nil
+@@ -59,11 +51,7 @@
+     if type(content) ~= "string" or content == "" then return content, 0 end
+     if string.find(content, "mcm_kolmi_crosscall_failopen_v1", 1, true) ~= nil then return content, 0 end
+     if string.find(content, 'CrossCall("ew_kolmi_', 1, true) == nil then return content, 0 end
+-    local helper = [[-- mcm_kolmi_crosscall_failopen_v1
+--- EW's Kolmi append is transport glue layered on top of the vanilla boss coroutine.
+--- A transport failure must never abort that coroutine: otherwise attacks, phase changes,
+--- minion spawning and the final kill_now all stop together. Prefer the normal entity-VM
+--- CrossCall registry, then the published NoitaPatcher bridge when this Lua state has it.
++    local helper = [[local mcm_kolmi_crosscall_failopen_v1 = true
+ local mcm_kolmi_crosscall_error_seen = {}
+ local function mcm_kolmi_crosscall(name, ...)
+     local ok, a, b, c, d = false, nil, nil, nil, nil
+@@ -78,9 +66,6 @@
+     local signature = tostring(name) .. "|" .. tostring(a)
+     if not mcm_kolmi_crosscall_error_seen[signature] then
+         mcm_kolmi_crosscall_error_seen[signature] = true
+-        if type(GlobalsSetValue) == "function" then
+-            pcall(GlobalsSetValue, "mcm25_kolmi_crosscall_failure_v1", signature)
+-        end
+         print("[Metamorph: Creative Menu] Kolmisilma EW CrossCall failed open: " .. signature)
+     end
+     return false, a
+@@ -97,14 +82,11 @@
+     local before = '            CrossCall("ew_spawn_kolmi", ComponentGetValue2(gid, "value_string"))'
+     local first, last = string.find(content, before, 1, true)
+     if first == nil then return content, 0 end
+-    local after = [[            -- mcm_kolmi_spawn_crosscall_failopen_v1
++    local after = [[            local mcm_kolmi_spawn_crosscall_failopen_v1 = true
+             local mcm_ok = false
+             if type(CrossCall) == "function" then
+                 mcm_ok = pcall(CrossCall, "ew_spawn_kolmi", ComponentGetValue2(gid, "value_string"))
+             end
+-            -- If the native cross-VM registry is split/unavailable, fail open into the
+-            -- vanilla pickup path. A missed network convenience call is preferable to a
+-            -- permanently inert final boss encounter.
+             if not mcm_ok then old(ent) end]]
+     local patched = string.sub(content, 1, first - 1) .. after .. string.sub(content, last + 1)
+ 
+@@ -130,14 +112,13 @@
+         end)
+ end
+ 
+-function resilience_patches.patch_world_sync_source(content, metrics_enabled)
++function resilience_patches.patch_world_sync_source(content)
+     if type(content) ~= "string" or string.find(content, "mcm_poly_world_sync_v5", 1, true) ~= nil then
+         return content, 0
+     end
+     local original = content
+     content = string.gsub(content, "\r\n", "\n")
+     content = string.gsub(content, "\r", "\n")
+-    local changed = 0
+     local function replace_once(source, before, after)
+         local first, last = string.find(source, before, 1, true)
+         if first == nil then return source, false end
+@@ -145,35 +126,9 @@
+     end
+ 
+     local state_anchor = "local iter_slow_2 = 0"
+-    local metrics_literal = metrics_enabled == true and "true" or "false"
+     local state_block = [[local iter_slow_2 = 0
+-
+--- mcm_poly_world_sync_v5
+-local EWCM_METRICS_ENABLED = ]] .. metrics_literal .. [[
+-local mcm_sent_chunks, mcm_sent_bytes = 0, 0
+-local mcm_recv_chunks, mcm_recv_bytes = 0, 0
+-local mcm_poly_scheduler_calls = 0
+-local mcm_poly_scheduler_paused = 0
+-local mcm_last_poly_cx, mcm_last_poly_cy = nil, nil
+-local MCM_BOSS_DEATH_PRESSURE_KEY = "mcm_ew_boss_death_pressure_until_v1"]]
+-    local ok
+-    content, ok = replace_once(content, state_anchor, state_block)
+-    if not ok then return original, 0 end
+-    changed = changed + 1
+-
+-    local send_anchor = [[            net.proxy_bin_send(KEY_WORLD_FRAME, str)
+-        end
+-    end
+-end
+-local int = 4 -- ctx.proxy_opt.world_sync_interval]]
+-    local send_block = [[            net.proxy_bin_send(KEY_WORLD_FRAME, str)
+-            if EWCM_METRICS_ENABLED then
+-                mcm_sent_chunks = mcm_sent_chunks + 1
+-                mcm_sent_bytes = mcm_sent_bytes + #str
+-            end
+-        end
+-    end
+-end
++local mcm_poly_world_sync_v5 = true
++local MCM_BOSS_DEATH_PRESSURE_KEY = "mcm_ew_boss_death_pressure_until_v1"
+ 
+ local function mcm_boss_death_pressure_active()
+     if type(GlobalsGetValue) ~= "function" then return false end
