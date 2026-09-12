@@ -1,0 +1,195 @@
+--- metamorph_creative_menu/files/features/forms/manager.lua
++++ metamorph_creative_menu/files/features/forms/manager.lua
+@@ -48,18 +48,6 @@
+ local runtime_error_log = {}
+ local RUNTIME_ERROR_REPEAT_FRAMES = 600
+ 
+-local function diagnostic_event(kind, details)
+-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_EVENT) == "function" then
+-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_EVENT, tostring(kind or "FORM"), tostring(details or ""))
+-    end
+-end
+-
+-local function real_time_ms()
+-    if type(GameGetRealWorldTimeSinceStarted) ~= "function" then return nil end
+-    local ok, value = pcall(GameGetRealWorldTimeSinceStarted)
+-    return ok and tonumber(value) and tonumber(value) * 1000 or nil
+-end
+-
+ local function protected_runtime_call(label, fn, ...)
+     if type(fn) ~= "function" then return false end
+     local ok, err = pcall(fn, ...)
+@@ -74,9 +62,6 @@
+     local last = runtime_error_log[signature]
+     if last == nil or frame - last >= RUNTIME_ERROR_REPEAT_FRAMES then
+         runtime_error_log[signature] = frame
+-        if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-            pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "form." .. tostring(label), message)
+-        end
+         print("[Metamorph: Creative Menu] " .. tostring(label) .. " failed: " .. message)
+     end
+     return false
+@@ -174,9 +159,7 @@
+     orphan_probe_complete = true
+     orphan_probe_entity = current
+     form_manager.ensure_runtime_hooks({ bootstrap_if_installed = true })
+-    diagnostic_event(owned_marker and "FORM RECOVERED" or "FORM ADOPTED",
+-        string.format("entity=%s target=%s backup=%s", tostring(current), tostring(target),
+-            tostring(session.allow_death_handoff)))
++
+     return true
+ end
+ 
+@@ -269,13 +252,8 @@
+ 
+ function form_manager.handle_form_death(old_form, reason, responsible, damage, projectile)
+     old_form = tonumber(old_form) or 0
+-    local death_started_ms = real_time_ms()
+     local source_path = session ~= nil and tostring(session.requested_target or session.target or "") or ""
+-    local x0, y0 = 0, 0
+-    if old_form ~= 0 and EntityGetIsAlive(old_form) then x0, y0 = EntityGetTransform(old_form) end
+-    diagnostic_event("FORM DEATH", string.format("entity=%s source=%s reason=%s responsible=%s damage=%s projectile=%s pos=%.1f,%.1f",
+-        tostring(old_form), source_path, tostring(reason or "death"), tostring(responsible or 0), tostring(damage), tostring(projectile or 0),
+-        tonumber(x0) or 0, tonumber(y0) or 0))
++
+     if session == nil then return false end
+ 
+     if session.kind ~= "polymorph"
+@@ -321,10 +299,7 @@
+     pending_return_frame = nil
+     protected_runtime_call("form_runtime.reset", form_runtime.reset)
+     local corpse_detached = detach_dead_form_as_corpse(old_form, source_path, reason, responsible)
+-    local death_finished_ms = real_time_ms()
+-    diagnostic_event("FORM HANDOFF", string.format("old=%s restored=%s corpse_detached=%s elapsed_ms=%s",
+-        tostring(old_form), tostring(restored), tostring(corpse_detached),
+-        death_started_ms ~= nil and death_finished_ms ~= nil and string.format("%.2f", death_finished_ms-death_started_ms) or "nil"))
++
+     return true
+ end
+ 
+@@ -454,9 +429,7 @@
+             transition_queue.clear()
+             return false, reason
+         end
+-        diagnostic_event("FORM SWITCH QUEUED", string.format("from=%s to=%s frame=%s",
+-            tostring(session ~= nil and (session.requested_target or session.target) or "external"),
+-            tostring(entity_path), tostring(GameGetFrameNum())))
++
+         return true, "queued_after_human"
+     end
+ 
+@@ -503,7 +476,6 @@
+         pcall(ComponentSetValue2, component, "frames", 1)
+     end
+     pending_return_frame = GameGetFrameNum()
+-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION) == "function" then pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION, "form.return_binding", "result=true") end
+     return true
+ end
+ 
+@@ -516,8 +488,7 @@
+     if pending == nil then return false end
+     if pending.human_frame == nil then
+         transition_queue.mark_human(frame)
+-        diagnostic_event("FORM SWITCH HUMAN FRAME", string.format("entity=%s target=%s frame=%s",
+-            tostring(current), tostring(pending.entity_path), tostring(frame)))
++
+         return false
+     end
+     if not transition_queue.ready(frame) then return false end
+@@ -526,12 +497,10 @@
+     if request == nil then return false end
+     local ok, reason = start_transform_creature(current, request.entity_path, request.frames, request.options)
+     if not ok then
+-        diagnostic_event("FORM SWITCH FAILED", string.format("target=%s reason=%s frame=%s",
+-            tostring(request.entity_path), tostring(reason), tostring(frame)))
+-        return false
+-    end
+-    diagnostic_event("FORM SWITCH START", string.format("target=%s human_frame=%s frame=%s",
+-        tostring(request.entity_path), tostring(request.human_frame), tostring(frame)))
++
++        return false
++    end
++
+     return true
+ end
+ 
+@@ -540,7 +509,7 @@
+     restore_transform_flash_suppression(false)
+ 
+     if transition_queue.expire(frame) then
+-        diagnostic_event("FORM SWITCH EXPIRED", string.format("frame=%s", tostring(frame)))
++
+     end
+     corpse_service.update()
+ 
+@@ -596,8 +565,7 @@
+             if session.phase == "active" then protected_runtime_call("form_runtime.update", form_runtime.update, current, session) end
+         elseif #components == 0 then
+             local controls_restored = restore_human_controls(current)
+-            diagnostic_event("FORM RETURN", string.format("entity=%s controls_restored=%s path=native",
+-                tostring(current), tostring(controls_restored)))
++
+             session = nil
+             pending_return_frame = nil
+             protected_runtime_call("form_runtime.reset", form_runtime.reset)
+@@ -611,8 +579,7 @@
+     if #components == 0 then
+         if pending_return_frame ~= nil then
+             local controls_restored = restore_human_controls(current)
+-            diagnostic_event("FORM RETURN", string.format("entity=%s controls_restored=%s path=unowned",
+-                tostring(current), tostring(controls_restored)))
++
+         end
+         pending_return_frame = nil
+         if transition_queue.has_pending() and human_entity_ready(current) then
+--- metamorph_creative_menu/files/features/possession/keybinds.lua
++++ metamorph_creative_menu/files/features/possession/keybinds.lua
+@@ -28,7 +28,6 @@
+     if not input_guard.actions_allowed() or inventory_open() or menu_open == true then return false end
+     if not action_bindings.consume("possession") then return false end
+     local success, reason = possession.possess_under_cursor(player_locator.get())
+-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION) == "function" then pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION, "possession", "binding="..tostring(action_bindings.get("possession")).." result="..tostring(success).." reason="..tostring(reason)) end
+     if not success then
+         if reason == "no_target" then GamePrint(GameTextGetTranslatedOrNot("$mcm_possess_no_target"))
+         else GamePrint(GameTextGetTranslatedOrNot("$mcm_possess_failed") .. ": " .. tostring(reason or "")) end
+--- metamorph_creative_menu/files/features/spells/slot_settler.lua
++++ metamorph_creative_menu/files/features/spells/slot_settler.lua
+@@ -22,13 +22,6 @@
+     local ok, x, y = pcall(ComponentGetValue2, item, "inventory_slot")
+     if not ok then return nil end
+     return item, tonumber(x), tonumber(y) or 0
+-end
+-
+-local function report(label, reason)
+-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE,
+-            "spells.slot_settle", tostring(label or "drag") .. ":" .. tostring(reason or "failed"))
+-    end
+ end
+ 
+ local function inspect(commit)
+@@ -184,12 +177,12 @@
+ 
+                     commit.frame = frame
+                 else
+-                    report(commit.label, repair_reason)
++
+                     table.remove(pending, index)
+                     failed = failed + 1
+                 end
+             else
+-                report(commit.label, reason)
++
+                 table.remove(pending, index)
+                 failed = failed + 1
+             end
+--- metamorph_creative_menu/files/features/weather/runtime_effects.lua
++++ metamorph_creative_menu/files/features/weather/runtime_effects.lua
+@@ -11,7 +11,6 @@
+ 
+     pcall(GameEmitRainParticles, particle_count, 1024, "water", 200, 220, 200, false, true)
+     state.last_rain_emit_frame = frame
+-    state.rain_emitted_total = (tonumber(state.rain_emitted_total) or 0) + particle_count
+ end
+ 
+ function runtime_effects.update_lightning(state, world_component, write_value)
