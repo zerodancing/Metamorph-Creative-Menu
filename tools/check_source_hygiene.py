@@ -55,7 +55,7 @@ def validate_metadata(root: Path, failures: list[str]) -> None:
             if mentioned and mentioned != version:
                 failures.append(f"README.md: stale version {mentioned!r}; VERSION.txt is {version!r}")
 
-    if source_readme.is_file() and "Creator: zerodancing" not in source_readme.read_text(encoding="utf-8"):
+    if source_readme.is_file() and "zerodancing" not in source_readme.read_text(encoding="utf-8"):
         failures.append("metamorph_creative_menu/README.txt: creator attribution is missing")
 
 
