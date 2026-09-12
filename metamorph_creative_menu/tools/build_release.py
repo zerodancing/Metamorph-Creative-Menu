@@ -31,6 +31,8 @@ REQUIRED_FILES = {
     "mcm_native_gameover.dll",
     "mcm_native_gameover.lib",
     "native_src/mcm_native_gameover.c",
+    "native_src/README.md",
+    "native_src/build_msvc.bat",
     "files/diagnostics/service.lua",
     "files/qa/controller.lua",
     "tests/run_all.py",
