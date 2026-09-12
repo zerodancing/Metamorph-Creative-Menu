@@ -36,9 +36,15 @@ REQUIRED_MARKERS = [
     "THIRD_PARTY_NOTICES.md",
 ]
 
-# Root README files describe the current mod, not a numbered release. Release
-# numbers belong in VERSION.txt / CHANGELOG.txt and release metadata instead.
-SEMVER_RE = re.compile(r"(?<![A-Za-z0-9])(?:v\s*)?\d+\.\d+(?:\.\d+)?(?![A-Za-z0-9])", re.IGNORECASE)
+# Root READMEs document current behavior instead of a numbered MCM release.
+# Match release/version wording tied to MCM, while allowing legitimate version
+# numbers for dependencies, tools, game builds, protocols, and similar details.
+MCM_VERSION_PATTERNS = [
+    re.compile(r"\bcurrent\s+version\s*[:：]?\s*\*{0,2}v?\d+\.\d+(?:\.\d+)?", re.IGNORECASE),
+    re.compile(r"\bversion\s+v?\d+\.\d+(?:\.\d+)?\b", re.IGNORECASE),
+    re.compile(r"\bMCM\s+v?\d+\.\d+(?:\.\d+)?\b", re.IGNORECASE),
+    re.compile(r"Metamorph:\s*Creative\s+Menu\s+v?\d+\.\d+(?:\.\d+)?", re.IGNORECASE),
+]
 HEADING_RE = re.compile(r"^(#{1,6})\s+\S", re.MULTILINE)
 
 
@@ -49,6 +55,14 @@ def fail(message: str) -> None:
 
 def heading_shape(text: str) -> list[int]:
     return [len(match.group(1)) for match in HEADING_RE.finditer(text)]
+
+
+def find_mcm_version(text: str) -> str | None:
+    for pattern in MCM_VERSION_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return match.group(0)
+    return None
 
 
 def main() -> None:
@@ -68,9 +82,9 @@ def main() -> None:
         fail("README.md has no Markdown section headings")
 
     for name, text in docs.items():
-        version = SEMVER_RE.search(text)
-        if version:
-            fail(f"{name} contains a release number: {version.group(0)!r}")
+        version_reference = find_mcm_version(text)
+        if version_reference:
+            fail(f"{name} contains a numbered MCM release reference: {version_reference!r}")
 
         for marker in REQUIRED_MARKERS:
             if marker not in text:
