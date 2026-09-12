@@ -128,6 +128,21 @@ jobs:
         shell: bash
         run: python metamorph_creative_menu/tests/run_all.py metamorph_creative_menu
 
+      - name: Verify full source archive build
+        if: steps.import.outputs.changed == 'true'
+        shell: bash
+        run: python metamorph_creative_menu/tools/build_release.py /tmp/Metamorph-Creative-Menu-source-check.zip
+
+      - name: Verify player package build
+        if: steps.import.outputs.changed == 'true'
+        shell: bash
+        run: python tools/build_user_release.py metamorph_creative_menu /tmp/Metamorph-Creative-Menu-player-check.zip
+
+      - name: Validate player package
+        if: steps.import.outputs.changed == 'true'
+        shell: bash
+        run: python tools/validate_user_release.py /tmp/Metamorph-Creative-Menu-player-check.zip
+
       - name: Commit imported source
         if: steps.import.outputs.changed == 'true'
         shell: bash
