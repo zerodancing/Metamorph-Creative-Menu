@@ -12,7 +12,7 @@ This file documents external projects and code used by or integrated with **Meta
   - `metamorph_creative_menu/NoitaPatcher/load.lua`
   - `metamorph_creative_menu/NoitaPatcher/noitapatcher.dll`
 - **Purpose in MCM:** extended Noita API functionality used for entity serialization/deserialization, player authority handoff, hard form recovery, CrossCall registration, MagicNumbers runtime changes, exact companion wand use and related fallbacks.
-- **License/status note:** GitHub currently reports no detected repository license for `dextercd/NoitaPatcher`. The upstream repository and documentation are authoritative for NoitaPatcher terms. NoitaPatcher is **not** covered by any license that may later be chosen for MCM's original code.
+- **License/status note:** the NoitaPatcher upstream repository and documentation are authoritative for its licensing and redistribution terms. It is a third-party component and is not relicensed by MCM.
 
 ## lbase64
 
@@ -44,6 +44,6 @@ This file documents external projects and code used by or integrated with **Meta
 
 ## MCM project license
 
-At the time this notice was written, the repository does not declare a top-level license for MCM's original code. That means no repository-wide license should be interpreted as relicensing the third-party components listed above.
+Licensing of MCM's original code is governed only by any top-level project license file present in the repository. This notice does not itself grant a license to MCM's original code and does not alter the terms of the third-party components listed above.
 
-If a project license is added later, this file should remain and the project license should explicitly exclude third-party components where their upstream terms differ.
+If a project license is added or changed, this file should remain so bundled third-party components continue to be identified separately from MCM's original code.
