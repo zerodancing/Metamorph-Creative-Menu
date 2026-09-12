@@ -10,7 +10,9 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
+import build_user_release as player_builder
 import import_source_archive as importer
+import validate_user_release as player_validator
 
 
 class SourceArchiveTests(unittest.TestCase):
@@ -115,6 +117,50 @@ class SourceArchiveTests(unittest.TestCase):
             with mock.patch("pathlib.Path.cwd", return_value=Path(temp)):
                 with mock.patch.dict(os.environ, {}, clear=False):
                     self.assertEqual(importer.main(), 0)
+
+
+class PlayerReleaseToolTests(unittest.TestCase):
+    PATCH_TEXT = """--- metamorph_creative_menu/example.txt
++++ metamorph_creative_menu/example.txt
+@@ -1 +1 @@
+-development
++player
+"""
+
+    def prepare_patch_case(self, root: Path, staged_text: str) -> tuple[Path, Path, Path]:
+        source = root / "source" / player_builder.ROOT_NAME
+        patch_dir = source / "tools" / "player_release"
+        patch_dir.mkdir(parents=True)
+        (patch_dir / "00-example.patch").write_text(self.PATCH_TEXT, encoding="utf-8")
+
+        stage = root / "stage"
+        target = stage / player_builder.ROOT_NAME
+        target.mkdir(parents=True)
+        staged_file = target / "example.txt"
+        staged_file.write_text(staged_text, encoding="utf-8")
+        return source, stage, staged_file
+
+    @unittest.skipUnless(player_builder.shutil.which("patch"), "patch utility is required")
+    def test_release_patch_applies_forward(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            source, stage, staged_file = self.prepare_patch_case(Path(temp), "development\n")
+            player_builder.apply_release_patches(source, stage)
+            self.assertEqual(staged_file.read_text(encoding="utf-8"), "player\n")
+
+    @unittest.skipUnless(player_builder.shutil.which("patch"), "patch utility is required")
+    def test_release_patch_skips_when_cleanup_is_already_integrated(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            source, stage, staged_file = self.prepare_patch_case(Path(temp), "player\n")
+            player_builder.apply_release_patches(source, stage)
+            self.assertEqual(staged_file.read_text(encoding="utf-8"), "player\n")
+
+    def test_lua_comment_detection_ignores_double_dash_inside_strings(self) -> None:
+        self.assertFalse(player_validator.contains_lua_comment('return "https://example.invalid/a--b"\n'))
+        self.assertFalse(player_validator.contains_lua_comment("return '--not-a-comment'\n"))
+
+    def test_lua_comment_detection_finds_line_and_block_comments(self) -> None:
+        self.assertTrue(player_validator.contains_lua_comment("local x = 1 -- comment\n"))
+        self.assertTrue(player_validator.contains_lua_comment("--[[ block ]]\nreturn 1\n"))
 
 
 if __name__ == "__main__":
