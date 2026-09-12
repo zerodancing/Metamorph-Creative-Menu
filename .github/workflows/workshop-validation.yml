@@ -1,4 +1,4 @@
-name: Validate Workshop build
+name: Workshop build
 
 on:
   push:
@@ -8,11 +8,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: workshop-build
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Validate Workshop metadata and package rules
         shell: bash
@@ -34,10 +38,15 @@ jobs:
               root / 'workshop.xml',
               root / 'workshop_preview_image.png',
               root / 'dev_mode.lua',
+              root / 'README.txt',
           ]
           missing = [p.relative_to(root).as_posix() for p in required if not p.is_file()]
           if missing:
               raise SystemExit('Missing Workshop files: ' + ', '.join(missing))
+
+          readme = (root / 'README.txt').read_text(encoding='utf-8')
+          if readme != 'Creator: zerodancing\n':
+              raise SystemExit("Workshop source README.txt must contain only 'Creator: zerodancing'")
 
           if (root / 'NoitaPatcher').exists():
               raise SystemExit('Workshop branch must not contain NoitaPatcher/')
@@ -154,11 +163,8 @@ jobs:
           candidates = list((root / 'files').rglob('*.lua')) + [root / 'init.lua', root / 'settings.lua']
           pattern = re.compile(r'(?<![A-Za-z0-9_])(?:io\.|os\.|ffi\.|require\s*\(\s*[\"\']ffi[\"\'])')
 
-          # Development-only QA/diagnostic folders are excluded by workshop.xml.
           excluded_runtime_dirs = ('/files/qa/', '/files/diagnostics/')
 
-          # bounded_log.lua intentionally probes io.open and returns a clean failure when
-          # the restricted Workshop sandbox does not expose it; the guard itself is safe.
           allowed_guarded = Path('metamorph_creative_menu/files/core/bounded_log.lua')
           guard_text = allowed_guarded.read_text(encoding='utf-8')
           required_guard = 'if type(io) ~= "table" or type(io.open) ~= "function" then'
@@ -205,9 +211,6 @@ jobs:
           if not texlua:
               raise SystemExit('texlua not found')
 
-          # This contract intentionally belongs only to the full standalone build.
-          # Workshop must omit the bundled NoitaPatcher DLL, so only this one contract
-          # is excluded; all other discovered contracts and every behavioral Lua mock run.
           excluded_contracts = {'standalone_patcher_contract.py'}
           preferred = [
               'syntax_contract.py',
@@ -241,3 +244,91 @@ jobs:
               'excluded=standalone_patcher_contract.py'
           )
           PY
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Package exact Workshop upload set
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
+          import xml.etree.ElementTree as ET
+
+          root = Path('metamorph_creative_menu')
+          archive_path = Path('Metamorph-Creative-Menu-Workshop.zip')
+          workshop = ET.parse(root / 'workshop.xml').getroot()
+
+          def split_pipe(value):
+              return [x.strip().replace('\\', '/') for x in value.split('|') if x.strip()]
+
+          excluded_dirs = set(split_pipe(workshop.attrib.get('dont_upload_folders', '')))
+          excluded_files = set(split_pipe(workshop.attrib.get('dont_upload_files', '')))
+
+          def excluded(relative):
+              name = relative.as_posix()
+              return name in excluded_files or any(name == d or name.startswith(d + '/') for d in excluded_dirs)
+
+          files = [p for p in sorted(root.rglob('*')) if p.is_file() and not excluded(p.relative_to(root))]
+          with ZipFile(archive_path, 'w', compression=ZIP_DEFLATED, compresslevel=9) as archive:
+              for path in files:
+                  relative = Path('metamorph_creative_menu') / path.relative_to(root)
+                  info = ZipInfo(relative.as_posix(), date_time=(1980, 1, 1, 0, 0, 0))
+                  info.compress_type = ZIP_DEFLATED
+                  info.external_attr = 0o100644 << 16
+                  archive.writestr(info, path.read_bytes())
+
+          with ZipFile(archive_path) as archive:
+              names = {name for name in archive.namelist() if not name.endswith('/')}
+              required = {
+                  'metamorph_creative_menu/mod.xml',
+                  'metamorph_creative_menu/mod_id.txt',
+                  'metamorph_creative_menu/init.lua',
+                  'metamorph_creative_menu/settings.lua',
+                  'metamorph_creative_menu/translations.csv',
+                  'metamorph_creative_menu/workshop.xml',
+                  'metamorph_creative_menu/workshop_preview_image.png',
+              }
+              missing = sorted(required - names)
+              if missing:
+                  raise SystemExit('Missing required files in Workshop ZIP: ' + ', '.join(missing))
+              forbidden = sorted(
+                  name for name in names
+                  if name.lower().endswith('.dll')
+                  or name.startswith('metamorph_creative_menu/NoitaPatcher/')
+                  or name.startswith('metamorph_creative_menu/tests/')
+                  or name.startswith('metamorph_creative_menu/files/qa/')
+                  or name.startswith('metamorph_creative_menu/files/diagnostics/')
+                  or name == 'metamorph_creative_menu/README.txt'
+              )
+              if forbidden:
+                  raise SystemExit('Forbidden files in Workshop ZIP: ' + ', '.join(forbidden))
+              broken = archive.testzip()
+              if broken is not None:
+                  raise SystemExit('Workshop ZIP CRC failure: ' + broken)
+          print(f'Workshop ZIP: PASS files={len(files)} bytes={archive_path.stat().st_size}')
+          PY
+
+      - name: Publish stable Workshop download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG=workshop-latest
+          ASSET=Metamorph-Creative-Menu-Workshop.zip
+          notes="Ready-to-upload Steam Workshop edition. Source commit: ${GITHUB_SHA}. This build intentionally excludes bundled NoitaPatcher/DLL and unrestricted API access."
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" --clobber
+            gh release edit "$TAG" --title "Latest Steam Workshop build" --notes "$notes"
+          else
+            gh release create "$TAG" "$ASSET" --target "$GITHUB_SHA" --title "Latest Steam Workshop build" --notes "$notes"
+          fi
