@@ -1,0 +1,36 @@
+--- metamorph_creative_menu/files/ui/tabs/world_rules.lua
++++ metamorph_creative_menu/files/ui/tabs/world_rules.lua
+@@ -1,6 +1,5 @@
+ local world_rules_tab = {}
+ local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
+-local audit = ui.audit
+ local world_rule_service = dofile("mods/metamorph_creative_menu/files/features/world_rules/service.lua")
+ 
+ local search = ""
+@@ -34,7 +33,7 @@
+     local call_ok, result, reason = pcall(fn, ...)
+     if not call_ok then
+         local detail=tostring(result)
+-        audit(action_name, "result=false reason=exception:" .. detail)
++
+         ui.report_error_once("world_rules.action", ui.tr("$mcm_rules_error", "RULE ERROR"), detail, "ui.rules.action")
+         return false, "exception"
+     end
+@@ -54,7 +53,7 @@
+         ui.tr("$mcm_confirm", "CONFIRM") .. ": " .. reset_label, nil, math.max(32,panel_width-10))
+     then
+         local ok, reason = run_rule_action("rules.reset", world_rule_service.reset)
+-        audit("rules.reset", "result="..tostring(ok).." reason="..tostring(reason))
++
+     end
+     if not can_edit then ui.white_text(0, 0, ui.tr("$mcm_rules_unavailable", "World-rule editing unavailable")) end
+     search = ui.search_input(search, math.max(68, panel_width - 28), 64, "world_rules")
+@@ -84,7 +83,7 @@
+         if can_edit and (clicked or right) then
+             local ok, reason
+             ok, reason = run_rule_action("rule.step", world_rule_service.step, rule, right and -1 or 1)
+-            audit("rule.step", "id="..tostring(rule.id).." direction="..tostring(right and -1 or 1).." result="..tostring(ok).." reason="..tostring(reason))
++
+         end
+     end
+     ui.end_scroll_viewport(scroll, math.ceil(visible / columns) * ui.ICON_STEP)
