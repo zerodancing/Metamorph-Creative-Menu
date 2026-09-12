@@ -4,625 +4,583 @@
 
 <h1 align="center">Metamorph: Creative Menu</h1>
 
-<p align="center">Ein Kreativmenü und Werkzeugpaket für Noita: Zauber, Zauberstäbe, Gegenstände, Materialien, Perks, Kreaturen, Verwandlungen, Effekte, Teleportation, Wetter, Weltregeln und vieles mehr.</p>
+<p align="center">Ein Kreativmenü und Sandbox-Werkzeugpaket für Noita: Zauber, Zauberstäbe, Gegenstände, Materialien, Perks, Effekte, Kreaturen, Verwandlungen, Besitzergreifung, Teleportation, Wetter, Weltregeln, Mehrspieler-Integration und Wiederherstellungswerkzeuge.</p>
 
-<p align="center"><strong>Version 2.0.0</strong></p>
+<p align="center"><strong>Ersteller und Maintainer: <a href="https://github.com/zerodancing">zerodancing</a></strong></p>
 
 ---
 
-# Herunterladen
+# Download
 
-[**⬇️ Neueste Version des Mods herunterladen**](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/download/latest-build/Metamorph-Creative-Menu.zip)
+Für normales Spielen verwende den installationsfertigen Build:
 
-Aktuelle Version: **2.0.0**
+[**⬇️ Aktuellen Build herunterladen**](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/download/latest-build/Metamorph-Creative-Menu.zip)
 
-**Für die Vollversion müssen unsichere Mods erlaubt sein.**
+[Seite des aktuellen Builds](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/tag/latest-build) · [Changelog](metamorph_creative_menu/CHANGELOG.txt)
 
-[Seite des neuesten Builds](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/tag/latest-build)
+Der GitHub-Release wird automatisch aus dem vollständigen Entwicklungsbaum erzeugt. Tests, QA-Werkzeuge, Diagnostik, nativer Quellcode und Build-Werkzeuge bleiben im Repository, werden aber aus dem Spielerarchiv entfernt.
 
-[Änderungsliste für Version 2.0.0](metamorph_creative_menu/CHANGELOG.txt)
-
-# Inhalt
-
-- [Installation](#installation)
-- [Vollversion und Steam-Workshop-Version](#vollversion-und-steam-workshop-version)
-- [Über den Mod](#über-den-mod)
-- [Steuerung und Oberfläche](#steuerung-und-oberfläche)
-- [Zauber](#zauber)
-- [Zauberstäbe](#zauberstäbe)
-- [Gegenstände und Flüssigkeiten](#gegenstände-und-flüssigkeiten)
-- [Materialien](#materialien)
-- [Perks](#perks)
-- [Effekte](#effekte)
-- [Kreaturen und Verwandlungen](#kreaturen-und-verwandlungen)
-- [Rückkehr nach einer Verwandlung und Tod der Form](#rückkehr-nach-einer-verwandlung-und-tod-der-form)
-- [Kreaturen übernehmen](#kreaturen-übernehmen)
-- [Spieler](#spieler)
-- [Wetter und Zeit](#wetter-und-zeit)
-- [Weltregeln](#weltregeln)
-- [Teleportation](#teleportation)
-- [Entangled Worlds](#entangled-worlds)
-- [NoitaPatcher und unsichere Mods](#noitapatcher-und-unsichere-mods)
-- [Wenn etwas nicht funktioniert](#wenn-etwas-nicht-funktioniert)
-- [Fehler melden](#fehler-melden)
+Der eigenständige GitHub-Build enthält NoitaPatcher und native Wiederherstellungsfunktionen. Daher müssen **Unsafe Mods erlaubt** sein.
 
 # Installation
 
-1. [Lade die neueste Version des Mods herunter](https://github.com/zerodancing/Metamorph-Creative-Menu/releases/download/latest-build/Metamorph-Creative-Menu.zip).
+1. Lade `Metamorph-Creative-Menu.zip` über den Link oben herunter.
 2. Starte Noita und öffne im Hauptmenü **Mods**.
-3. Klicke auf **Mod-Ordner öffnen**.
-4. Verschiebe den Ordner `metamorph_creative_menu` aus dem heruntergeladenen Archiv in den geöffneten Ordner `mods`. Falls `metamorph_creative_menu` dort bereits vorhanden ist, lösche den alten Ordner und ersetze ihn durch den neuen.
-5. Schließe den Mod-Ordner.
-6. Klicke im Mod-Menü auf **Aktualisieren**. **Metamorph: Creative Menu** sollte nun in der Liste erscheinen.
-7. Klicke auf **Unsichere Mods**, bis der Text rot wird und **Unsichere Mods: Erlaubt** anzeigt.
-8. Klicke auf den Namen des Mods, sodass er hervorgehoben wird und **[x]** davor erscheint. Das bedeutet, dass der Mod aktiviert ist.
-9. Klicke auf **Neues Spiel mit aktiven Mods starten**.
-10. Wähle einen Spielmodus und spiele.
+3. Klicke auf **Open mods folder**.
+4. Entpacke oder verschiebe den Ordner `metamorph_creative_menu` in den geöffneten `mods`-Ordner. Der endgültige Pfad muss direkt `metamorph_creative_menu/mod.xml` enthalten, ohne zusätzlichen Archiv-Unterordner.
+5. Wenn bereits eine ältere Kopie vorhanden ist, ersetze den gesamten Ordner `metamorph_creative_menu`, statt alte und neue Dateien zusammenzuführen.
+6. Kehre zu Noita zurück und aktualisiere die Mod-Liste.
+7. Erlaube **Unsafe Mods**.
+8. Aktiviere **Metamorph: Creative Menu** und starte ein Spiel mit aktiven Mods.
 
-# Vollversion und Steam-Workshop-Version
+Aktiviere den eigenständigen GitHub-Build und die Steam-Workshop-Version nicht gleichzeitig.
 
-Der auf dieser GitHub-Seite verfügbare Build ist die Vollversion von MCM. Er enthält NoitaPatcher und Funktionen, für die unsichere Mods erlaubt sein müssen.
+# Eigenständiger Build und Steam Workshop
 
-Die [Steam-Workshop-Version](https://steamcommunity.com/sharedfiles/filedetails/?id=3785170245) wird separat installiert. Sie enthält weder NoitaPatcher noch die Funktionen der Vollversion, die den Zugriff unsicherer Mods benötigen.
+Der über dieses GitHub-Repository verteilte Build ist der vollständige Standalone-Build. Er enthält NoitaPatcher und Funktionen, die uneingeschränkten Mod-API-Zugriff benötigen, darunter Low-Level-Materialoperationen und native Game-Over-Wiederherstellung.
 
-Installiere und aktiviere nicht beide Versionen gleichzeitig.
+Der [Steam-Workshop-Build](https://steamcommunity.com/sharedfiles/filedetails/?id=3785170245) wird separat installiert. Er enthält nicht die nativen Komponenten, die für die nur im Standalone-Build verfügbaren Funktionen benötigt werden.
+
+Beide Builds verwenden dieselbe Mod-Identität. Eine gleichzeitige Installation kann daher doppelte oder kollidierende Dateien erzeugen und wird nicht unterstützt.
 
 # Über den Mod
 
-**Metamorph: Creative Menu (MCM)** ist ein Kreativmenü und Werkzeugpaket für Noita.
+**Metamorph: Creative Menu (MCM)** ist ein Kreativmenü und Sandbox-Werkzeugpaket für Noita.
 
-Es vereint Werkzeuge für Zauber, Zauberstäbe, Gegenstände, Materialien, Perks, Effekte, Kreaturen, Verwandlungen, Wetter, globale Weltregeln und Teleportation in einer Oberfläche.
+Es bündelt Werkzeuge für:
 
-MCM eignet sich sowohl für freies kreatives Spielen als auch zum Experimentieren mit den Mechaniken von Noita. Viele Vorgänge bestehen nicht einfach darin, eine neue Entität zu erzeugen, sondern berücksichtigen den bereits vorhandenen Zustand eines Zauberstabs, Gegenstands, einer Form, eines Perks oder der Welt.
+- Zauber und Zauberinventare;
+- Zauberstab-Bearbeitung und wiederverwendbare Presets;
+- Gegenstände und Flüssigkeitsbehälter;
+- den vollständigen Materialkatalog und Materialmalerei;
+- Perks und unterstütztes Entfernen von Perks;
+- Status-Effekte und GameEffect-Entitäten;
+- Kreaturen, Verwandlungen und Besitzergreifung;
+- Wetter und Zeit;
+- globale Weltregeln;
+- Teleportation;
+- optionale Entangled-Worlds-Integration;
+- Wiederherstellung nach Verwandlung, Formtod und Game Over.
 
-**Entangled Worlds ist nicht erforderlich.** Ohne Entangled Worlds funktioniert MCM vollständig als Einzelspieler-Mod. Ist Entangled Worlds installiert, stehen zusätzliche experimentelle Mehrspielerfunktionen zur Verfügung.
+MCM versucht, auf echtem Noita-Zustand zu arbeiten, statt alles durch dekorative Kopien zu ersetzen. Vorhandene Zauberkarten werden als Entitäten bewegt, Gegenstandsübergaben beachten die Inventarstruktur, Zauberstabänderungen nutzen Commit-/Rollback-Pfade, Materialien bleiben echte simulierte Materialien, und reversible Weltregeln bewahren genügend Ursprungszustand, um unterstützte Einstellungen später wiederherzustellen.
 
-# Steuerung und Oberfläche
+Entangled Worlds ist optional. Ohne EW bleibt MCM ein vollständiger Einzelspieler-Mod.
 
-| Aktion | Taste |
+# Steuerung
+
+Standardbelegung:
+
+| Aktion | Standard |
 | --- | --- |
-| Kreativmenü öffnen / schließen | **F4 oder TAB** |
-| Zur Menschenform zurückkehren | **TAB während einer Verwandlung** |
-| Eine Kreatur übernehmen | **G** |
+| Kreativmenü öffnen / schließen | **F4** |
+| Während einer Verwandlung zur Menschenform zurückkehren | **TAB** |
+| Eine Kreatur in der Welt übernehmen | **G** |
 | Mit dem ausgewählten Material malen | **Mittlere Maustaste** |
 
-Das MCM-Fenster ist außerdem über die normale Inventaroberfläche verfügbar.
+Das Kreativfenster ist auch über die normale Noita-Inventaroberfläche erreichbar.
 
-Tastenbelegungen können im Bereich **STEUERUNG** oder in den Mod-Einstellungen geändert werden.
+Belegungen können im MCM-Bereich **CONTROLS** und in Noitas Mod-Einstellungen geändert werden. Tastaturtasten, Maustasten und exakte **CTRL / SHIFT / ALT**-Kombinationen werden unterstützt.
 
-Beim Zuweisen einer Taste:
+Während der Belegung:
 
-- **DELETE / BACKSPACE** — Belegung löschen;
-- **ESC** — abbrechen;
-- **R** — Standardbelegung wiederherstellen;
-- **ALLES ZURÜCKSETZEN** — nach Bestätigung alle Standardbelegungen wiederherstellen.
+- **DELETE / BACKSPACE** löscht die Belegung;
+- **ESC** bricht ab;
+- **R** stellt die Standardbelegung dieser Aktion wieder her;
+- **RESET ALL** stellt nach Bestätigung alle Standardbelegungen wieder her.
 
-Wenn dieselbe Kombination mehreren Aktionen zugewiesen ist, zeigt MCM einen Konflikt an.
+Doppelte Belegungen bleiben editierbar, MCM zeigt den Konflikt jedoch an, statt eine andere Aktion still zu überschreiben.
 
-## Fenster des Kreativmenüs
+Menünavigation, Bereiche, Rückkehr aus einer Form, Besitzergreifung, Materialmalerei, Effektbereinigung, Wetterfreigabe, Zurücksetzen von Weltregeln und unterstützte Mehrspieleraktionen können neu belegt werden.
 
-Das Fenster kann:
+# Creative-Menu-Fenster
 
-- verschoben werden;
-- in Breite und Höhe verändert werden;
+Das direkte Kreativmenü ist ein persistentes, skalierbares Fenster und kein festes Debug-Overlay.
+
+Es kann:
+
+- über den Titel verschoben werden;
 - an Kanten und Ecken skaliert werden;
 - minimiert werden;
 - geschlossen werden;
-- auf die Standardanordnung zurückgesetzt werden.
+- auf das Standardlayout zurückgesetzt werden.
 
-Größe, Position und der zuletzt geöffnete Bereich werden zwischen Spielstarts gespeichert.
+Position, Breite, Höhe und der zuletzt geöffnete Bereich werden zwischen Sitzungen gespeichert. Nach Auflösungsänderungen wird die gespeicherte Geometrie wieder in den sichtbaren GUI-Bereich geklemmt.
 
-Große Kataloge verwenden Bildlauf und passen sich automatisch an die aktuelle Fenstergröße an.
+Listen und Kataloge verwenden vermessene Layouts und Noita-Scrollcontainer. Eine Größenänderung des Fensters verändert sofort die sichtbare Inhaltsmenge, und übersetzte Beschriftungen dürfen umbrechen, ohne benachbarte Bedienelemente zu überlagern. Schmale Layouts verteilen Controls auf zusätzliche Zeilen, statt sie übereinanderzuzeichnen.
 
-## Suche
+Das bloße Öffnen oder Überfahren des abgelösten Fensters deaktiviert das Gameplay nicht dauerhaft. Wenn ein Klick, Drag oder fokussiertes Textfeld sonst gleichzeitig den Spieler auslösen würde, unterdrückt MCM die betroffenen Spielersteuerungen vorübergehend und stellt sie anschließend wieder her.
 
-Die Suche ist in folgenden Katalogen verfügbar:
+# Suche und Lokalisierung
 
-- Zauber;
-- Gegenstände;
-- Materialien;
-- Perks;
-- Kreaturen.
+Die Suche ist in den wichtigsten Katalogen verfügbar, darunter Zauber, Gegenstände, Materialien, Perks und Kreaturen.
 
-Sie kann nicht nur den angezeigten Namen berücksichtigen, sondern auch den englischen Namen, den Lokalisierungsschlüssel, die technische Kennung oder den XML-Pfad.
+Je nach Eintrag kann sie Folgendes durchsuchen:
 
-Die Suche unterscheidet nicht zwischen Groß- und Kleinschreibung und toleriert kleine Tippfehler bei ausreichend langen Wörtern.
+- den Namen in der aktuellen Oberflächensprache;
+- den englischen Namen;
+- Lokalisierungsschlüssel;
+- technische Kennungen;
+- XML-Pfade.
 
-Die MCM-Oberfläche ist in 11 Sprachen lokalisiert. Für reguläre Spielinhalte werden nach Möglichkeit die Übersetzungen von Noita wiederverwendet.
+Die Suche ignoriert Groß-/Kleinschreibung, normalisiert gängige Akzente und Trennzeichen und toleriert kleine Tippfehler in längeren Suchbegriffen.
+
+Die eigene MCM-Oberfläche ist lokalisiert auf:
+
+- Englisch;
+- Russisch;
+- Brasilianisches Portugiesisch;
+- Spanisch;
+- Deutsch;
+- Französisch;
+- Italienisch;
+- Polnisch;
+- Vereinfachtes Chinesisch;
+- Japanisch;
+- Koreanisch.
+
+Für regulären Noita-Inhalt verwendet der Mod nach Möglichkeit die Lokalisierungsschlüssel des Spiels, statt doppelte Namenslisten zu pflegen.
 
 # Zauber
 
-Im Zauberbereich kann nicht nur mit dem Katalog, sondern auch mit den tatsächlichen Zaubern des aktuellen Spielers gearbeitet werden.
+Der Zauberbereich arbeitet sowohl mit dem Katalog als auch mit bereits vorhandenen Zauberentitäten des Spielers.
 
-Gleichzeitig verfügbar sind:
+Der Hauptarbeitsbereich enthält:
 
-- die Plätze des aktiven Zauberstabs;
-- **IMMER WIRKEN**;
-- das Zauberinventar;
-- der Zauberkatalog.
+- die normalen Slots des aktiven Zauberstabs;
+- **ALWAYS CAST**-Karten;
+- das Zauberinventar des Spielers;
+- den durchsuchbaren Zauberkatalog.
 
-## Schnelles Ersetzen
+## Schnelles Ersetzen des ausgewählten Slots
 
-Du kannst einen bestimmten Platz des Zauberstabs auswählen und im Katalog mit LMB auf den gewünschten Zauber klicken. Der Zauber wird in den ausgewählten Platz eingesetzt.
+Ein kurzer Klick wählt einen Zauberstabslot. Danach ersetzt ein kurzer LMB-Klick auf einen Katalogzauber diesen Slot.
 
-## Ziehen und Ablegen
+Dies ist der schnelle Weg für normale Bearbeitung. Präzises Verschieben erfolgt per Drag-and-drop.
 
-Vorhandene Zauber können verschoben werden:
+## Transaktionales Drag-and-drop
 
-- zwischen Zauberstabplätzen;
-- nach **IMMER WIRKEN**;
-- von **IMMER WIRKEN** zurück in normale Plätze;
-- in bestimmte Plätze des Zauberinventars;
-- aus dem Inventar zurück auf den Zauberstab;
+Vorhandene Karten können verschoben werden:
+
+- zwischen Zauberstabslots;
+- von normalen Slots zu **ALWAYS CAST**;
+- von **ALWAYS CAST** zurück zu normalen Slots;
+- in einen exakten Zauberinventar-Slot;
+- vom Inventar zurück auf den Zauberstab;
 - in die Spielwelt;
-- in den Papierkorb.
+- in den Papierkorb, sofern unterstützt.
 
-Bei vorhandenen Zauberkarten versucht MCM, die tatsächliche Spielentität zu verschieben, statt eine neue Kopie zu erzeugen. Dadurch bleibt veränderter oder von anderen Mods hinzugefügter Zustand der Karte erhalten.
+Bei einer vorhandenen Karte verschiebt MCM nach Möglichkeit die echte Entität. Veränderlicher Zustand, verbleibende Verwendungen und von anderen Mods hinzugefügte Daten gehen daher nicht nur durch einen Positionswechsel verloren.
 
-Der ursprüngliche Zauber bleibt an seinem Ort, bis das neue Ziel bestätigt wurde. Ein fehlgeschlagener oder unzulässiger Vorgang sollte die ursprüngliche Karte nicht zerstören.
+Die Quelle bleibt unverändert, bis die Zieltransaktion bestätigt wurde. Ungültige oder unbekannte Drop-Ziele brechen den Vorgang ab, statt die ursprüngliche Karte zu löschen. Eine Mausfreigabe führt höchstens eine bestätigte Operation aus.
 
-## Immer wirken
+Katalogkarten sind Vorlagen und werden beim Ziehen nie verbraucht.
 
-Permanente Zauber haben einen eigenen Bereich.
+## Always Cast
 
-Beim Verschieben zwischen normalen Plätzen und **IMMER WIRKEN** berücksichtigt MCM die Kapazität des Zauberstabs, damit die Struktur der normalen Plätze gültig bleibt.
+Always-Cast-Karten haben eine eigene Leiste. Promotion, Rückstufung und Tausch berücksichtigen die effektive Kapazität normaler Slots, damit keine ungültige Zauberstabstruktur entsteht.
 
-## Rückgängig / Wiederholen
+## Rückgängig und Wiederholen
 
-Für interne Änderungen am Zauberstab steht ein begrenzter Verlauf mit **RÜCKGÄNGIG / WIEDERHOLEN** zur Verfügung.
+Interne Zauberstabänderungen besitzen eine begrenzte **UNDO / REDO**-Historie.
 
-Er gilt für Vorgänge, die sich sicher aus dem Zustand des Zauberstabs selbst wiederherstellen lassen.
-
-Die Übergabe eines tatsächlichen Zaubers an die Außenwelt oder an das normale Spielinventar lässt sich nicht immer korrekt allein durch Wiederherstellen des Zauberstabzustands rückgängig machen. Solche Aktionen können daher nicht immer rückgängig gemacht werden.
+Vorgänge, die eine echte Entität in die Außenwelt oder in ein anderes Inventar übergeben, lassen sich nicht immer sicher aus einem Zauberstab-Snapshot zurückholen. Solche externen Übergaben werden daher nicht als universell rückgängig machbar versprochen.
 
 # Zauberstäbe
 
-MCM enthält einen vollständigen Editor für den aktiven Zauberstab.
+Der Zauberstab-Arbeitsbereich bearbeitet den aktuell gehaltenen Zauberstab.
 
-Verändert werden können:
+Unterstützte Werte umfassen:
 
-- die Anzahl der Plätze;
+- Kapazität / Slots;
 - Zauber pro Schuss;
-- die Aufladezeit;
-- die Verzögerung zwischen Schüssen;
-- die Streuung;
-- der Geschwindigkeitsmultiplikator für Projektile;
-- das maximale Mana;
-- die Mana-Aufladung;
-- die Rückstoß-Erholung;
-- die Stufe des Zauberstabs;
-- das Mischen;
-- der Modus ohne Aufladen.
+- Aufladezeit;
+- Verzögerung zwischen Schüssen;
+- Streuung;
+- Geschwindigkeitsmultiplikator für Projektile;
+- maximales Mana;
+- Mana-Aufladung;
+- Rückstoß-Erholung;
+- Zauberstab-Level;
+- Shuffle;
+- Never-Reload-Verhalten.
 
-Auch Aussehen und zugehörige Parameter lassen sich ändern:
+MCM bearbeitet außerdem Darstellung und Metadaten:
 
-- der angezeigte Name;
-- Sperren;
-- das Bild des Zauberstabs;
-- der Bildversatz;
-- der Abschusspunkt.
+- angezeigter Name;
+- Sperren für Zauberstab und Karten;
+- Sprite-Pfad;
+- Sprite-Offsets;
+- Schussposition.
 
-Für das Aussehen von Zauberstäben steht ein visueller Katalog zur Verfügung.
+Ein visueller Erscheinungskatalog folgt vorhandenen Zauberstab-XML-Daten, wenn verfügbar.
 
-## Gespeicherte Zauberstäbe
+## Zauberstab-Presets
 
-Ein Zauberstab kann gespeichert und sein gespeicherter Zustand später wiederverwendet werden.
+Zauberstäbe können als persistente benannte Presets gespeichert und in späteren Welten oder Noita-Sitzungen wiederverwendet werden.
 
-Gespeichert werden:
+Ein Preset kann speichern:
 
-- Werte;
-- Mana;
-- Aussehen;
-- normale Zauber;
-- **IMMER WIRKEN**;
-- die Anordnung der Karten;
-- verbleibende Anwendungen;
-- der eingefrorene Zustand der Karten.
+- Zauberstabwerte;
+- Mana-Werte;
+- visuelle Metadaten;
+- normale Zauberkarten;
+- Always-Cast-Karten;
+- Slotpositionen;
+- verbleibende Verwendungen;
+- eingefrorenen Kartenstatus.
 
-Gespeicherte Zauberstäbe stehen zwischen verschiedenen Welten und in späteren Noita-Sitzungen zur Verfügung.
+Jedes Preset bietet zwei getrennte Aktionen:
 
-### Anwenden
+- **APPLY** schreibt den gespeicherten Blueprint auf den aktuell gehaltenen Zauberstab;
+- **GET COPY** baut einen neuen Zauberstab aus demselben Blueprint.
 
-**ANWENDEN** überträgt den gespeicherten Zustand auf den Zauberstab, den der Spieler gerade besitzt.
+Eine Kopie wird nach Möglichkeit in einen freien Zauberstabslot des Schnellinventars gelegt. Gibt es keinen geeigneten Slot, bleibt der fertig gebaute Zauberstab in der Welt beim Spieler.
 
-### Kopie
-
-**KOPIE** erstellt eine separate Kopie des gespeicherten Zauberstabs.
-
-Wenn im Schnellinventar ein geeigneter Platz frei ist, wird der neue Zauberstab dort abgelegt. Andernfalls wird er neben dem Spieler in der Spielwelt erzeugt.
-
-Wenn die Erstellung nicht korrekt abgeschlossen werden kann, versucht MCM, die unvollständige Entität zu entfernen.
+Zauberstabersetzung und Preset-Laden nutzen Commit-/Rollback-Pfade. Wenn Konstruktion oder Platzierung nicht abgeschlossen werden können, versucht MCM den unvollständigen Entitätsbaum zu entfernen, statt einen defekten Teil-Zauberstab zurückzulassen.
 
 # Gegenstände und Flüssigkeiten
 
 ## Gegenstände
 
-**LMB** auf einen Katalogeintrag erzeugt einen Gegenstand neben dem Spieler.
+Ein kurzer **LMB**-Klick auf einen Katalogeintrag erzeugt einen unterstützten Gegenstand in der Nähe des Spielers.
 
-**RMB** versucht, den Gegenstand direkt ins Inventar zu legen.
+**RMB** versucht, ihn in den passenden Inventarbereich zu legen.
 
-Ein Gegenstand kann außerdem gezogen werden:
+Katalogeinträge können außerdem gezogen werden:
 
-- in einen passenden Bereich des Schnellinventars;
-- aus dem Menü heraus an eine gewählte Stelle der Spielwelt.
+- auf ein passendes Ziel im Schnellinventar;
+- aus dem Menü hinaus an eine exakte Weltposition.
 
-Wird die Karte innerhalb des Menüs ohne gültiges Ziel losgelassen, wird der Vorgang abgebrochen.
+Wird eine Karte innerhalb des Menüs ohne gültiges Ziel losgelassen, wird der Vorgang abgebrochen. Die Katalogkarte ist nur eine Vorlage und bleibt verfügbar.
 
-Der Katalog enthält Vorlagen. Der Eintrag selbst verschwindet daher nach dem Erzeugen eines Gegenstands nicht.
+MCM respektiert Noitas normale Trennung des Schnellinventars in Zauberstab- und Gegenstandsslots. Ein fehlgeschlagenes XML-Laden, Befüllen mit Flüssigkeit, Inventar-Handoff oder optionaler Mehrspieler-Handoff entfernt die neu erzeugte Entität nach Möglichkeit wieder.
 
-MCM berücksichtigt die normale Aufteilung des Noita-Schnellinventars in Zauberstab- und Gegenstandsplätze und sollte einen bereits vorhandenen Gegenstand nicht ohne Grund ersetzen.
+Einige echte Inventargegenstände liegen im Spiel in kreaturenorientierten Verzeichnissen. MCM klassifiziert bekannte Fälle nach Verhalten, statt aus dem Ordnernamen allein abzuleiten, ob etwas Gegenstand oder Kreatur ist.
 
 ## Flüssigkeiten
 
-MCM kann echte Spielbehälter mit der ausgewählten Flüssigkeit erzeugen.
+Flüssigkeitseinträge erzeugen echte gefüllte Noita-Behälter und keine dekorativen UI-Objekte.
 
-Der erzeugte Behälter verhält sich wie ein normaler Gegenstand in Noita:
-
-- er kann im Inventar aufbewahrt werden;
-- in die Welt geworfen werden;
-- zerbrechen;
-- seinen Inhalt verschütten;
-- an normalen Materialreaktionen teilnehmen.
+Der resultierende Behälter kann getragen, fallen gelassen, zerbrochen und ausgeschüttet werden; sein Inhalt nimmt an normalen Materialreaktionen teil.
 
 # Materialien
 
-Der Materialkatalog wird aus den Stoffen aufgebaut, die in der aktuellen Noita-Instanz registriert sind.
+Der Materials-Bereich ist ein Weltmalwerkzeug auf Basis von Noitas echtem Materialregister.
 
-Er umfasst verschiedene Materialarten, darunter:
+Der Katalog wird aus registrierten Flüssigkeiten, Sanden / Pulvern, Gasen, Feuern, Feststoffen sowie verwandten statischen oder Effektmaterialien aufgebaut. Korrekt registrierte Materialien anderer aktiver Mods können deshalb automatisch erscheinen.
 
-- Flüssigkeiten;
-- Pulver;
-- Gase;
-- Feuer;
-- feste Materialien;
-- statische Materialien;
-- Materialien mit besonderer Darstellung.
+Materialerkennung und teure Validierung werden auf begrenzte Arbeit verteilt, statt den gesamten Katalog in einem einzigen UI-Frame zu scannen.
 
-Wenn ein anderer aktiver Mod ein eigenes Material korrekt zu Noita hinzufügt, kann es ebenfalls in MCM erscheinen.
+## Materialdarstellung
 
-## Mit Materialien malen
+Flüssigkeiten verwenden dieselbe Darstellung gefüllter Behälter wie der Gegenstandsbereich.
 
-1. Wähle ein Material.
-2. Wähle die Pinselgröße.
-3. Klicke auf **MALEN STARTEN**.
-4. Schließe das Inventar.
-5. Halte in der Spielwelt die zugewiesene Maltaste gedrückt.
+Bei Nicht-Flüssigkeiten bevorzugt MCM definierte Texturen und Tint-Daten aus `materials.xml`, einschließlich geerbter Definitionen. Fehlt eine definierte Textur, basiert der Fallback auf der tatsächlichen Engine-Farbe des Materials und nicht auf einer willkürlichen Vorschaufarbe.
 
-Standardmäßig wird die **mittlere Maustaste** verwendet.
+## Malen
 
-Das Öffnen des Inventars beendet den Malmodus.
+1. Material auswählen.
+2. Pinselgröße wählen.
+3. Malmodus aktivieren.
+4. Inventar schließen.
+5. Die konfigurierte Mal-Eingabe in der Welt gedrückt halten.
 
-## Verhalten der Materialien
+Das Öffnen des Inventars beendet den aktiven Malmodus.
 
-MCM erzeugt echte Materialien der Spielwelt, keine dekorativen Partikel.
+Malen erzeugt nicht nur dekorative Partikel. MCM setzt echte Zellen über einen zur Engine passenden Pfad in die Welt. Dynamische Materialien folgen weiterhin der Noita-Simulation: Flüssigkeiten fließen, Pulver fallen, Gase bewegen sich, Feuer reagiert und instabile Stoffe können sich durch Materialreaktionen verändern.
 
-Nach dem Platzieren folgen sie weiterhin der normalen Simulation von Noita:
+Unterschiedliche Materialklassen benötigen unterschiedliche Platzierungsstrategien. Der Standalone-Build kann NoitaPatchers direkten Weltgitterzugriff und einen kleinen PixelScene-Fallback für definierte Fälle verwenden, die Noita an einer bestimmten Texturkoordinate nicht direkt konstruieren kann.
 
-- Flüssigkeiten fließen;
-- Pulver rieseln;
-- Gase breiten sich aus;
-- Feuer reagiert mit der Umgebung;
-- Stoffe reagieren miteinander;
-- instabile Materialien können sich in andere umwandeln.
-
-Für unterschiedliche Materialarten verwendet MCM geeignete Platzierungsverfahren, einschließlich zusätzlicher NoitaPatcher-Funktionen für Fälle, die sich mit den normalen Mod-Werkzeugen nicht zuverlässig umsetzen lassen.
+Arbeitswarteschlangen sind begrenzt, damit ein großer gehaltenener Pinsel nicht absichtlich unbegrenzte Arbeit in einem einzigen Frame ausführt.
 
 # Perks
 
-## Einen Perk erzeugen
+## Perks erzeugen und erhalten
 
-**LMB** erzeugt den ausgewählten Perk in der Spielwelt.
+**LMB** erzeugt einen normalen Pickup des ausgewählten Perks in der Welt.
 
-Er kann wie ein normaler Noita-Perk aufgenommen werden.
+Die Take-Aktion kann den Perk einzeln oder in größeren Mengen gewähren. Massenaktionen werden als begrenzte Jobs verarbeitet, statt alle Kopien in einem einzigen UI-Frame anzuwenden.
 
-## Perks erhalten
+Die Oberfläche zeigt den Fortschritt, und noch ausstehende Arbeit kann abgebrochen werden. Bereits bestätigte Kopien bleiben nach dem Abbruch erhalten.
 
-MCM ermöglicht das Erhalten von:
-
-- 1 Kopie;
-- 10 Kopien;
-- 100 Kopien.
-
-Mehrfaches Erhalten wird schrittweise verarbeitet, damit nicht viele aufwendige Vorgänge in einem einzigen Frame ausgeführt werden.
-
-Die Oberfläche zeigt den Fortschritt an, und die noch ausstehenden Schritte können abgebrochen werden. Bereits erfolgreich erhaltene Kopien bleiben beim Spieler.
+Jede gewährte Kopie durchläuft weiterhin den normalen Perk-Anwendungspfad, statt den Endzustand direkt zu fälschen.
 
 ## Perks entfernen
 
-Einen Perk sicher zu entfernen ist deutlich schwieriger, als ihn zu erhalten.
+Einen Perk zu entfernen ist wesentlich schwieriger, als ihn zu gewähren. Perks können Globals, Komponenten, Entitäten, Spielerwerte und lang laufende Mechaniken verändern; Noita bietet dafür keine universelle inverse Operation.
 
-Einige Perks verändern mehrere Spielsysteme gleichzeitig, erzeugen Entitäten oder starten Effekte, für die es keine einzige allgemeingültige Rückgängig-Funktion gibt.
+MCM entfernt deshalb nur Zustand, für den eine ausreichend sichere verfolgte Gegenoperation existiert. Das Transaktionsjournal versucht, nur Zustand dieser konkreten Perk-Anwendung zu entfernen, ohne unabhängigen Spielerzustand zurückzusetzen.
 
-Deshalb entfernt MCM nur unterstützte Änderungen, für die eine ausreichend zuverlässige Gegenoperation möglich ist.
+Wenn eine Bereinigung nur teilweise gelingt oder nicht als vollständig bewiesen werden kann, bleibt sie als unvollständig behandelt, statt still als erfolgreich zu gelten.
 
-Der Mod versucht, nur den Zustand rückgängig zu machen, der durch die jeweilige Anwendung des Perks erzeugt wurde, ohne andere Effekte oder Spielerwerte unnötig zurückzusetzen.
+Ein Drittanbieter-Perk kann vergebbar sein, ohne korrekt entfernbar zu sein.
 
 # Effekte
 
-MCM kann unterstützte Elemente anwenden und entfernen, darunter:
+Der Effects-Bereich wendet unterstützte Materialstatus und GameEffect-Entitäten an und entfernt sie.
 
-- Spieleffekte;
-- materialbezogene Zustände.
+Die Entfernung berücksichtigt nach Möglichkeit Besitz. MCM löscht nicht wahllos ähnliche versteckte Effekte, die Perks, dem Spiel oder einem anderen System gehören.
 
-Beim Entfernen versucht der Mod, fremde Zustände nicht zu verändern, die zu Perks oder anderen Spielsystemen gehören.
+Persistente von MCM erzeugte Effekte verwenden begrenzte Bereinigung / Ablaufbehandlung, damit das Entfernen eines MCM-Effekts keinen fremden Zustand zurücksetzt.
 
-So können MCM-eigene Effekte bereinigt werden, ohne pauschal jeden ähnlichen Zustand des Spielers zu löschen.
+# Kreaturen
 
-# Kreaturen und Verwandlungen
+Der Kreaturenkatalog behält exakte XML-Pfade bei, statt alle ähnlich benannten Entitäten zusammenzuführen.
 
-## Kreaturen erzeugen
+Unterstützte Interaktionen:
 
-**LMB** erzeugt die ausgewählte Kreatur neben dem Spieler.
+- **LMB** — erzeugt die ausgewählte definierte Entität beim Spieler;
+- Drag aus dem Menü — erzeugt sie an der bestätigten Weltcursorposition;
+- **RMB** — verwandelt den aktuellen Spieler in eine unterstützte Form;
+- der spezielle Eintrag **PLAYER** — erzeugt oder stellt Spielerzustand wieder her, wie unten beschrieben.
 
-Die Karte einer Kreatur kann außerdem aus dem Menü gezogen werden, um sie an einer gewählten Stelle der Spielwelt zu erzeugen.
+Wird eine gezogene Karte wieder über dem Menü losgelassen, wird der Welt-Spawn abgebrochen.
 
-**RMB** auf einen unterstützten Eintrag versucht, den aktuellen Spieler in die entsprechende Form zu verwandeln.
+Kompatibilitätsregeln für gefährliche oder ungewöhnliche Formen verwenden exakte Pfade. Ein Dateiname, der nur ein bekanntes Wort enthält, macht eine Entität nicht automatisch zu einer gleichwertigen Form.
 
-## Kompatibilität der Formen
+# Verwandlungen und Rückkehr zur Menschenform
 
-Kreaturen in Noita unterscheiden sich intern sehr stark voneinander.
+Spielbare Formen behalten nützliche native Bewegung, Angriffe, Darstellung und Physik, soweit praktikabel. Komponenten, die direkt mit Spielereingabe konkurrieren, können deaktiviert oder angepasst werden, solange die Form vom Spieler gesteuert wird.
 
-Deshalb unterscheidet MCM Verwandlungsziele anhand exakter XML-Pfade und behandelt ähnlich aussehende Kreaturen nicht automatisch als austauschbar.
+Einige komplexe Kreaturen benötigen zusätzliche Kompatibilitätslogik. Bosse, skriptgesteuerte Wrapper und stark physikabhängige Entitäten müssen sich als Spielerform nicht exakt wie ihre KI-gesteuerte Originalversion verhalten.
 
-Während einer Verwandlung nutzt MCM die Fähigkeiten der ausgewählten Form und wendet bei Bedarf besondere Kompatibilitätsregeln für einzelne Kreaturen an.
+Die konfigurierte Rückkehraktion — standardmäßig **TAB** — nutzt zuerst den normalen Pfad zum Beenden der Verwandlung. Reicht das nicht aus, besitzt der Standalone-Build zusätzliche NoitaPatcher-gestützte Wiederherstellungspfade.
 
-# Rückkehr nach einer Verwandlung und Tod der Form
+Bei unterstützten Fällen tödlichen Schadens versucht MCM:
 
-Mit der zugewiesenen Aktion kannst du zur Menschenform zurückkehren — standardmäßig mit **TAB**.
+- die tote temporäre Form bzw. Leiche in der Welt zu belassen, wenn passend;
+- eine menschliche Spielerentität wiederherzustellen;
+- Authority und Steuerung zurückzugeben;
+- das Inventar zu bewahren;
+- relevanten Spielerzustand wiederherzustellen.
 
-MCM verwendet zunächst die normalen Noita-Mechanismen zum Beenden einer Verwandlung. Für schwierigere Fälle steht eine zusätzliche Wiederherstellung über NoitaPatcher zur Verfügung.
+Das ist Wiederherstellungslogik, keine absolute Unsterblichkeit. Ein Drittanbieter-Kill-Script, inkompatibler Engine-Zustand oder Prozessabsturz kann den unterstützten Handoff umgehen.
 
-Der Mod behandelt außerdem unterstützte Situationen, in denen eine vorübergehende Form tödlichen Schaden erleidet.
+# Besitzergreifung
 
-In solchen Fällen versucht MCM:
+Besitzergreifung steuert eine bereits in der Welt existierende Kreatur, statt eine Form aus dem Katalog zu wählen.
 
-- den Körper der gestorbenen Form zu erhalten;
-- den menschlichen Spieler wiederherzustellen;
-- die Steuerung zurückzugeben;
-- das Inventar zu erhalten;
-- spielerbezogenen Zustand wiederherzustellen.
+Die Standardtaste ist **G**.
 
-Das ist keine absolute Unsterblichkeit. Ungewöhnliche Todesarten durch andere Mods, inkompatible Mods oder interne Noita-Fehler können den normalen Wiederherstellungsmechanismus umgehen.
+Ziele auf eine geeignete Kreatur und benutze die Besitzergreifungsaktion. MCM prüft das Ziel, bereitet eine kompatible Formtransaktion vor und entfernt bzw. retired die ursprüngliche Weltentität erst, nachdem der neue spielergesteuerte Zustand bestätigt wurde.
 
-# Kreaturen übernehmen
+Scheitert der Übergang, sollte die ursprüngliche Kreatur nicht einfach verschwinden.
 
-Neben der Auswahl einer Form aus dem Katalog kann MCM **eine Kreatur übernehmen, die bereits in der Spielwelt existiert**.
+Die Funktion ist nicht auf MCMs eingebauten Katalog begrenzt. Eine kompatible Kreatur eines anderen Mods kann funktionieren, universelle Kompatibilität mit allen Drittanbieterentitäten wird jedoch nicht garantiert.
 
-Standardmäßig wird die Taste **G** verwendet.
+# Player-Eintrag
 
-Bewege den Mauszeiger auf ein geeignetes Ziel und verwende die zugewiesene Aktion.
+**PLAYER** ist ein spezieller Eintrag im Kreaturenkatalog und kein normaler Polymorph-Zieltyp.
 
-MCM prüft die Kreatur, führt die Verwandlung in eine kompatible Form aus und entfernt die ursprüngliche Entität erst dann aus der Welt, wenn der erfolgreiche Abschluss bestätigt wurde.
+Seine Spawn-Aktion erzeugt einen getrennten spielerähnlichen Charakter und versucht geeignete Darstellung sowie Informationen zur maximalen Gesundheit zu kopieren.
 
-Falls die Verwandlung nicht zustande kommt, sollte die ursprüngliche Kreatur nicht einfach verschwinden.
+Die Transformationsaktion auf **PLAYER** verwandelt einen bereits menschlichen Spieler nicht in ein Duplikat. Befindet sich der Spieler in einer anderen Form, dient die Aktion als Rückkehr zur Menschenform.
 
-Diese Funktion ist nicht auf den statischen MCM-Katalog beschränkt. Auch eine geeignete Kreatur aus einem anderen Mod kann die Prüfung bestehen, eine allgemeine Kompatibilität mit beliebigen Drittanbieter-Entitäten wird jedoch nicht garantiert.
+# Game-Over-Wiederherstellung im Einzelspieler
 
-# Spieler
+Der Standalone-Einzelspieler-Build enthält einen zusätzlichen Wiederherstellungspfad für Noitas normalen Game-Over-Bildschirm.
 
-**SPIELER** ist ein besonderer Eintrag im Kreaturenkatalog.
+Wenn die native Integration die benötigten Spielstrukturen sicher erkennen kann, fügt MCM dem Game-Over-Interface die Aktion **„I didn't die“** hinzu.
 
-Es handelt sich nicht um eine normale Form, in die man sich verwandelt.
+MCM hält während des Spiels eine fortlaufend aktualisierte Spieler-Sicherung. Das Auslösen der Wiederherstellung fordert die Wiederherstellung über MCMs normalen Update-Pfad an, statt den kompletten Spieler direkt im UI-Klickhandler neu aufzubauen.
 
-**LMB** erzeugt einen separaten Charakter, für den MCM zu kopieren versucht:
+Eine unterstützte Wiederherstellung versucht:
 
-- das Aussehen des Spielers;
-- die maximale Gesundheit.
+- eine lebende Spielerentität wiederherzustellen oder zu erhalten;
+- sie wieder authoritative zu machen;
+- den Game-Over-Zustand der Engine zu löschen;
+- Steuerung und nutzbaren Spielerzustand zurückzugeben;
+- Game-Over-Audio, Musik und UI bestmöglich zu bereinigen;
+- nach der Wiederherstellung ein kurzes Schutzfenster zu geben.
 
-**RMB** auf den Eintrag **SPIELER** verwandelt den normalen Spieler nicht in diese Entität.
-
-Befindet sich der Spieler bereits in Menschenform, geschieht nichts. Ist der Spieler gerade in eine andere Kreatur verwandelt, wird die Rückkehr zur Menschenform verwendet.
+Der native Helper ist fail-closed ausgelegt. Er sucht im laufenden unterstützten Noita-Executable nach bekannten Strukturen, statt dauerhaft auf eine einzige hart codierte Adresse zu schreiben. Können die erwarteten Strukturen nach einem Spielupdate nicht sicher erkannt werden, wird die optionale Wiederherstellung nicht benutzt, statt an eine unsichere Adresse zu schreiben.
 
 # Wetter und Zeit
 
-MCM kann Folgendes verändern:
+MCM kann unterstützten Wetter- und Zeitstatus steuern, einschließlich Presets und einzelner Parameter der aktuellen Implementierung.
 
-- die Tageszeit;
-- Wettervorgaben;
-- einzelne unterstützte Wetterparameter.
+Erzwungener Zustand kann später wieder an die normale Spielsteuerung freigegeben werden. Nach dem Erzwingen einer Tageszeit kann MCM beispielsweise diese Einstellung wieder loslassen, damit Noitas natürlicher Zeitfluss weiterläuft.
 
-Ein gewünschter Zustand kann gesetzt und der entsprechende Parameter später wieder aus der Kontrolle von MCM entlassen werden.
-
-So lässt sich beispielsweise nach dem erzwungenen Setzen einer Tageszeit der natürliche Zeitablauf von Noita wiederherstellen.
+Wetteränderungen werden als zustandsbehaftete Steuerung behandelt und nicht als einmalige Einweg-Konsolenbefehle.
 
 # Weltregeln
 
-Der Bereich **REGELN** ermöglicht tiefgreifendere Änderungen am Verhalten der Spielwelt.
+Der Bereich **RULES** verändert unterstütztes globales Spielverhalten.
 
-Je nach Regel lassen sich beispielsweise folgende Parameter steuern:
+Regeln decken unter anderem ab:
 
 - Beziehungen zwischen Kreaturen;
-- Gold;
-- Verwendung von Zaubern;
-- Kriegsnebel;
-- Belohnungen für bestimmte Arten von Tötungen;
-- Heilungsabwürfe;
-- Blut;
-- Schwerkraft;
-- physikalisches Verhalten;
-- Trittkraft;
-- physikalische Verbindungen;
+- Goldverhalten;
+- Zaubernutzung;
+- Fog of War;
+- ausgewählte Kill-Belohnungen;
+- Heilungsdrops;
+- blutbezogenes Verhalten;
+- Gravitation;
+- Physik;
+- Trittstärke;
+- Physikgelenke;
 - Tag-Nacht-Zyklus;
 - weitere unterstützte globale Parameter.
 
-Der wichtigste Punkt: MCM-Regeln sind als **umkehrbare Änderungen** ausgelegt.
+Das wichtigste Ziel ist Reversibilität.
 
-Für unterstützte Einstellungen speichert der Mod den Ausgangszustand und erlaubt es, die Werte auf ihren normalen Zustand zurückzusetzen.
+Für unterstützte Regeln zeichnet MCM den Ursprungszustand auf oder leitet ihn ab, damit die Einstellung später zurückgesetzt werden kann. Multiplikator-Regler werden relativ zum Ursprungswert angewandt und nicht wiederholt auf bereits veränderte Ergebnisse multipliziert.
 
-Wird ein Multiplikator verwendet, wird der neue Wert relativ zum Ausgangszustand berechnet, statt immer wieder auf ein bereits verändertes Ergebnis multipliziert zu werden.
-
-Vorgänge, bei denen sehr viele Entitäten oder Physikobjekte verändert werden müssen, werden schrittweise abgearbeitet, statt beim Tastendruck die gesamte Welt auf einmal zu bearbeiten.
+Regeln, die viele Entitäten oder Physikobjekte anfassen müssen, nutzen begrenzte Update-Arbeit über mehrere Frames, statt die gesamte Welt synchron durch einen einzigen Menüklick umzuschreiben.
 
 # Teleportation
 
-MCM ermöglicht schnelles Reisen zu vorbereiteten Zielen im Spiel, darunter Punkte:
+Der Teleportbereich bietet vorbereitete Ziele in der Welt, darunter Punkte auf der Hauptroute, Holy Mountains, größere Nebenbereiche und weitere unterstützte Orte.
 
-- entlang des Hauptwegs;
-- in den Heiligen Bergen;
-- in großen Seitengebieten;
-- an weiteren unterstützten Orten.
+Vor dem Versetzen kann MCM das Laden des Zielgebiets anfordern und sucht nutzbaren freien Raum in der Nähe, statt den Spieler absichtlich direkt in festes Terrain zu setzen.
 
-Vor der Teleportation kann der Mod das Zielgebiet laden und versucht, in der Nähe einen freien Platz zu finden, damit der Spieler nicht direkt in einer festen Wand oder einem anderen Hindernis erscheint.
+Teleportation hängt weiterhin davon ab, dass die Welt laden und ein gültiges Ziel bereitstellen kann. Stark modifizierte Welten können Fallback-Verhalten benötigen.
 
 # Entangled Worlds
 
-**Entangled Worlds / Noita Proxy ist optional.**
+**Entangled Worlds / Noita Proxy ist optional.** MCM funktioniert ohne EW.
 
-MCM funktioniert auch ohne Entangled Worlds vollständig im Einzelspieler.
+Wenn EW vorhanden ist, aktiviert MCM zusätzliche mehrspielerbewusste Funktionen. Alle Peers sollten kompatible MCM-Builds verwenden, wenn sie auf MCM-spezifisch synchronisierten Zustand angewiesen sind.
 
-Ist Entangled Worlds installiert, werden zusätzliche experimentelle Mehrspielerfunktionen aktiviert.
+## Authority und Formen
 
-Für bestmögliche Kompatibilität wird empfohlen, dass alle Teilnehmer dieselbe MCM-Version verwenden.
+Spielerformen benötigen spezielle Ownership-Behandlung, weil ein verwandelter Spieler nicht versehentlich eine zweite Netzwerk-Authority hinterlassen darf.
+
+MCM koordiniert Ownership, Retirement und Rückkehr zur Menschenform mit EW, soweit unterstützt. Boss- und Kolmi-artige Entitäten besitzen zusätzliche Lifecycle-Behandlung, die doppelte Authorities und veraltete netzwerkgesteuerte Kopien vermeiden soll.
+
+Der normale EW-Todespfad bleibt für Entitäten zuständig, die nicht als MCM-eigener Formzustand erkannt werden.
 
 ## Gegenstände, Zauberstäbe und Zauber
 
-Wo immer möglich verwenden Gegenstände in der Welt und abgelegte Zauber die normalen Mechanismen von Entangled Worlds.
+Wo möglich nutzt MCM EWs normale Item-/Inventarmechanismen, statt ein paralleles Transportsystem zu erfinden.
 
-Auch Inventaränderungen können über Entangled Worlds übertragen werden.
+Bestätigte Zauberstab- und Zauberinventaränderungen fordern die passende Multiplayer-Aktualisierung an, wenn die Integration verfügbar ist. Von MCM erzeugte Weltgegenstände können an EWs normalen World-Item-Pfad übergeben werden.
 
 ## Perks
 
-Ein von MCM erzeugter Perk bleibt eine echte Spielentität und wird nach Möglichkeit über das normale Weltgegenstand-System von Entangled Worlds übertragen.
+Normale Perk-Pickups können EWs normale World-Item-Synchronisation verwenden. MCMs eigene Perk-Zustandslogik koordiniert Refresh und begrenzte Operationen, damit Massenaktionen nicht für jede Kopie einen teuren globalen Refresh auslösen.
 
 ## Materialien
 
-Das Malen mit Materialien bietet experimentelle Mehrspielerunterstützung.
+Materialmalerei besitzt einen eigenen Kompatibilitätspfad, weil Weltzellenänderungen keine normalen Item-Entitäten sind.
 
-MCM synchronisiert betroffene Bereiche der Welt, damit das Ergebnis auch bei anderen Teilnehmern erscheinen kann.
+MCM hält Malarbeit begrenzt, trennt Arbeit an Chunk-Grenzen und koordiniert erforderliche EW-World-Frame-/Persistenzschritte, bevor synchronisierte Konvertierungsarbeit freigegeben wird. Ein noch nicht geladener Streaming-Rand-Chunk wird verschoben, statt den gesamten aktuellen Pinselstrich zu blockieren.
 
-Damit dies korrekt funktioniert, muss das entsprechende Material auch beim anderen Spieler vorhanden sein. Wenn sich die verwendeten Mod-Sammlungen unterscheiden, kann keine identische Darstellung aller Materialien garantiert werden.
+Das Ziel ist, dass nahe EW-Peers unterstützten gemalten Weltzustand sehen können, ohne die normale MCM-UI-Aktion remote als rein dateinamenbasierten PixelScene-Aufruf nachzuspielen.
 
-## Wetter und Weltregeln
+Dabei gelten weiterhin EWs Material-ID-Annahmen: Ein empfangendes Spiel kann kein Material korrekt erzeugen, das dort nicht existiert oder dessen Engine-Materialregister inkompatibel ist.
 
-Unterstützte Änderungen an Wetter und globalen Regeln können über Entangled Worlds synchronisiert werden.
+## Wetter, Besitzergreifung und Weltzustand
 
-## Verwandlungen und Übernahme von Kreaturen
+Unterstützter MCM-Multiplayerzustand umfasst außerdem Koordination für Wetter, Besitzergreifung und ausgewähltes Weltregel-/Lifecycle-Verhalten. Authority-Prüfungen verhindern, dass zwei Peers gleichzeitig Besitzer desselben Zustands werden.
 
-Verwandlungen erhalten bei Verwendung von Entangled Worlds zusätzliche Unterstützung.
+EW-Unterstützung ist absichtlich konservativ. Wenn die Integration keinen sicheren Synchronisationspfad beweisen kann, bevorzugt MCM korrektes lokales Verhalten, statt jede Einzelspieleroperation fälschlich als automatisch mehrspielersicher darzustellen.
 
-Beim Übernehmen einer bereits vorhandenen Kreatur berücksichtigt der Mod auch deren Netzwerkzustand. Wenn MCM nicht zuverlässig genug feststellen kann, dass die ursprüngliche Entität entfernt werden darf, lässt es sie lieber bestehen.
+# Kompatibilität und Einschränkungen
 
-## Spieler
+Noita stellt viele Systeme über lose gekoppelte Entitäten, XML, Lua-Komponenten und natives Engine-Verhalten bereit. MCM kann deshalb keine universelle Kompatibilität mit jeder modifizierten Entität oder jedem zukünftigen Spielupdate garantieren.
 
-Die Erzeugung der besonderen Entität **SPIELER** wird auch mit Entangled Worlds unterstützt. In diesem Fall übernimmt sie die Farben des Aussehens der Person, die sie erzeugt hat.
+Wichtige Einschränkungen:
 
-## Teleportation zwischen Spielern
+- Eine Kreatur kann spawnbar sein, ohne eine sichere Spielerform zu sein.
+- Ein Perk kann vergebbar sein, ohne eine zuverlässige inverse Operation zu besitzen.
+- Externe Zauber- oder Gegenstandsübergaben lassen sich nicht immer aus einem internen Snapshot rückgängig machen.
+- Drittanbieter-Skripte können unterstützte Todes- und Wiederherstellungspfade umgehen.
+- Native Wiederherstellungsfunktionen hängen von unterstütztem Noita-Executable-Verhalten ab und deaktivieren sich fail-closed, wenn benötigte Strukturen nicht sicher erkennbar sind.
+- Entangled Worlds kann kein Material synchronisieren, das im Register des empfangenden Spiels fehlt.
+- Stark modifizierte Inventare, Entitäten oder Weltregeln können mod-spezifische Kompatibilitätsarbeit benötigen.
 
-Wenn Entangled Worlds aktiv ist, werden im Teleportationsbereich die verfügbaren Spieler angezeigt.
+MCM versucht Ursprungszustand zu bewahren und fehlgeschlagene Mutationen zurückzurollen, aber ein Sandbox-Werkzeug, das live Spielzustand verändert, kann nicht jede Drittanbieter-Mod-Kombination vollständig transaktional machen.
 
-**HINGEHEN** teleportiert dich zum ausgewählten Spieler.
+# Gespeicherte Daten
 
-**HIERHER HOLEN** sendet dem ausgewählten Spieler eine Anfrage, sich zu dir teleportieren zu lassen.
+MCM speichert benutzerbezogenen Zustand, der Sitzungen überdauern soll, darunter unterstützte Einstellungen, Tastenbelegungen, Menü-Layout und Zauberstab-Presets.
 
-In beiden Fällen versucht MCM, einen freien Platz in der Nähe des Ziels zu verwenden.
+Die Mod-Identität bleibt stabil, damit normale Updates unterstützte gespeicherte Daten behalten. Beim Installieren eines neuen Standalone-Builds wird trotzdem empfohlen, den ganzen Mod-Ordner zu ersetzen, da das Zusammenführen alter und neuer Dateien veraltete Runtime-Dateien hinterlassen kann.
 
-## Einschränkungen
+# Fehlerbehebung
 
-Die Unterstützung für Entangled Worlds bleibt experimentell.
+## Der Mod erscheint nicht
 
-**Im Mehrspielermodus kann die Verwandlung in große oder aus vielen Gelenken bestehende Bosse zu einem kritischen Leistungseinbruch führen und die aktuelle Spielsitzung praktisch unbrauchbar machen.**
+Prüfe, ob der Pfad so endet:
 
-Noita lässt sich äußerst schwer vollständig synchronisieren, besonders wenn sich gleichzeitig Folgendes verändert:
+`mods/metamorph_creative_menu/mod.xml`
 
-- die Pixelwelt;
-- Materialien;
-- Physikobjekte;
-- komplexe Kreaturen und Bosse;
-- Inhalte anderer Mods.
+Ein zusätzlicher Archivordner oberhalb von `metamorph_creative_menu` verhindert, dass Noita den Mod korrekt erkennt.
 
-Deshalb verspricht MCM keine perfekte Synchronisierung jedes denkbaren Zustands.
+## Native oder Materialfunktionen funktionieren nicht
 
-# NoitaPatcher und unsichere Mods
+Prüfe, ob **Unsafe Mods** erlaubt sind und der Standalone-GitHub-Build installiert ist, ohne Dateien mit dem Workshop-Build zu mischen.
 
-Die Vollversion von MCM enthält **NoitaPatcher**.
+## Das Menü öffnet sich, aber gleichzeitig löst eine Spielaktion aus
 
-Er wird für Funktionen verwendet, die sich mit den normalen Modding-Möglichkeiten von Noita nicht ausreichend umsetzen lassen, insbesondere für Teile der Mechanismen für:
+Prüfe benutzerdefinierte Belegungen auf Konflikte. MCM zeigt doppelte Belegungen an, erlaubt aber bewusst, sie beizubehalten.
 
-- Wiederherstellung nach komplexen Verwandlungen;
-- Arbeit mit Spielentitäten;
-- Arbeit mit der Spielwelt;
-- Platzierung bestimmter Materialien;
-- erweiterte Kompatibilität.
+## Eine Kreatur lässt sich nicht sicher verwandeln
 
-Deshalb müssen für die Vollversion **unsichere Mods** erlaubt sein.
+Nicht jede spawnfähige XML-Entität ist eine unterstützte Spielerform. Für Kreaturen mit Spezialbehandlung existieren Regeln nach exaktem Pfad.
 
-NoitaPatcher ist bereits im fertigen MCM-Build enthalten und muss nicht separat installiert werden.
+## Ein Perk lässt sich nicht entfernen
 
-# Wenn etwas nicht funktioniert
+Entfernung wird nur angeboten, wenn MCM eine unterstützte inverse Operation für den verfolgten Zustand besitzt. Das ist absichtlich so; geratenes Cleanup kann fremden Spielerzustand beschädigen.
 
-## MCM wird nicht geladen
+## Multiplayer verhält sich zwischen Peers unterschiedlich
 
-Prüfe, ob nach dem Entpacken folgende Datei vorhanden ist:
-
-```text
-Noita/mods/metamorph_creative_menu/mod.xml
-```
-
-Prüfe außerdem, ob:
-
-- MCM im Menü **Mods** aktiviert ist;
-- **[x]** daneben angezeigt wird;
-- **unsichere Mods erlaubt** sind;
-- das Spiel mit aktiven Mods gestartet wurde.
-
-## Funktionen mit NoitaPatcher funktionieren nicht
-
-Prüfe, ob folgende Datei vorhanden ist:
-
-```text
-metamorph_creative_menu/NoitaPatcher/noitapatcher.dll
-```
-
-und stelle sicher, dass **unsichere Mods** erlaubt sind.
-
-## Rückkehr aus einer Form funktioniert nicht
-
-Versuche die zugewiesene Rückkehraktion — standardmäßig **TAB**.
-
-Wenn das Problem erneut auftritt, sollten in einem Fehlerbericht möglichst folgende Angaben enthalten sein:
-
-- der genaue Name der Kreatur;
-- der XML-Pfad, falls bekannt;
-- wie die Form erhalten wurde;
-- ob die normale Rückkehr funktioniert;
-- ob das Problem nur nach tödlichem Schaden auftritt;
-- ob Entangled Worlds verwendet wird.
-
-## Probleme mit Entangled Worlds
-
-Prüfe:
-
-- ob alle Teilnehmer dieselbe MCM-Version verwenden;
-- ob die Entangled-Worlds-Versionen kompatibel sind;
-- ob dieselbe Mod-Sammlung verwendet wird, wenn das Problem Materialien oder Kreaturen aus anderen Mods betrifft.
+Verwende auf allen Teilnehmern kompatible MCM-Builds und eine kompatible Noita-/Entangled-Worlds-Umgebung. MCM kann kein inkompatibles Materialregister oder beliebige Netzwerkänderungen anderer Mods reparieren.
 
 # Fehler melden
 
-[Issue erstellen](https://github.com/zerodancing/Metamorph-Creative-Menu/issues)
+Ein nützlicher Bugreport sollte enthalten:
 
-Für einen hilfreichen Bericht sollten möglichst folgende Angaben gemacht werden:
+- was du tun wolltest;
+- den exakten MCM-Bereich und die Aktion;
+- ob das Problem im Einzelspieler, mit Entangled Worlds oder in beiden Fällen auftritt;
+- ob Standalone- oder Workshop-Build installiert ist;
+- ob weitere Gameplay-Mods aktiv sind;
+- zuverlässige Reproduktionsschritte;
+- relevante Noita-/EW-Logs, wenn vorhanden.
 
-- die MCM-Version;
-- was genau du getan hast;
-- das erwartete Ergebnis;
-- das tatsächliche Ergebnis;
-- Name der betroffenen Kreatur, des Gegenstands, Perks oder Materials;
-- ob Entangled Worlds verwendet wird;
-- andere Mods, die mit dem Problem zusammenhängen könnten;
-- Fehlermeldung oder entsprechender Ausschnitt aus dem Protokoll;
-- Screenshot oder Video, wenn es das Problem besser zeigt.
+Bei Problemen mit Verwandlung, Besitzergreifung, Gegenständen oder Materialien gib nach Möglichkeit die exakte Entität bzw. das Material an. Technische Kennungen sind oft hilfreicher als ein übersetzter Anzeigename.
+
+# Repository und Entwicklungsquelle
+
+Das Repository enthält absichtlich den **vollständigen Entwicklungsbaum** und nicht dasselbe reduzierte Archiv, das Spieler herunterladen.
+
+`metamorph_creative_menu/` enthält Runtime-Code zusammen mit:
+
+- automatisierten Tests;
+- QA-Werkzeugen;
+- Diagnostik;
+- nativem Quellcode;
+- Build-Werkzeugen;
+- Release-Cleanup-Regeln;
+- Entwicklungsdokumentation.
+
+Diese Dateien sind für Entwicklung und Regressionstests nützlich und bleiben daher im GitHub-Source. Das installationsfertige Spieler-ZIP wird separat erzeugt und schließt entwicklungsbezogenen Inhalt aus.
+
+Das Spielerpaket erhält außerdem release-spezifische Bereinigung einschließlich des minimalen Player-`README.txt`, während der Source-Baum seine Entwicklungsdokumentation behält.
+
+# Tests
+
+Die automatisierte Testsuite liegt unter `metamorph_creative_menu/tests/` und kombiniert Python-Contract-Checks mit Lua-Mocktests.
+
+Vom Repository-Root aus führt der Release-Workflow die Suite gegen den vollständig importierten Source aus, bevor ein Spieler-Build veröffentlicht wird. Für die Lua-Mocktests wird `texlua` benötigt.
+
+Source-Hygiene-Prüfungen schützen außerdem produktionsnahe Dateien und Dokumentation vor Resten der Entwicklungshistorie, veralteten Debug-Oberflächen und versehentlichen Prozessartefakten.
+
+# Source-Archiv-Import und Release-Prozess
+
+Vollständiger Entwicklungs-Source kann aus einem Archiv der Familie `Metamorph-Creative-Menu-v...zip` importiert werden.
+
+Der Import-Workflow prüft die Archivstruktur, verlangt die vollständigen Entwicklungsbestandteile, führt Source-Hygiene und Regressionstests aus und committet erst danach den importierten Baum.
+
+Ein ModWorkshop-/Spieler-Archiv wird nicht als Entwicklungsquelle behandelt.
+
+Der öffentliche `latest-build`-Release wird anschließend durch einen getrennten Player-Builder aus dem vollständigen Source erzeugt. Dieser entfernt QA, Tests, Diagnostik, nativen Quellcode und andere rein entwicklungsbezogene Inhalte, wendet Release-Cleanup-Regeln an, validiert das Ergebnis und aktualisiert erst danach das stabile Download-Asset.
+
+Diese Trennung hält das Repository vollständig für Entwicklung nutzbar und den normalen Spielerdownload gleichzeitig klein und frei von Entwicklungsinstrumentierung.
 
 # Drittanbieter-Komponenten
 
-- **Noita** — Nolla Games.
-- **NoitaPatcher** — dextercd, in der Vollversion enthalten.
-- **lbase64** — Ilya Kolbin, in MCM enthalten.
-- **Entangled Worlds / Noita Proxy** — IntQuant und weitere Mitwirkende; wird separat installiert und ist optional.
-
-Ausführliche Angaben zu den ursprünglichen Projekten und ihren Lizenzen stehen in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
----
-
-**Metamorph: Creative Menu** ist ein inoffizieller, von Nutzern erstellter Mod für Noita. Das Projekt steht in keiner Verbindung zu Nolla Games und ist kein offiziell unterstützter Bestandteil des Spiels.
-
-[↑ Zur Sprachauswahl](#languages)
+Drittanbieter-Komponenten, gebündelte Abhängigkeiten und Upstream-Projekte sind in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) dokumentiert.
