@@ -14,10 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
       - name: Scan exact Steam upload set
+        id: scan
         shell: python
         run: |
           from pathlib import Path
+          import os
           import re
           import xml.etree.ElementTree as ET
 
@@ -58,9 +61,24 @@ jobs:
                       if pattern.search(line):
                           findings.append(f'{rel}:{lineno}: {label}: {line.strip()[:220]}')
 
-          if findings:
-              print(f'WORKSHOP_RUNTIME_AUDIT=FAIL files={scanned} findings={len(findings)}')
-              for finding in findings:
-                  print(finding)
-              raise SystemExit(1)
-          print(f'WORKSHOP_RUNTIME_AUDIT=PASS files={scanned}')
+          status = 'FAIL' if findings else 'PASS'
+          lines = [f'WORKSHOP_RUNTIME_AUDIT={status} files={scanned} findings={len(findings)}', *findings]
+          report = '\n'.join(lines) + '\n'
+          Path('workshop-runtime-audit.txt').write_text(report, encoding='utf-8')
+          print(report, end='')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f'findings={len(findings)}\n')
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workshop-runtime-audit
+          path: workshop-runtime-audit.txt
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Fail on runtime residue
+        if: steps.scan.outputs.findings != '0'
+        shell: bash
+        run: exit 1
