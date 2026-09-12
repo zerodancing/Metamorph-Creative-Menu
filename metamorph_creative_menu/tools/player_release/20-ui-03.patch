@@ -1,0 +1,170 @@
+--- metamorph_creative_menu/files/ui/tabs/creatures.lua
++++ metamorph_creative_menu/files/ui/tabs/creatures.lua
+@@ -341,25 +298,12 @@
+                 }, bounds, {x=scroll.x, y=scroll.y, width=scroll.width, height=scroll.height})
+             end
+         end
+-        if review_mode ~= "play" and (clicked or right) then
+-            review_marks[tostring(entry.path)] = review_mode
+-            local compatibility_status, compatibility_reason = "unknown", "unavailable"
+-            if creature_service ~= nil and type(creature_service.compatibility_status) == "function" then
+-                local checked, status, reason = pcall(creature_service.compatibility_status, entry.path)
+-                if checked then compatibility_status, compatibility_reason = tostring(status or "unknown"), tostring(reason or "unknown") end
+-            end
+-            audit("creature.review", "verdict="..tostring(review_mode).." path="..tostring(entry.path).." id="..tostring(entry.id or "")
+-                .." name="..tostring(entry.display_name or "").." auto="..compatibility_status.." auto_reason="..compatibility_reason)
+-            local label = ui.tr("$mcm_mobs_mode_log_retest", "LOG RETEST")
+-            if review_mode == "safe" then label = ui.tr("$mcm_mobs_mode_log_safe", "LOG SAFE") end
+-            if review_mode == "unsafe" then label = ui.tr("$mcm_mobs_mode_log_unsafe", "LOG UNSAFE") end
+-            GamePrint(ui.tr("$mcm_mobs_review_logged", "MOBS REVIEW") .. " " .. label .. ": " .. tostring(entry.path))
+-        elseif clicked and entry.special == "player" then
++        if clicked and entry.special == "player" then
+             local ok=spawn(player, entry)
+-            audit("creature.spawn", "path="..tostring(entry.path).." result="..tostring(ok))
++
+         elseif right then
+             local ok, reason=transform(player, entry)
+-            audit("creature.transform", "path="..tostring(entry.path).." result="..tostring(ok).." reason="..tostring(reason))
++
+         end
+     end
+     ui.end_scroll_viewport(scroll, math.ceil(#results / columns) * ui.ICON_STEP)
+--- metamorph_creative_menu/files/ui/tabs/effects.lua
++++ metamorph_creative_menu/files/ui/tabs/effects.lua
+@@ -1,7 +1,6 @@
+ local effects_tab = {}
+ 
+ local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
+-local audit = ui.audit
+ local effect_service = dofile("mods/metamorph_creative_menu/files/features/effects/service.lua")
+ 
+ local catalog = nil
+@@ -104,7 +103,7 @@
+     else
+         ok, reason = effect_service.add(player, selected, frames)
+     end
+-    audit("effect.add", "id="..tostring(selected.id or selected.path).." variant="..tostring(index).." result="..tostring(ok).." reason="..tostring(reason))
++
+     return ok, reason
+ end
+ 
+@@ -132,7 +131,7 @@
+         if active and type(effect_service.set_remaining)=="function" then
+             local frames=DURATIONS[picked].frames
+             local ok,reason=effect_service.set_remaining(player,resolved,frames)
+-            audit("effect.duration", "id="..tostring(resolved.id or resolved.path).." value="..tostring(frames).." result="..tostring(ok).." reason="..tostring(reason))
++
+         end
+     end
+     return 13
+@@ -161,7 +160,7 @@
+             selected_variant[key] = picked
+             if active and type(effect_service.switch_variant) == "function" then
+                 local ok, reason = effect_service.switch_variant(player,entry,picked)
+-                audit("effect.variant", "id="..tostring(entry.id or entry.path).." variant="..tostring(picked).." result="..tostring(ok).." reason="..tostring(reason))
++
+             end
+         end
+         height = height + 13
+@@ -196,7 +195,7 @@
+         ui.tr("$mcm_confirm", "CONFIRM") .. ": " .. remove_all_label, nil, math.max(32,panel_width-10))
+     then
+         local removed=effect_service.remove_all(player)
+-        audit("effect.remove_all", "removed="..tostring(removed))
++
+     end
+ 
+     local h=ui.scroll_height(screen_height, 142 + editor_height)
+@@ -219,7 +218,7 @@
+             selected_key=key
+             local removed=type(effect_service.remove_family)=="function" and effect_service.remove_family(player,entry)
+                 or effect_service.remove(player,entry)
+-            audit("effect.remove", "id="..tostring(entry.id or entry.path).." family=true removed="..tostring(removed))
++
+         end
+     end
+     ui.end_scroll_viewport(scroll,math.ceil(visible/columns)*ui.ICON_STEP)
+--- metamorph_creative_menu/files/ui/tabs/items.lua
++++ metamorph_creative_menu/files/ui/tabs/items.lua
+@@ -1,7 +1,6 @@
+ local items_tab = {}
+ 
+ local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
+-local audit = ui.audit
+ local item_service = dofile("mods/metamorph_creative_menu/files/features/items/service.lua")
+ local item_catalog = dofile("mods/metamorph_creative_menu/files/features/items/ui_catalog.lua")
+ local material_preview = dofile("mods/metamorph_creative_menu/files/platform/noita/material_preview.lua")
+@@ -98,11 +97,11 @@
+     if result.click == true then
+         if payload.kind == "catalog_liquid" then
+             local ok, reason = item_service.spawn_filled_flask(player, payload.material_id, false)
+-            audit("item.spawn_liquid", "id=" .. tostring(payload.material_id) .. " result=" .. tostring(ok) .. " reason=" .. tostring(reason))
++
+             if not ok then report_create_failure(payload.display_name) end
+         else
+             local entity, reason = item_service.spawn_near(player, payload.path)
+-            audit("item.spawn", "path=" .. tostring(payload.path) .. " entity=" .. tostring(entity) .. " reason=" .. tostring(reason))
++
+             if entity ~= 0 then
+                 GamePrint(ui.tr("$mcm_created_nearby", "Spawned nearby") .. ": " .. tostring(payload.display_name or ""))
+             else
+@@ -116,7 +115,7 @@
+     local release_x, release_y = tonumber(result.release_x), tonumber(result.release_y)
+     local menu_bounds = type(ui.panel_bounds) == "function" and ui.panel_bounds() or nil
+     if release_x == nil or release_y == nil or point_inside(menu_bounds, release_x, release_y) then
+-        audit("item.drag.cancel", "kind=" .. tostring(payload.kind) .. " reason=in_menu")
++
+         return
+     end
+ 
+@@ -128,7 +127,7 @@
+         else
+             ok, reason = item_service.give_strict(player, payload.path, payload.category ~= "WANDS")
+         end
+-        audit("item.drag.native_inventory", "kind=" .. tostring(payload.kind) .. " result=" .. tostring(ok) .. " reason=" .. tostring(reason))
++
+         if ok then
+             GamePrint(ui.tr("$mcm_received", "Received") .. ": " .. tostring(payload.display_name or ""))
+         else
+@@ -139,20 +138,18 @@
+ 
+     local world_x, world_y = tonumber(result.world_x), tonumber(result.world_y)
+     if world_x == nil or world_y == nil then
+-        audit("item.drag.world", "kind=" .. tostring(payload.kind) .. " result=false reason=position")
++
+         report_create_failure(payload.display_name)
+         return
+     end
+ 
+     if payload.kind == "catalog_liquid" then
+         local ok, reason = item_service.spawn_filled_flask_at(payload.material_id, world_x, world_y)
+-        audit("item.drag.world_liquid", "id=" .. tostring(payload.material_id) .. " result=" .. tostring(ok)
+-            .. " reason=" .. tostring(reason) .. " x=" .. tostring(world_x) .. " y=" .. tostring(world_y))
++
+         if not ok then report_create_failure(payload.display_name) end
+     else
+         local entity, reason = item_service.spawn_at(payload.path, world_x, world_y)
+-        audit("item.drag.world", "path=" .. tostring(payload.path) .. " entity=" .. tostring(entity)
+-            .. " reason=" .. tostring(reason) .. " x=" .. tostring(world_x) .. " y=" .. tostring(world_y))
++
+         if entity == 0 then report_create_failure(payload.display_name) end
+     end
+ end
+@@ -241,7 +238,7 @@
+         if right then
+             if is_liquid then
+                 local ok, reason = item_service.spawn_filled_flask(player, entry.id, true)
+-                audit("item.take_liquid", "id="..tostring(entry.id).." result="..tostring(ok).." reason="..tostring(reason))
++
+                 if not ok and reason == "full" then
+                     GamePrint(ui.tr("$mcm_inventory_full_spawned", "Inventory full — spawned nearby") .. ": " .. entry.display_name)
+                 elseif not ok then
+@@ -249,7 +246,7 @@
+                 end
+             else
+                 local ok, reason, entity, spawned_nearby = item_service.give(player, entry.path, entry.category ~= "WANDS")
+-                audit("item.take", "path="..tostring(entry.path).." result="..tostring(ok).." reason="..tostring(reason).." entity="..tostring(entity))
++
+                 if ok then
+                     GamePrint(ui.tr("$mcm_received", "Received") .. ": " .. entry.display_name)
+                 elseif reason == "full" then
