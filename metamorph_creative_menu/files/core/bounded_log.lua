@@ -1,6 +1,3 @@
--- Small filesystem boundary for persistent diagnostics.
--- The writer keeps a recent tail when the file reaches its size budget so crash
--- breadcrumbs survive without letting the mod directory grow forever.
 local bounded_log = {}
 
 local function open_file(path, mode)
