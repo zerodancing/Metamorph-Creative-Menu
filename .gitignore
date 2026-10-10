@@ -1,0 +1,29 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary / backup files
+*.tmp
+*.bak
+*~
+
+# Generated build output
+dist/
+
+# Python test artifacts
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+# Runtime / diagnostic output
+*.log
+
+# Keep bundled native runtime tracked
+!metamorph_creative_menu/NoitaPatcher/noitapatcher.dll

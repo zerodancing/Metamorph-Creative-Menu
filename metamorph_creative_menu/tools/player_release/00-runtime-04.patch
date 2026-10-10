@@ -1,0 +1,168 @@
+--- metamorph_creative_menu/files/features/weather/service.lua
++++ metamorph_creative_menu/files/features/weather/service.lua
+@@ -16,7 +16,6 @@
+     next_lightning_frame = 0,
+     lightning_clear_frame = 0,
+     last_rain_emit_frame = -1,
+-    rain_emitted_total = 0,
+     rain_stop_guard_until = 0,
+     last_lightning_update_frame = -1,
+     last_full_update_frame = -1,
+@@ -301,24 +300,6 @@
+     end
+ end
+ 
+-function weather_service.debug_state()
+-    local component = world_component()
+-    local result = {
+-        active = state.active == true,
+-        rainfall = tonumber(state.rainfall) or 0,
+-        lightning = tonumber(state.lightning) or 0,
+-        last_rain_emit_frame = tonumber(state.last_rain_emit_frame) or -1,
+-        rain_emitted_total = tonumber(state.rain_emitted_total) or 0,
+-        rain_stop_guard_until = tonumber(state.rain_stop_guard_until) or 0,
+-    }
+-    if component ~= nil then
+-        for _, field_name in ipairs({ "rain", "rain_target", "fog", "fog_target", "wind", "wind_speed" }) do
+-            local read_succeeded, value = pcall(ComponentGetValue2, component, field_name)
+-            if read_succeeded then result[field_name] = tonumber(value) or value end
+-        end
+-    end
+-    return result
+-end
+ 
+ METAMORPH_CREATIVE_MENU_WEATHER_SERVICE = weather_service
+ 
+--- metamorph_creative_menu/files/features/world_rules/physics.lua
++++ metamorph_creative_menu/files/features/world_rules/physics.lua
+@@ -630,23 +630,6 @@
+     return recovery.has("player_gravity")
+ end
+ 
+-function physics_adapter.debug_local_gravity(player, factor)
+-    local rows = {}
+-    if player == nil or player == 0 or not EntityGetIsAlive(player) then return {player=0, factor=factor, rows=rows} end
+-    for _, pair in ipairs({{"CharacterDataComponent","gravity"},{"CharacterPlatformingComponent","pixel_gravity"}}) do
+-        for _, component_id in ipairs(EntityGetComponentIncludingDisabled(player, pair[1]) or {}) do
+-            local key = local_gravity_key(component_id, pair[2])
+-            local baseline = physics_state.local_gravity_native[key]
+-            local read_succeeded, current_value = pcall(ComponentGetValue2, component_id, pair[2])
+-            rows[#rows + 1] = {
+-                component=component_id, field=pair[2], current=read_succeeded and tonumber(current_value) or nil,
+-                native=baseline and baseline.native or nil,
+-                expected=(baseline and factor) and rule_math.scaled(baseline.native, factor) or nil,
+-            }
+-        end
+-    end
+-    return {player=player, factor=factor, rows=rows}
+-end
+ 
+ function physics_adapter.has_gravity_overrides()
+     for _, record in pairs(physics_state.bodies) do
+--- metamorph_creative_menu/files/features/world_rules/service.lua
++++ metamorph_creative_menu/files/features/world_rules/service.lua
+@@ -67,10 +67,6 @@
+     state.last_rule_reassert = -100000
+ 
+     restore_loaded_gold_lifetimes_if_disabled()
+-
+-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "world_rules.startup_recovery", "restored_stale_saved_overrides=true")
+-    end
+     return true
+ end
+ 
+@@ -247,18 +243,11 @@
+ local function apply_network_snapshot(choices)
+     state.remote_authoritative = true
+     state.reset_pending = false
+-    local failures = {}
+     for index, rule in ipairs(RULES) do
+         local desired_index = math.max(1, math.min(#rule.choices, math.floor(tonumber(choices[index]) or 1)))
+-        if selected_index(rule) ~= desired_index then
+-            local applied, reason = apply_rule_index(rule, desired_index)
+-            if not applied then failures[#failures + 1] = tostring(rule.id) .. ":" .. tostring(reason) end
+-        end
++        if selected_index(rule) ~= desired_index then apply_rule_index(rule, desired_index) end
+     end
+     state.last_physics_scan = -100000
+-    if #failures > 0 and type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "world_rules.snapshot_apply", table.concat(failures, ","))
+-    end
+ end
+ 
+ update_network_sync = function(frame)
+@@ -271,10 +260,6 @@
+ end
+ 
+ function world_rule_service.gravity_factor() return physics_factor("physics_gravity") end
+-
+-function world_rule_service.local_gravity_debug()
+-    return physics_adapter.debug_local_gravity(player_locator.get(), world_rule_service.gravity_factor())
+-end
+ 
+ function world_rule_service.step(rule, direction)
+     if not recover_stale_saved_overrides() then return false, "startup_recovery" end
+--- metamorph_creative_menu/files/features/world_rules/time_dt.lua
++++ metamorph_creative_menu/files/features/world_rules/time_dt.lua
+@@ -253,14 +253,5 @@
+     return true
+ end
+ 
+-function owner.debug_state()
+-    return {
+-        baseline=state.baseline,
+-        last_written=state.last_written,
+-        day_multiplier=state.day_multiplier,
+-        weather_frozen=state.weather_frozen,
+-    }
+-end
+-
+ METAMORPH_CREATIVE_MENU_TIME_DT_OWNER = owner
+ return owner
+--- metamorph_creative_menu/files/platform/noita/native_gameover_patch.lua
++++ metamorph_creative_menu/files/platform/noita/native_gameover_patch.lua
+@@ -3,14 +3,6 @@
+ end
+ 
+ local native_gameover_patch = {}
+-
+-local PROFILE = {
+-    name = "adaptive_noita_pe32_gameover_native_r10",
+-    mode = "pe32_import_resolution_and_signature_scan",
+-    compatibility = "stock Noita x86 Game Over / Save Replay semantics",
+-    fixed_exe_hash = false,
+-    fixed_virtual_addresses = false,
+-}
+ 
+ local MODULE_NAME = "mcm_native_gameover"
+ local MODULE_CPATH = "./mods/metamorph_creative_menu/?.dll"
+@@ -142,28 +134,5 @@
+     return value == true, tostring(reason or (value and "post_revive_cleaned" or "unknown"))
+ end
+ 
+-function native_gameover_patch.status()
+-    local native_reason = nil
+-    if type(state.module) == "table" and type(state.module.reason) == "function" then
+-        local ok, value = pcall(state.module.reason)
+-        if ok then native_reason = tostring(value) end
+-    end
+-    return {
+-        installed = native_gameover_patch.is_installed(),
+-        load_reason = state.load_reason,
+-        install_reason = state.install_reason,
+-        native_reason = native_reason,
+-        profile = PROFILE.name,
+-        backend = "native_x86_lua_c_module_adaptive",
+-        revive_request_pending = native_gameover_patch.has_revive_request(),
+-        stock_button_builder = "save_replay_slot",
+-        network_disabled = ew_active(),
+-    }
+-end
+-
+-function native_gameover_patch.profile()
+-    return PROFILE
+-end
+-
+ METAMORPH_CREATIVE_MENU_NATIVE_GAMEOVER_PATCH = native_gameover_patch
+ return native_gameover_patch

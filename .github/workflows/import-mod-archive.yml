@@ -1,0 +1,109 @@
+name: Import full MCM source archive
+
+on:
+  push:
+    paths:
+      - 'Metamorph-Creative-Menu-v*.zip'
+      - 'Metamorph-Creative-Menu-v*.ZIP'
+      - 'tools/import_source_archive.py'
+      - 'tools/test_repository_tools.py'
+      - '.github/workflows/import-mod-archive.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: import-mcm-source
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check repository tooling
+        run: |
+          python -m compileall -q tools
+          python tools/test_repository_tools.py
+
+      - name: Import source archive
+        id: import
+        run: python tools/import_source_archive.py
+
+      - name: Install Lua test runtime
+        if: steps.import.outputs.changed == 'true'
+        shell: bash
+        run: |
+          if ! command -v texlua >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y texlive-binaries
+          fi
+
+      - name: Check source hygiene
+        if: steps.import.outputs.changed == 'true'
+        run: python tools/check_source_hygiene.py .
+
+      - name: Run regression suite
+        if: steps.import.outputs.changed == 'true'
+        run: python metamorph_creative_menu/tests/run_all.py metamorph_creative_menu
+
+      - name: Verify full source archive build
+        if: steps.import.outputs.changed == 'true'
+        run: python metamorph_creative_menu/tools/build_release.py /tmp/Metamorph-Creative-Menu-source-check.zip
+
+      - name: Verify player package build
+        if: steps.import.outputs.changed == 'true'
+        run: python tools/build_user_release.py metamorph_creative_menu /tmp/Metamorph-Creative-Menu-player-check.zip
+
+      - name: Validate player package
+        if: steps.import.outputs.changed == 'true'
+        run: python tools/validate_user_release.py /tmp/Metamorph-Creative-Menu-player-check.zip
+
+      - name: Commit imported source
+        if: steps.import.outputs.changed == 'true'
+        shell: bash
+        run: |
+          git config user.name "zerodancing"
+          git config user.email "194230808+zerodancing@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Source archive already matches the repository."
+            exit 0
+          fi
+          git commit -m "Import Metamorph Creative Menu source ${{ steps.import.outputs.version }}"
+          git push
+
+      - name: Remove rejected source archive
+        if: failure()
+        shell: bash
+        run: |
+          mapfile -t archives < <(
+            git ls-tree -r --name-only HEAD \
+              | grep -Ei '^Metamorph-Creative-Menu-v.*\.zip$' \
+              || true
+          )
+          if [ "${#archives[@]}" -eq 0 ]; then
+            echo "No tracked source archive needs cleanup."
+            exit 0
+          fi
+
+          git restore --source=HEAD --staged --worktree -- metamorph_creative_menu
+          for archive in "${archives[@]}"; do
+            rm -f -- "$archive"
+          done
+          git add -u -- .
+
+          if git diff --cached --quiet; then
+            echo "No rejected archive cleanup was needed."
+            exit 0
+          fi
+
+          git config user.name "zerodancing"
+          git config user.email "194230808+zerodancing@users.noreply.github.com"
+          git commit -m "Remove rejected Metamorph Creative Menu source archive"
+          git push

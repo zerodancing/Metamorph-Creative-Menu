@@ -1,0 +1,15 @@
+3.0.0
+=====
+
+- Added the resizable creative menu with persistent layout and assignable controls.
+- Expanded spell and wand editing, including drag-and-drop, Always Cast support, undo/redo,
+  appearance editing, and persistent wand presets.
+- Expanded item, material, perk, effect, creature, transformation, possession, weather,
+  world-rule, and teleportation tooling.
+- Added bounded material painting and improved material discovery/classification.
+- Improved reversible form handling, scripted attacks, held-wand forms, and return-to-human
+  recovery paths.
+- Improved Entangled Worlds integration for forms, items, perks, materials, weather,
+  possession, boss lifecycle handling, and authority cleanup.
+- Added adaptive single-player Game Over recovery for supported 32-bit Noita builds.
+- Added the complete automated regression suite and deterministic source/release tooling.

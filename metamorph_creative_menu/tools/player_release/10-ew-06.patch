@@ -1,0 +1,99 @@
+--- metamorph_creative_menu/files/integrations/ew/resilience_patches.lua
++++ metamorph_creative_menu/files/integrations/ew/resilience_patches.lua
+@@ -595,10 +325,9 @@
+         local count_anchor = [[        local perk_count = tonumber(GlobalsGetValue(perk_flag_name .. "_PICKUP_COUNT", "0"))
+         if perk_count > 0 then]]
+         local count_block = [[        local perk_count = tonumber(GlobalsGetValue(perk_flag_name .. "_PICKUP_COUNT", "0"))
+-        -- mcm_peer_perk_sender_filter_v1
+         if global_perks[perk_id] then
+-            local mcm_hidden = math.max(0, tonumber(GlobalsGetValue("mcm_creative_perk_hidden_count_v1:" .. perk_id, "0")) or 0)
+-            if mcm_hidden > 0 then perk_count = math.max(0, perk_count - mcm_hidden) end
++            local mcm_peer_perk_sender_filter_v1_hidden = math.max(0, tonumber(GlobalsGetValue("mcm_creative_perk_hidden_count_v1:" .. perk_id, "0")) or 0)
++            if mcm_peer_perk_sender_filter_v1_hidden > 0 then perk_count = math.max(0, perk_count - mcm_peer_perk_sender_filter_v1_hidden) end
+         end
+         if perk_count > 0 then]]
+         local changed, ok = replace_peer_once(content, count_anchor, count_block)
+@@ -610,8 +339,7 @@
+         local anchor = [[    local current_counts = util.get_ent_variable(entity, "ew_current_perks") or {}
+     for perk_id, count in pairs(perk_data) do]]
+         local replacement = [[    local current_counts = util.get_ent_variable(entity, "ew_current_perks") or {}
+-    -- mcm_peer_perk_removal_v1: preserve removed ids as explicit zeroes for EW's
+-    -- existing negative-diff cleanup path.
++    local mcm_peer_perk_removal_v1 = true
+     for perk_id in pairs(current_counts) do
+         if perk_data[perk_id] == nil then perk_data[perk_id] = 0 end
+     end
+@@ -623,7 +351,7 @@
+ 
+     local marker_anchor = "local global_perks = {"
+     local marked, marked_ok = replace_peer_once(content, marker_anchor,
+-        marker_anchor .. " -- mcm_peer_perk_sync_v4")
++        "local mcm_peer_perk_sync_v4 = true\n" .. marker_anchor)
+     if not marked_ok then return original, 0 end
+     return marked, 1
+ end
+@@ -640,15 +368,15 @@
+     end
+ 
+     local ok
+-    content, ok = replace_once(content, "    if #ho ~= 0 then\n", "    if true then -- mcm_perk_helper_empty_homunculus_v1\n")
+-    if not ok then return original, 0 end
+-    content, ok = replace_once(content, "    if #lu ~= 0 then\n", "    if true then -- mcm_perk_helper_empty_lukki_v1\n")
+-    if not ok then return original, 0 end
+-    content, ok = replace_once(content, "    if #gh ~= 0 then\n", "    if true then -- mcm_perk_helper_empty_ghost_v1\n")
++    content, ok = replace_once(content, "    if #ho ~= 0 then\n", "    if true then\n")
++    if not ok then return original, 0 end
++    content, ok = replace_once(content, "    if #lu ~= 0 then\n", "    if true then\n")
++    if not ok then return original, 0 end
++    content, ok = replace_once(content, "    if #gh ~= 0 then\n", "    if true then\n")
+     if not ok then return original, 0 end
+ 
+     local function_anchor = "function homunculus.on_world_update()"
+-    local function_header = [[-- mcm_perk_helper_sync_v1
++    local function_header = [[local mcm_perk_helper_sync_v1 = true
+ GlobalsSetValue("mcm_perk_helper_sync_loaded_v1", "1")
+ local mcm_had_perk_helpers = false
+ function homunculus.on_world_update()]]
+@@ -659,9 +387,6 @@
+         rpc.send_positions(ho, lu, gh, GameGetFrameNum())
+     end]]
+     local send_block = [[    local mcm_has_perk_helpers = #ho ~= 0 or #lu ~= 0 or #gh ~= 0
+-    -- Send one authoritative empty snapshot after the last helper disappears. While at
+-    -- least one class remains alive the existing per-frame packets now also reconcile
+-    -- any other class whose list became empty.
+     if mcm_has_perk_helpers or mcm_had_perk_helpers then
+         rpc.send_positions(ho, lu, gh, GameGetFrameNum())
+     end
+@@ -685,7 +410,7 @@
+     local module_anchor = [[local module = {}]]
+     local helpers = [=[local module = {}
+ 
+--- mcm_perk_mutation_sync_v1
++local mcm_perk_mutation_sync_v1 = true
+ GlobalsSetValue("mcm_perk_mutation_sync_loaded_v1", "1")
+ local mcm_mutation_baselines = {}
+ 
+--- metamorph_creative_menu/files/integrations/ew/world_items.lua
++++ metamorph_creative_menu/files/integrations/ew/world_items.lua
+@@ -46,9 +46,6 @@
+     if type(CrossCall) == "function" then
+         local crosscall_succeeded, crosscall_error = pcall(CrossCall, "ew_thrown", entity)
+         if crosscall_succeeded then return true, "direct" end
+-        if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-            pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "item.ew_thrown", tostring(crosscall_error))
+-        end
+     end
+ 
+     outbox_sequence = math.max(outbox_sequence, tonumber(GlobalsGetValue(OUTBOX_SEQUENCE_KEY, "0")) or 0) + 1
+--- metamorph_creative_menu/files/integrations/ew/world_rules_sync.lua
++++ metamorph_creative_menu/files/integrations/ew/world_rules_sync.lua
+@@ -35,9 +35,6 @@
+     local signature = tostring(code) .. "\31" .. tostring(details or "")
+     if last_network_error.signature == signature and frame - last_network_error.frame < 600 then return end
+     last_network_error.signature, last_network_error.frame = signature, frame
+-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "world_rules." .. tostring(code), tostring(details or ""))
+-    end
+     print("[Metamorph: Creative Menu] EW world-rules: " .. tostring(code) .. " - " .. tostring(details or ""))
+ end
+ 

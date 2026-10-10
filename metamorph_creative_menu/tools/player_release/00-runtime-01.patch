@@ -1,0 +1,140 @@
+--- metamorph_creative_menu/NoitaPatcher/noitapatcher/nsew/world_ffi.lua
++++ metamorph_creative_menu/NoitaPatcher/noitapatcher/nsew/world_ffi.lua
+@@ -32,7 +32,7 @@
+     struct Position bottom_right;
+ };
+ 
+-struct std_string { /* VC++ std::string */
++struct std_string {
+     char *buffer;
+     char sso_buffer[12];
+     size_t size;
+@@ -162,7 +162,6 @@
+     bool show_in_creative_mode;
+     bool is_just_particle_fx;
+     char padding9[2];
+-    // struct grid_CosmeticParticleConfig *ParticleEffect;
+ };
+ 
+ enum CellType {
+@@ -217,7 +216,6 @@
+     void* field40_0xa0;
+ };
+ 
+-// In the Noita code this would be the ICellBurnable class
+ struct Cell {
+     struct Cell_vtable* vtable;
+ 
+--- metamorph_creative_menu/files/features/companion/player_clone.xml
++++ metamorph_creative_menu/files/features/companion/player_clone.xml
+@@ -45,7 +45,5 @@
+ 
+     <VariableStorageComponent _tags="mcm_companion_next_fire" name="mcm_companion_next_fire" value_int="0"></VariableStorageComponent>
+ 
+-    <!-- Keep the DES authority stable around the owner. MCM-only Lua controllers are
+-         attached after EW has captured the initial serialized entity, never in this XML. -->
+     <StreamingKeepAliveComponent></StreamingKeepAliveComponent>
+ </Entity>
+--- metamorph_creative_menu/files/features/creatures/service.lua
++++ metamorph_creative_menu/files/features/creatures/service.lua
+@@ -2,7 +2,6 @@
+ local classification = dofile("mods/metamorph_creative_menu/files/features/creatures/classification.lua")
+ local compatibility = dofile("mods/metamorph_creative_menu/files/features/creatures/compatibility.lua")
+ local transform_routing = dofile("mods/metamorph_creative_menu/files/features/creatures/transform_routing.lua")
+-local creature_diagnostics = dofile("mods/metamorph_creative_menu/files/features/creatures/diagnostics.lua")
+ local catalog_builder = dofile("mods/metamorph_creative_menu/files/features/creatures/catalog_builder.lua")
+ local ew_world_entities = dofile("mods/metamorph_creative_menu/files/integrations/ew/world_entities.lua")
+ local spawn_compat = dofile("mods/metamorph_creative_menu/files/features/creatures/spawn_compat.lua")
+@@ -62,14 +61,6 @@
+ function creature_service.warmup_step(budget) return catalog_builder.warmup_step(budget) end
+ function creature_service.catalog_version() return catalog_builder.catalog_version() end
+ 
+-function creature_service.collect_diagnostics()
+-    return creature_diagnostics.collect(creature_service)
+-end
+-
+-function creature_service.diagnostic_info_for_path(path)
+-    return creature_diagnostics.info(creature_service, path)
+-end
+-
+ function creature_service.collect_prewarm_candidates()
+ 
+     local result, seen = {}, {}
+@@ -107,8 +98,6 @@
+ 
+                 return tonumber(context.entity), "existing_kolmi"
+             end
+-        elseif not ok_before and type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-            pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "creature.spawn_preflight", tostring(context))
+         end
+     end
+ 
+@@ -116,20 +105,10 @@
+     if entity == 0 then return 0, "load" end
+ 
+     if type(spawn_compat) == "table" and type(spawn_compat.after_spawn) == "function" then
+-        local ok_compat, compat_ok, compat_reason = pcall(spawn_compat.after_spawn, entity_path, entity, tonumber(x), tonumber(y), spawn_context)
+-        if not ok_compat or compat_ok ~= true then
+-            if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-                pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "creature.spawn_compat",
+-                    ok_compat and tostring(compat_reason or "compat_failed") or tostring(compat_ok))
+-            end
+-        end
++        pcall(spawn_compat.after_spawn, entity_path, entity, tonumber(x), tonumber(y), spawn_context)
+     end
+ 
+-    local call_ok, tracked, track_reason = pcall(ew_world_entities.track, entity, {creative_creature=true})
+-    if (not call_ok or tracked ~= true) and type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "creature.ew_track",
+-            call_ok and tostring(track_reason or "track_failed") or tostring(tracked))
+-    end
++    pcall(ew_world_entities.track, entity, {creative_creature=true})
+     return entity, "spawned"
+ end
+ 
+--- metamorph_creative_menu/files/features/creatures/spawn_compat.lua
++++ metamorph_creative_menu/files/features/creatures/spawn_compat.lua
+@@ -11,16 +11,7 @@
+ 
+ local ARENA_BOSS_RADIUS_SQ = 192 * 192
+ local ARENA_REFERENCE_RADIUS_SQ = 768 * 768
+-local REPLACED_COUNT = "mcm30_kolmi_existing_arena_root_replaced_v1"
+-local REUSED_REMOTE_COUNT = "mcm30_kolmi_existing_remote_root_reused_v1"
+-local REUSED_REFERENCE_COUNT = "mcm30_kolmi_existing_reference_reused_v1"
+-
+-local function bump(key)
+-    if type(GlobalsGetValue) ~= "function" or type(GlobalsSetValue) ~= "function" then return end
+-    local ok, value = pcall(GlobalsGetValue, key, "0")
+-    value = ok and (tonumber(value) or 0) or 0
+-    pcall(GlobalsSetValue, key, tostring(value + 1))
+-end
++
+ 
+ local function alive(entity)
+     entity = tonumber(entity) or 0
+@@ -197,19 +188,15 @@
+     local reference = nearest_reference(x, y)
+     local existing = existing_authored_kolmi(x, y)
+     if existing == 0 then
+-        if reference ~= 0 then bump(REUSED_REFERENCE_COUNT) end
+         return { kind = "kolmi", reference_id = reference }
+     end
+ 
+     local retired, reason = quiet_retire_existing(existing)
+     if retired then
+-        bump(REPLACED_COUNT)
+-        if reference ~= 0 then bump(REUSED_REFERENCE_COUNT) end
+         return { kind = "kolmi", reference_id = reference, replaced_entity = existing }
+     end
+ 
+     if reason == "remote_authority" then
+-        bump(REUSED_REMOTE_COUNT)
+         return { kind = "reuse", entity = existing, reference_id = reference, reason = reason }
+     end
+ 
+@@ -247,4 +234,5 @@
+ spawn_compat.CREATIVE_REF_TAG = CREATIVE_REF_TAG
+ spawn_compat.BOOTSTRAP = BOOTSTRAP
+ spawn_compat.CONTROLLER = CONTROLLER
++
+ return spawn_compat

@@ -1,0 +1,2 @@
+-- Intentionally empty. Used only in generated player-form XMLs to replace an NPC
+-- lifecycle script whose ownership assumptions do not hold for a polymorphed player.

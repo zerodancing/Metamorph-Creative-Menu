@@ -1,0 +1,82 @@
+name: Publish ready-to-install build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'metamorph_creative_menu/**'
+      - '!metamorph_creative_menu/tests/**'
+      - '!metamorph_creative_menu/files/qa/**'
+      - '!metamorph_creative_menu/files/diagnostics/**'
+      - '!metamorph_creative_menu/native_src/**'
+      - '!metamorph_creative_menu/tools/**'
+      - '!metamorph_creative_menu/README.txt'
+      - '!metamorph_creative_menu/BUILD.txt'
+      - '!metamorph_creative_menu/CHANGELOG.txt'
+      - '!metamorph_creative_menu/dev_mode.lua'
+      - '!metamorph_creative_menu/mod_id.txt'
+      - '!metamorph_creative_menu/mcm_native_gameover.lib'
+      - '!metamorph_creative_menu/files/core/bounded_log.lua'
+      - '!metamorph_creative_menu/files/features/creatures/diagnostics.lua'
+      - '!metamorph_creative_menu/files/integrations/ew/bridge/qa.lua'
+      - '!metamorph_creative_menu/files/integrations/ew/bridge/qa_reserved.lua'
+      - 'metamorph_creative_menu/tools/player_release/*.patch'
+      - 'tools/build_user_release.py'
+      - 'tools/validate_user_release.py'
+      - '.github/workflows/publish-ready-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-ready-build
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check repository tooling
+        run: |
+          python -m compileall -q tools
+          python tools/test_repository_tools.py
+
+      - name: Install Lua test runtime
+        shell: bash
+        run: |
+          if ! command -v texlua >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y texlive-binaries
+          fi
+
+      - name: Check source hygiene
+        run: python tools/check_source_hygiene.py .
+
+      - name: Run regression suite
+        run: python metamorph_creative_menu/tests/run_all.py metamorph_creative_menu
+
+      - name: Build player package
+        run: python tools/build_user_release.py metamorph_creative_menu Metamorph-Creative-Menu.zip
+
+      - name: Validate player package
+        run: python tools/validate_user_release.py Metamorph-Creative-Menu.zip
+
+      - name: Publish stable download URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="$(tr -d '\r\n ' < metamorph_creative_menu/VERSION.txt)"
+          notes="Ready-to-install Metamorph: Creative Menu ${version}. Source commit: ${GITHUB_SHA}. Development and QA files are excluded from this archive."
+
+          if gh release view latest-build >/dev/null 2>&1; then
+            gh release upload latest-build Metamorph-Creative-Menu.zip --clobber
+            gh release edit latest-build --title "Metamorph: Creative Menu ${version}" --notes "$notes"
+          else
+            gh release create latest-build Metamorph-Creative-Menu.zip --target "$GITHUB_SHA" --title "Metamorph: Creative Menu ${version}" --notes "$notes"
+          fi

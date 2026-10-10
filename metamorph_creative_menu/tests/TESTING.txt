@@ -1,0 +1,156 @@
+Metamorph: Creative Menu — test infrastructure
+==============================================
+
+This file documents the automated regression-test system only. Player-facing behavior is documented in the repository's multilingual `README*.md` files. The source-package `README.txt` only identifies the full development tree and is not an executable behavior contract.
+
+Testing principle
+-----------------
+
+Whenever possible, a test should answer:
+
+    "Will the required behavior survive a refactor?"
+
+rather than:
+
+    "Does a particular source string still exist in a particular file?"
+
+The primary protection is executable Lua mock/integration scenarios. They load the real production module, replace only the Noita/EW boundary and verify observable outcomes: entity state, rollback, network mailboxes, player-authority switching, inventory overflow and similar behavior.
+
+Source-level contracts remain only where the property is genuinely static: syntax, dependency direction, module cycles, localization completeness and the built-in QA state graph.
+
+Running the suite
+-----------------
+
+From the mod root:
+
+    python tests/run_all.py
+
+`run_all.py` automatically discovers all `*_contract.py` and `*_mock.lua` files, so a new test does not need to be added to a manual runner list.
+
+Repository CI layers
+--------------------
+
+The repository uses separate checks for separate failure domains:
+
+- `Check repository tooling` compiles the repository-level Python tools and runs their contract tests.
+- `Check full source` runs source hygiene, the complete regression suite and the deterministic full-source archive build for development-tree changes.
+- `Publish ready-to-install build` runs only for changes that can affect the player package. It rebuilds and validates the cleaned player archive before updating the stable release asset.
+- `Import full MCM source archive` validates a manually uploaded full-source archive before it is allowed to replace the checked-in development tree.
+
+Keeping source CI separate from publishing means QA, tests, native-source documentation and other development-only changes are still verified without needlessly replacing the player release asset.
+
+Behavior coverage
+-----------------
+
+`behavior_coverage_contract.py` maps required player-facing mechanics to executable tests. It is not a map of production file names: internal architecture may change as long as observable behavior remains the same and the corresponding scenario still passes.
+
+Covered scenarios include, among others:
+
+- top menu/header survival when the active tab throws a runtime error;
+- full title-bar movement, four-edge/corner resizing, persistent two-dimensional layout
+  and visible frame affordances;
+- measured catalogue height shared by every scrollable section, including translated
+  narrow layouts and enlarged windows;
+- native scroll-container coordinate ownership, preventing detached viewport contents
+  from starting at the screen origin;
+- vanilla inventory state preservation while the menu is open;
+- spell catalog and wand operations, including transactional DROP and EW world-item handoff;
+- item LMB world spawn and EW registration;
+- item RMB inventory delivery and inventory resync;
+- separate four-wand/four-item quick-slot capacity and safe world overflow;
+- filled containers, shared Items/Materials liquid previews and hidden probe cleanup;
+- authored material texture/tint inheritance and colour fallback behavior;
+- nonstandard vanilla item roles including Sampo/Crystal Key/rewards without admitting
+  true creature hybrids;
+- perk LMB spawn, vanilla/EW world-item handoff, canonical pickup and RMB direct apply;
+- perk transaction rollback, creative-source accounting, bounded failed-cleanup backoff and special inverses;
+- sender-side EW global-perk filtering that preserves stock EW semantics for ordinary pickups;
+- MOBS catalog/prewarm, single LMB spawn and exact-coordinate drag spawn;
+- RMB transform with a complete form session;
+- TAB return and TAB/G separation;
+- form death -> living human + corpse handoff;
+- Boss Dragon/Maggot Tiny player-driver behavior;
+- form combat, authority switching, transform-flash ownership, event-driven network metadata and runtime reset;
+- possession retirement only after confirmed transformation;
+- EW target-search tolerance/fallback;
+- time presets, advanced weather and EW latest-snapshot roundtrips;
+- World Rules/MagicNumbers/physics ownership, bounded scans, dirty publication and EW mailbox state;
+- equal user-facing host/peer rights;
+- demand-driven player/location teleport streaming, safe free-space placement and
+  targeted BRING HERE requests;
+- companion health/spawn guard and peer-to-host request routing;
+- EW RPC namespace, serialization/profiling, remote-form generation reset and compatibility-patch status;
+- bounded material-paint mailboxes, backpressure recovery and stock-EW terrain/entity transport for peers without MCM;
+- bounded diagnostics and runtime scanning;
+- Alt-Tab/focus quarantine and TAB/G separation;
+- lazy loading of the built-in Z QA runner.
+
+Static contracts
+----------------
+
+Lua syntax
+~~~~~~~~~~
+
+All Lua files are parsed with `texluac -p`. This catches syntax errors after moves/renames and intentionally makes no claim about game behavior.
+
+Architecture
+~~~~~~~~~~~~
+
+The architecture contract checks only durable boundaries that help prevent regressions:
+
+- the main `core / platform / integrations / features / ui / diagnostics / qa` layers exist;
+- obsolete mixed directories do not return;
+- generic `core` does not depend on Noita/EW/gameplay;
+- `platform` does not depend on gameplay/network/UI;
+- gameplay/integrations do not depend on UI/diagnostics/QA;
+- UI does not implement EW protocol and does not directly own low-level Entity/Component mutations;
+- EW peer policy does not leak across gameplay code;
+- internal `dofile` dependency graph has no cycles;
+- production modules have real consumers unless explicitly exempted extension points;
+- tests do not treat README prose as an executable contract.
+
+The architecture contract intentionally does not freeze line counts, local variable names, exact helper locations, exact call ordering or historical implementation markers.
+
+Localization
+~~~~~~~~~~~~
+
+The localization contract collects runtime `$mcm_*` references and verifies that translation rows exist and all 11 supported language columns are populated. Moving a tab or feature between files must not break this contract.
+
+QA state graph
+~~~~~~~~~~~~~~
+
+The QA graph contract verifies that every literal state-transition target has a handler. Actual gameplay scenarios belong in behavioral mocks and real in-game QA.
+
+Why old string-based tests were removed
+---------------------------------------
+
+The old static regression checker contained many assertions such as "this exact line must be in this file" or "this local function must have this name." Those tests blocked safe refactoring while proving little about behavior, so they were replaced by architectural invariants and executable scenarios.
+
+Protection against accidental code deletion
+-------------------------------------------
+
+Useful production behavior cannot be inferred reliably from line count or symbol presence. Protection is layered:
+
+1. syntax/dependency checks catch physically broken modules;
+2. behavior coverage prevents the regression scenario itself from silently disappearing;
+3. executable mocks call production APIs and check final observable results.
+
+When adding tests, prefer assertions such as:
+
+    "a fifth wand cannot overwrite a full four-slot wand row and remains in the world"
+
+instead of:
+
+    "inventory_slots.lua contains QUICK_SLOT_COUNT = 4".
+
+Mutation probes
+---------------
+
+During major test-suite work, temporary mutation probes may be run against copies of the project to confirm that tests fail when important behavior is intentionally broken. Such mutations are not part of the normal suite and must never be committed to production code.
+
+What offline tests do not prove
+-------------------------------
+
+Even a strong mock suite cannot fully reproduce real Noita + Entangled Worlds scheduling, physics, separate entity Lua VMs, native NoitaPatcher behavior, actual serialization or races between two game processes.
+
+After runtime changes to forms, perks, inventory, EW, weather/World Rules or physics, a real in-game regression run is still required. The purpose of the offline suite is to make ordinary refactors fail early and specifically before a problem is discovered only by manual play.

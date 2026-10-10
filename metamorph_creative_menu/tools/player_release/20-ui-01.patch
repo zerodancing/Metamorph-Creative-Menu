@@ -1,0 +1,166 @@
+--- metamorph_creative_menu/files/ui/components/wand_appearance_editor.lua
++++ metamorph_creative_menu/files/ui/components/wand_appearance_editor.lua
+@@ -20,9 +20,6 @@
+     last_error = reason
+     local message = ui.tr("$mcm_wand_appearance_error", "Could not change appearance") .. ": " .. reason
+     if type(GamePrint) == "function" then pcall(GamePrint, message) end
+-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "wand.appearance", reason)
+-    end
+ end
+ 
+ local function clear_error()
+--- metamorph_creative_menu/files/ui/components/wand_editor.lua
++++ metamorph_creative_menu/files/ui/components/wand_editor.lua
+@@ -10,7 +10,6 @@
+ 
+ local expanded = true
+ local tracked_wand = 0
+-local last_error = nil
+ 
+ local FIELDS = {
+     {id="slots", key="$mcm_wand_slots", fallback="SLOTS"},
+@@ -29,9 +28,7 @@
+ }
+ 
+ local function perform(player, wand, label, callback, options)
+-    local ok, reason = history.perform(player, wand, label, callback, options)
+-    last_error = ok and nil or reason
+-    return ok, reason
++    return history.perform(player, wand, label, callback, options)
+ end
+ 
+ local function reset_controls(wand)
+@@ -40,7 +37,7 @@
+ 
+ local function draw_stat(player, wand, snapshot, field, panel_width)
+     local definition = wand_service.definition(field.id) or {}
+-    local _, reason = numeric.draw("wand.stat." .. tostring(wand) .. "." .. field.id,
++    numeric.draw("wand.stat." .. tostring(wand) .. "." .. field.id,
+         ui.tr(field.key, field.fallback), snapshot.stats[field.id], {
+             integer=definition.integer == true,
+             step=field.step or definition.step or 1,
+@@ -57,7 +54,6 @@
+                 end, {coalesce_key="stat." .. field.id,coalesce_frames=45})
+             end,
+         })
+-    if reason ~= nil then last_error = reason end
+ end
+ 
+ function wand_editor.draw(player, wand, panel_width)
+@@ -66,16 +62,12 @@
+     if tracked_wand ~= wand then
+         tracked_wand = wand
+         reset_controls(wand)
+-        last_error = nil
+     end
+ 
+-    local history_changed, history_error = history_bar.draw(player, wand)
++    local history_changed = history_bar.draw(player, wand)
+     if history_changed then
+         snapshot = select(1, wand_service.snapshot(wand)) or snapshot
+         reset_controls(wand)
+-        last_error = nil
+-    elseif history_error ~= nil then
+-        last_error = history_error
+     end
+ 
+     local toggle = (expanded and "- " or "+ ") .. ui.tr("$mcm_wand_stats", "WAND STATS")
+@@ -104,9 +96,6 @@
+ 
+     appearance_editor.draw(player, wand, panel_width)
+ 
+-    if METAMORPH_CREATIVE_MENU_DEV_MODE == true and last_error ~= nil then
+-        ui.wrapped_text(0, 0, ui.tr("$mcm_wand_edit_error", "Could not change wand") .. ": " .. tostring(last_error), panel_width - 12)
+-    end
+     return true
+ end
+ 
+--- metamorph_creative_menu/files/ui/menu_controller.lua
++++ metamorph_creative_menu/files/ui/menu_controller.lua
+@@ -3,7 +3,6 @@
+ local menu_controller = {}
+ 
+ local ui = dofile("mods/metamorph_creative_menu/files/ui/runtime.lua")
+-local audit = ui.audit
+ local player_locator = dofile("mods/metamorph_creative_menu/files/platform/noita/player_locator.lua")
+ local input_guard = dofile("mods/metamorph_creative_menu/files/platform/noita/input_guard.lua")
+ local menu_inventory_guard = dofile("mods/metamorph_creative_menu/files/platform/noita/menu_inventory_guard.lua")
+@@ -96,7 +95,7 @@
+     end
+     active_tab = index
+     save_active_tab()
+-    audit("menu.tab", "id=" .. tostring(tabs[index].id) .. " source=" .. tostring(source or "ui"))
++
+     return true
+ end
+ 
+@@ -269,13 +268,13 @@
+         height=layout.height,
+         edges=edges,
+     }
+-    audit("menu.layout_begin", "kind=" .. tostring(kind))
++
+ end
+ 
+ local function update_pointer_operation(screen_width, screen_height)
+     if pointer_operation == nil then return end
+     if not left_mouse("down") then
+-        audit("menu.layout_end", "kind=" .. tostring(pointer_operation.kind))
++
+         pointer_operation = nil
+         save_layout()
+         return
+@@ -346,7 +345,7 @@
+ 
+     layout_reset_pending = true
+     pointer_operation = nil
+-    audit("menu.layout_reset_requested", "screen=" .. tostring(screen_width) .. "x" .. tostring(screen_height))
++
+ end
+ 
+ local function draw_tab_bar(width)
+@@ -530,9 +529,6 @@
+                 local signature = tostring(err)
+                 if tab_error_signatures[tab.id] ~= signature then
+                     tab_error_signatures[tab.id] = signature
+-                    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-                        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, "ui." .. tostring(tab.id), signature)
+-                    end
+                     print("[Metamorph: Creative Menu] UI tab '" .. tostring(tab.id) .. "' failed: " .. signature)
+                 end
+             else
+@@ -593,7 +589,7 @@
+         layout = panel_layout.create(screen_width, screen_height, {}, layout_outsets())
+         last_panel_width = layout.width
+         save_layout()
+-        audit("menu.layout_reset", "width=" .. tostring(math.floor(layout.width + 0.5)))
++
+     end
+     local before_x, before_y, before_width, before_height = layout.x, layout.y, layout.width, layout.height
+     panel_layout.clamp(layout, screen_width, screen_height, nil, layout_outsets())
+--- metamorph_creative_menu/files/ui/runtime.lua
++++ metamorph_creative_menu/files/ui/runtime.lua
+@@ -85,12 +85,6 @@
+     return { ui_runtime.translated(key), fallback or key, key }
+ end
+ 
+-function ui_runtime.audit(action, details)
+-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION) == "function" then
+-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_USER_ACTION, action, details)
+-    end
+-end
+-
+ function ui_runtime.report_error_once(key, title, reason, diagnostic_scope)
+     if reason == nil then return false end
+     key = tostring(key or diagnostic_scope or "ui")
+@@ -101,9 +95,6 @@
+     local message = tostring(title or "Error")
+     if reason ~= "" then message = message .. ": " .. reason end
+     if type(GamePrint) == "function" then pcall(GamePrint, message) end
+-    if type(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE) == "function" then
+-        pcall(METAMORPH_CREATIVE_MENU_DIAGNOSTICS_CAPTURE, tostring(diagnostic_scope or key), reason)
+-    end
+     return true
+ end
+ 

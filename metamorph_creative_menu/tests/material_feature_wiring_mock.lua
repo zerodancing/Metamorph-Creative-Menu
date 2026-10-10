@@ -1,0 +1,26 @@
+local root=assert(arg[1], 'root required')
+local function read(path)
+    local f=assert(io.open(root..'/'..path,'rb')); local s=f:read('*a'); f:close(); return s
+end
+local menu=read('files/ui/menu_controller.lua')
+local init=read('init.lua')
+local tab=read('files/ui/tabs/materials.lua')
+local painter=read('files/features/materials/painter.lua')
+local backend=read('files/platform/noita/material_grid.lua')
+local catalog=read('files/features/materials/catalog.lua')
+assert(string.find(menu,'id="materials"',1,true),'MATERIALS tab is not registered')
+assert(string.find(init,'material_painter.update',1,true),'material painter lifecycle is not composed')
+assert(string.find(tab,'painter.set_enabled(true)',1,true),'MATERIALS tab cannot arm closed-menu painting')
+assert(string.find(tab,'bindings.label("paint_draw")',1,true),'MATERIALS tab does not show the configured paint input')
+assert(string.find(painter,'action_bindings.is_down("paint_draw")',1,true),'paint stroke input is not assignable')
+assert(string.find(tab,'material_catalog.step',1,true) and not string.find(tab,'material_catalog.collect',1,true),
+    'MATERIALS tab still performs synchronous full catalog scan')
+assert(string.find(catalog,'budget',1,true),'material catalog has no incremental work budget')
+assert(string.find(painter,'grid_backend.paint_solid_scene_prepared',1,true),'solid brush is not routed separately')
+assert(string.find(painter,'grid_backend.paint_cell_prepared',1,true),'liquid/direct cell path missing')
+assert(not string.find(painter,'GameCreateParticle',1,true),'material-particle backend returned')
+assert(not string.find(painter,'ComponentSetValue2',1,true),'painter still mutates player fire controls')
+assert(string.find(backend,'construct_cell',1,true) and string.find(backend,'LoadPixelScene',1,true),
+    'hybrid direct-cell/solid PixelScene backend is incomplete')
+assert(not string.find(backend,'quant.ew',1,true),'material grid backend depends on EW')
+io.write('material_feature_wiring=PASS lazy_catalog=true hybrid_backend=true assignable_input=true standalone=true\n')
